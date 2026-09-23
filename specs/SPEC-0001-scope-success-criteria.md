@@ -94,3 +94,66 @@ A conclusão nunca deve ser “HeraclitusDB é seguro” ou “HeraclitusDB est�
 A conclusão permitida é limitada às propriedades efetivamente testadas, por exemplo:
 
 > Nesta configuração de POC, os cenários definidos AC-01 a AC-15 foram executados e produziram os resultados registrados, sob as limitações documentadas.
+
+
+---
+
+## 8. Revisão de rigor — gates de qualificação
+
+A POC passa a ter três classes de gate:
+
+### P0 — obrigatório para a reunião técnica
+
+- histórico válido persistido e verificável;
+- modificação, exclusão e reordenação detectadas;
+- ação HIGH sem aprovação não alcança o upstream;
+- replay, expiração e troca de identidade bloqueados;
+- Evidence Bundle verificável sem o banco de origem;
+- adulteração do bundle invalida a verificação;
+- execução limpa reproduzível;
+- caminho crítico sem dependência externa;
+- limitações de confiança externa explícitas.
+
+### P1 — obrigatório antes de qualquer piloto
+
+Fault injection, restart/recovery, build provenance, SBOM, hardening, limites de recursos, threat model, matriz de riscos, contrato de integração, retenção, secrets e identidade real.
+
+### P2 — qualificação institucional posterior
+
+HSM/KMS, ACT/ICP-Brasil real, IAM institucional, WORM externo, HA/DR, carga representativa, integrações reais e observabilidade corporativa.
+
+## 9. Critérios adicionais de aceite
+
+| ID | Propriedade | Teste | Resultado exigido |
+|---|---|---|---|
+| AC-16 | determinismo lógico | replay do mesmo dataset | mesmo state digest |
+| AC-17 | fail-closed | policy store indisponível em ação HIGH | DENY |
+| AC-18 | atomicidade | duas execuções com mesmo approval | upstream hits <= 1 |
+| AC-19 | TOCTOU | parâmetros mudam após aprovação | DENY |
+| AC-20 | isolamento | agente tenta upstream direto | BLOCKED |
+| AC-21 | pacote incompleto | remover objeto | FAIL |
+| AC-22 | traversal | path fora do pacote | FAIL |
+| AC-23 | oversized input | request excede teto | REJECT |
+| AC-24 | crash | queda durante operação crítica | nunca sucesso inventado |
+| AC-25 | build identity | bundle identifica build/commit | PASS |
+| AC-26 | egress | caminho P0 isolado | zero egress não declarado |
+| AC-27 | segredo | varredura de artefatos | zero segredo real |
+| AC-28 | verifier | exporter/origem desligados | PASS local |
+| AC-29 | confiança externa | ausência de trust externo | nunca PASS externo |
+| AC-30 | rastreabilidade | teste aponta evidência | PASS |
+
+## 10. Registro mínimo por teste
+
+Todo teste produz `run_id`, `test_id`, commits, expected, observed, reason_code, timestamps, correlation_id, evidence_refs, environment_digest e result.
+
+`result=PASS` significa somente que o resultado observado corresponde ao esperado.
+
+## 11. Exit codes
+
+- 0: checks solicitados passaram;
+- 2: falha de critério/verificação;
+- 3: entrada inválida;
+- 4: dependência obrigatória indisponível;
+- 5: estado UNKNOWN que exige investigação.
+
+A CLI nunca retorna 0 com teste falho apenas porque terminou de executar.
