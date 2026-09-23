@@ -1,62 +1,46 @@
-# Checklist da Reunião Técnica — Segurança da Informação / STF
+# Checklist da Reunião Técnica — POC Integrada
 
-## O que levar
+## Demonstração
 
-- notebook/VM com POC offline;
-- kit local com hashes;
-- diagrama de arquitetura;
-- threat model;
-- scorecard;
+Levar:
+
+- ambiente offline;
+- campaign run limpa;
+- scorecard Fase 1/Fase 2;
+- grafo do incidente;
 - Evidence Bundle válido;
-- Evidence Bundle adulterado;
-- README/SPECs disponíveis localmente;
-- commit exato dos repositórios.
+- bundle adulterado;
+- hashes/build info;
+- baseline público e técnico.
 
-## Perguntas de discovery
+## Mensagem em 30 segundos
 
-Estas perguntas são para eventual fase posterior, não pré-requisitos para a demo.
+> A POC simula uma campanha de ataque em ambiente isolado. O HeraclitusDB recebe telemetria de múltiplas classes, correlaciona o incidente e preserva provenance. O mesmo contexto de comprometimento alimenta a política que governa tentativas posteriores de alteração em aplicação e banco fictícios. No final, toda a campanha é exportada e verificada offline.
 
-### Arquitetura
+## Perguntas de discovery para o STF
 
-1. O STF prefere avaliação em VM, containers ou infraestrutura específica?
-2. Há restrições para execução de Rust/binários de laboratório?
-3. O primeiro caso de uso desejado seria segurança/SOC, auditoria de IA, cadeia de custódia ou outro?
-4. O piloto deveria receber eventos por API, fila, arquivo ou collector existente?
+Sem pedir detalhes sensíveis:
 
-### Segurança
+1. Quais **classes** de telemetria seriam prioritárias em eventual piloto: rede, identidade, host, banco ou aplicação?
+2. Existe preferência por Syslog, API, fila ou collector para integração futura?
+3. O primeiro caso de uso deveria priorizar SOC, auditoria de banco, aplicações judiciais ou agentes de IA?
+4. Quais resultados seriam considerados suficientes para uma POC aprovada?
+5. Em eventual piloto, qual equipe seria dona do incidente e qual equipe seria dona da evidência?
+6. Quais integrações devem permanecer somente read-only?
+7. Que mecanismos institucionais de IAM/KMS/HSM deveriam ser avaliados numa fase posterior?
+8. Qual ferramenta corporativa deve receber alertas, sem pedir credenciais ou arquitetura na primeira reunião?
 
-5. Qual mecanismo institucional de identidade seria considerado para service-to-service?
-6. Há HSM/KMS que deveria ser alvo de uma etapa futura?
-7. Qual SIEM/observability é usado para integrar alertas e métricas?
-8. Qual política de segmentação/egress deve ser respeitada?
+## Não pedir
 
-### Evidência
+- IP;
+- hostname;
+- regra de firewall;
+- versão de appliance;
+- vulnerabilidade;
+- credencial;
+- dump;
+- log real sigiloso;
+- acesso à rede;
+- dados processuais reais.
 
-9. Há preferência por formato de pacote e relatório técnico?
-10. Quais metadados de cadeia de custódia seriam considerados mínimos?
-11. Existe infraestrutura institucional de carimbo de tempo/ICP-Brasil a ser testada posteriormente?
-12. Há storage com retenção/WORM disponível?
-
-### Operação
-
-13. Qual equipe avaliaria o código e qualification report?
-14. Quais critérios fariam o STF considerar a POC tecnicamente bem-sucedida?
-15. Qual seria o menor escopo aceitável para um piloto isolado?
-16. Que informação **não** deve entrar na POC/piloto sob nenhuma hipótese?
-
-## O que não pedir na primeira reunião
-
-- acesso a PJe;
-- credenciais;
-- dados reais;
-- acesso à rede interna;
-- chaves;
-- exceção de firewall.
-
-Primeiro demonstrar propriedade técnica com dados sintéticos. Depois discutir qualquer integração.
-
-## Mensagem de encerramento
-
-A pergunta não é “vocês confiam no HeraclitusDB?”. A pergunta é:
-
-> Quais propriedades o STF gostaria de verificar de forma independente antes de confiar em uma camada desse tipo?
+A primeira POC deve ser convincente sem nada disso.
