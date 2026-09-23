@@ -92,3 +92,53 @@ Gerar:
 ## 8. Falhas
 
 Métrica ausente deve aparecer como NOT_COLLECTED, não zero.
+
+
+---
+
+## 9. Telemetria versus evidência
+
+Classificar registros:
+
+```text
+OPERATIONAL
+SECURITY_AUDIT
+SECURITY_EVIDENCE
+DEMO_RESULT
+```
+
+Telemetria operacional pode ser descartável. Evidência canônica não.
+
+## 10. Métricas do gateway
+
+Quando disponíveis:
+
+- requests total;
+- allow/deny total;
+- require approval;
+- replay rejected;
+- approvals pending;
+- approval latency;
+- upstream hits;
+- red-team events.
+
+## 11. Cardinalidade
+
+`correlation_id`, `event_id` e `approval_id` pertencem a logs/evidência, evitando labels de alta cardinalidade sem necessidade.
+
+## 12. Tracing
+
+Trace pode correlacionar producer/gateway/upstream, mas não substitui audit event. Sampling não pode remover SECURITY_EVIDENCE.
+
+## 13. Perfis
+
+Manter:
+
+1. correctness: todos os checks;
+2. demo-load: carga moderada repetível.
+
+Nunca desligar integridade para produzir benchmark mais bonito.
+
+## 14. Regressão
+
+A primeira execução qualificada cria baseline. Mudanças relevantes de latência, memória ou tamanho do bundle são sinalizadas como regressão potencial, não automaticamente como falha funcional.
