@@ -115,3 +115,47 @@ fixtures/
 ```
 
 A mesma seed deve produzir os mesmos eventos lógicos, exceto campos explicitamente variáveis e normalizados na validação.
+
+
+---
+
+## 9. Canonicalização
+
+Digests devem operar sobre bytes canônicos versionados. Para JSON, usar canonicalização determinística compatível com RFC 8785 ou equivalente documentado.
+
+O digest não pode depender de indentação, ordem incidental de chaves, locale, timezone implícito ou serializer não versionado.
+
+## 10. Proveniência ampliada
+
+Adicionar quando aplicável:
+
+```json
+{
+  "source":{"system":"synthetic-producer","instance_id":"producer-01","adapter_version":"1"},
+  "causation_id":"uuid",
+  "session_id":"synthetic-session",
+  "policy_version":"policy/1",
+  "sequence":42
+}
+```
+
+`correlation_id` agrupa uma operação; `causation_id` identifica o evento causador.
+
+## 11. Imutabilidade semântica
+
+- event_id não é reutilizado;
+- mesmo event_id com bytes diferentes => CONFLICT;
+- reenvio idêntico pode ser idempotente, mas permanece observável;
+- correção gera novo evento, nunca update in-place.
+
+## 12. Schema evolution
+
+Breaking change incrementa `schema_version`. Versão desconhecida é recusada, salvo migrador explicitamente versionado.
+
+## 13. Fixtures adicionais
+
+Criar datasets determinísticos para duplicate event, reordered events, malformed identity, stale approval, policy reload, oversized payload, partial export e crash recovery.
+
+## 14. Classificação
+
+PUBLIC/INTERNAL/RESTRICTED são rótulos **sintéticos de POC**. Qualquer categoria institucional futura será mapeada por configuração aprovada, nunca por constantes presumidas.
