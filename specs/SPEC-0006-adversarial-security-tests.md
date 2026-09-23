@@ -89,3 +89,59 @@ Cada teste adversarial produz:
 ## 9. Critério
 
 A POC não passa porque ataques foram bloqueados manualmente. O bloqueio deve ser produto da política/código e reproduzível pelo script.
+
+
+---
+
+## 10. Campanha ampliada
+
+| ID | Caso | Resultado |
+|---|---|---|
+| ADV-13 | 64 DENY concorrentes | 0 hits no upstream |
+| ADV-14 | approval double-spend | <=1 hit |
+| ADV-15 | identity header oversized | REJECT |
+| ADV-16 | path traversal no bundle | FAIL |
+| ADV-17 | symlink no bundle | FAIL |
+| ADV-18 | dois paths normalizados iguais | FAIL |
+| ADV-19 | campo crítico desconhecido | REJECT ou policy explícita |
+| ADV-20 | policy reload inválido | última válida ou fail-closed |
+| ADV-21 | policy muda entre approve/execute | DENY |
+| ADV-22 | correlation collision | sem confusão de autorização |
+| ADV-23 | mesmo event_id com bytes diferentes | CONFLICT |
+| ADV-24 | timeout após possível efeito | UNKNOWN/reconcile |
+| ADV-25 | exporter interrompido | pacote parcial FAIL |
+| ADV-26 | objeto gigante | bounded/reject |
+| ADV-27 | zip bomb, se ZIP existir | bounded/reject |
+| ADV-28 | arquivo extra | policy explícita |
+| ADV-29 | segredo sintético em log | redaction/alert |
+| ADV-30 | egress não declarado | gate FAIL |
+
+## 11. Oráculo independente
+
+Todo teste de bloqueio registra duas fontes:
+
+1. decisão do gateway;
+2. contador real do upstream sintético.
+
+`DENY` com `upstream_delta > 0` é FAIL.
+
+## 12. Repetibilidade
+
+Cada ataque produz attack_id, seed, expected, observed, upstream_delta, duration e evidence_refs.
+
+## 13. Mutation testing
+
+Provas de sabotagem mínimas:
+
+- replay;
+- identity binding;
+- parameters digest;
+- object/Merkle digest;
+- traversal;
+- UNKNOWN->SUCCEEDED.
+
+Cada mutação deve derrubar um teste específico.
+
+## 14. Segurança do red team
+
+A ferramenta de ataque é confinada à rede/loopback da POC e usa allowlist de destinos. Não recebe credencial real nem capacidade de atingir infraestrutura externa.
