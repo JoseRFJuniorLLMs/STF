@@ -10,32 +10,9 @@
 
 A POC demonstra uma única campanha de ataque sintética do primeiro sinal observável até a tentativa de adulteração e apagamento de rastros.
 
-```text
-                     CAMPANHA ADVERSARIAL SINTÉTICA
-                                 |
-                 +---------------+---------------+
-                 |                               |
-                 v                               v
-        FASE 1 — INVASÃO                FASE 2 — PÓS-COMPROMISSO
-        detectar/correlacionar          impedir/provar abuso
-                 |                               |
-                 v                               v
- Firewall/WAF/Identity/Host            Aplicação / Banco / Agente
- DB audit/App/Network                  Policy / HITL / Gateway
-                 |                               |
-                 +---------------+---------------+
-                                 |
-                                 v
-                            HERACLITUSDB
-                                 |
-                 +---------------+---------------+
-                 |               |               |
-                 v               v               v
-             SENTINEL           HRKL          EVIDENCE
-             detecção        append-only     bundle offline
-             correlação      LSN / HLC       verifier
-             grafo           Merkle
-```
+<p align="center">
+  <img src="assets/campanha-adversarial-sintetica.svg" alt="Campanha adversarial sintética em duas fases integrada ao HeraclitusDB" width="100%" />
+</p>
 
 ## Pergunta central
 
