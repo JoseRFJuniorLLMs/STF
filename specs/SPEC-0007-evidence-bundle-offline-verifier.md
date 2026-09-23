@@ -131,3 +131,82 @@ Preferência forte:
 ## 10. Futuro
 
 Uma eventual evolução pode alinhar completamente o formato ao SPEC-0087 do HeraclitusDB, incluindo custody chain, assinatura, TSA, SBOM e relatório técnico formal.
+
+
+---
+
+## 11. Manifesto v1 detalhado
+
+```json
+{
+  "schema_version":"stf-poc-evidence/1",
+  "package_id":"POC-STF-001",
+  "run_id":"...",
+  "source":{
+    "poc_commit":"...",
+    "heraclitus_commit":"...",
+    "build_digest":"sha256:..."
+  },
+  "range":{"lsn_start":0,"lsn_end":100},
+  "objects":[
+    {"path":"events/events.jsonl","size":1234,"sha256":"...","blake3":"..."}
+  ],
+  "merkle":{},
+  "trust":{
+    "timestamp":"NOT_CONFIGURED",
+    "signature":"NOT_CONFIGURED",
+    "external_trust":"UNVERIFIED"
+  },
+  "limitations":[]
+}
+```
+
+## 12. Segurança de paths
+
+O verifier MUST rejeitar:
+
+- `../`;
+- caminho absoluto;
+- drive prefix;
+- NUL;
+- symlink;
+- hardlink inesperado;
+- paths distintos que normalizam para o mesmo destino.
+
+Nunca extrair fora de diretório temporário controlado.
+
+## 13. Resource bounds
+
+Impor max objects, max object bytes, max total bytes, max manifest bytes, max nesting e timeout opcional.
+
+## 14. Ordem de verificação
+
+1. parse/estrutura;
+2. normalização de paths;
+3. limites;
+4. digest do manifesto;
+5. presença/tamanho;
+6. digests;
+7. range/count;
+8. Merkle;
+9. referências de auditoria;
+10. timestamp;
+11. assinatura;
+12. trust chain;
+13. resumo.
+
+Falha estrutural impede PASS em verificações dependentes.
+
+## 15. Estados separados
+
+```text
+LOCAL_CONTENT_INTEGRITY   PASS
+HISTORY_PROOF             PASS
+TIMESTAMP_CRYPTO          NOT_CONFIGURED
+SIGNATURE_CRYPTO          NOT_CONFIGURED
+INSTITUTIONAL_TRUST       UNVERIFIED
+```
+
+## 16. Verifier como artefato independente
+
+O verifier deve possuir versão, commit, hash e SBOM próprios. O pacote não pode depender de código autoexecutável interno para “provar a si mesmo”.
