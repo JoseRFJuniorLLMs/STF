@@ -117,3 +117,59 @@ EVIDENCE_EXPORT          PASS
 OFFLINE_VERIFY           PASS
 UNDECLARED_EGRESS        0
 ```
+
+
+---
+
+## 10. Kit offline
+
+A entrega deve poder ser materializada como:
+
+```text
+stf-poc-kit/
+├── images/
+├── bin/
+├── config/
+├── fixtures/
+├── policies/
+├── sbom/
+├── hashes.txt
+├── BUILD-INFO.json
+└── RUNBOOK.md
+```
+
+O host da reunião não deve precisar buscar imagens ou dependências.
+
+## 11. Hardening de runtime
+
+Recomendado:
+
+- imagens por digest, nunca `:latest`;
+- usuário não-root;
+- filesystem read-only quando compatível;
+- tmpfs para temporários;
+- capabilities mínimas;
+- sem Docker socket;
+- healthchecks;
+- limites de CPU/memória;
+- rede dedicada da POC.
+
+## 12. Build identity
+
+`BUILD-INFO.json` inclui repository, commit, `dirty=false`, toolchain, target, lockfile digest, build time declarado, SHA-256 do artefato e image digest.
+
+## 13. Supply chain
+
+O kit inclui lockfiles, SBOM CycloneDX/SPDX quando disponível, inventário de licenças, hashes e provenance conforme SPEC-0015.
+
+## 14. Prova de isolamento
+
+O verifier deve ser executado com egress realmente indisponível: namespace sem rota default, política equivalente ou mecanismo documentado.
+
+“Não chamou internet” não é suficiente se poderia ter chamado.
+
+## 15. Configuração de segurança
+
+O run report registra gateway mode, policy version, approval TTL, size limits, verifier limits e trust profile.
+
+Default que reduza segurança não pode ser ativado silenciosamente.
