@@ -98,3 +98,41 @@ A sabotagem não permanece na branch final.
 A POC prova detecção dentro do modelo testado. Não deve afirmar resistência absoluta contra administrador com controle total simultâneo de código, kernel, disco e cadeia de distribuição.
 
 Esse problema exige fronteiras externas adicionais, como WORM, HSM, atestação ou retenção independente, fora do escopo P0.
+
+
+---
+
+## 9. Identidade lógica versus física
+
+Separar identidade canônica do evento, representação física, digest do objeto exportado e raiz Merkle. Repack/compactação não pode ser confundido com alteração lógica quando preserva a identidade canônica.
+
+## 10. Matriz de corrupção
+
+| ID | Corrupção | Esperado |
+|---|---|---|
+| INT-01 | bit flip payload | DETECTED |
+| INT-02 | bit flip header | DETECTED |
+| INT-03 | truncamento | DETECTED |
+| INT-04 | registro removido | DETECTED |
+| INT-05 | registros trocados | DETECTED |
+| INT-06 | registro injetado | DETECTED |
+| INT-07 | root substituída | DETECTED conforme âncora/prova disponível |
+| INT-08 | manifest digest alterado | FAIL |
+| INT-09 | arquivo extra | WARN/FAIL por profile |
+| INT-10 | arquivo listado ausente | FAIL |
+
+## 11. Segmento aberto versus selado
+
+Se a prova exigir sealing/checkpoint, o script executa esse passo explicitamente. Raiz ainda expansível não será apresentada como âncora final.
+
+## 12. Torn writes
+
+Quando suportado pelo baseline, interromper o processo durante escrita, reiniciar e validar que escrita parcial não é silenciosamente aceita.
+
+## 13. Prova independente
+
+Sempre que possível, exportar proof path de LSN e validá-lo no verifier offline.
+
+## 14. Golden vectors
+
+Fixtures devem registrar bytes canônicos, SHA-256, BLAKE3 quando aplicável, Merkle root e proof path esperados para detectar regressões de encoding.
