@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>STF POC | HeraclitusDB Cyber Defense</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="shell">
+  <header class="topbar">
+    <div class="brand"><div class="brand-mark">H</div><div><div class="eyebrow">POC INTEGRADA • AMBIENTE SINTÉTICO</div><h1>HeraclitusDB Cyber Defense</h1><p>Intrusão → correlação → pós-compromisso → bloqueio → evidência</p></div></div>
+    <div class="top-actions"><div class="mode-pill"><span class="dot"></span><span id="mode">LOOPBACK ONLY</span></div><button class="btn ghost" id="resetBtn">Reiniciar</button><button class="btn" id="stepBtn">Próximo passo</button><button class="btn primary" id="runBtn">Executar campanha</button></div>
+  </header>
+
+  <section class="campaign-head panel">
+    <div><span class="section-kicker">CAMPANHA</span><h2 id="campaignId">STF-POC-CAMPAIGN-001</h2><p id="lastAction">Ambiente pronto.</p></div>
+    <div class="progress-wrap"><div class="progress-meta"><span id="stepText">0 / 17 eventos</span><span id="progressPct">0%</span></div><div class="progress"><div id="progressBar"></div></div></div>
+    <div class="risk-box"><span>RISCO CORRELACIONADO</span><strong id="riskValue">0</strong><small id="riskLabel">NORMAL</small></div>
+  </section>
+
+  <section class="kpis">
+    <div class="kpi panel"><span>Security Signals</span><strong id="signalCount">0</strong><small>multi-fonte</small></div>
+    <div class="kpi panel"><span>Incidente</span><strong id="incidentState">NÃO ABERTO</strong><small id="incidentId">aguardando correlação</small></div>
+    <div class="kpi panel"><span>Upstream hits</span><strong id="upstreamHits">0</strong><small>efeitos realmente executados</small></div>
+    <div class="kpi panel"><span>Integridade</span><strong id="integrityState">NOT RUN</strong><small>hash-chain + Merkle</small></div>
+    <div class="kpi panel"><span>Tamper</span><strong id="tamperState">NOT TESTED</strong><small>alteração histórica</small></div>
+    <div class="kpi panel"><span>Offline verify</span><strong id="offlineState">NOT RUN</strong><small>evidência independente</small></div>
+  </section>
+
+  <main class="grid">
+    <section class="panel span-8">
+      <div class="panel-head"><div><span class="section-kicker">ATAQUE</span><h3>Mapa da campanha</h3></div><div class="legend"><span><i class="sev info"></i>Info</span><span><i class="sev medium"></i>Médio</span><span><i class="sev high"></i>Alto</span><span><i class="sev critical"></i>Crítico</span></div></div>
+      <div class="phase-strip"><div class="phase phase1"><b>FASE 1</b><span>INVASÃO</span><small>detectar / correlacionar</small></div><div class="phase-arrow">→</div><div class="phase phase2"><b>FASE 2</b><span>PÓS-COMPROMISSO</span><small>impedir / provar abuso</small></div></div>
+      <div id="attackPath" class="attack-path"></div>
+    </section>
+
+    <section class="panel span-4 incident-panel">
+      <div class="panel-head"><div><span class="section-kicker">SOC</span><h3>Contexto do incidente</h3></div><span id="incidentBadge" class="badge neutral">CANDIDATE</span></div>
+      <div class="incident-hero"><div class="shield">!</div><div><b id="incidentSeverity">Sem incidente</b><span id="incidentSummary">Aguardando sinais suficientes.</span></div></div>
+      <dl class="facts"><div><dt>Principal</dt><dd id="principal">—</dd></div><div><dt>Estado</dt><dd id="incidentStatus">—</dd></div><div><dt>Risk score</dt><dd id="incidentRisk">0</dd></div><div><dt>Tags</dt><dd id="policyTags">—</dd></div></dl>
+      <div class="callout"><b>Regra de ouro</b><span>Sem telemetria, não existe claim de detecção. Sem enforcement, não existe claim de bloqueio.</span></div>
+    </section>
+
+    <section class="panel span-7">
+      <div class="panel-head"><div><span class="section-kicker">TRILHA</span><h3>Eventos e rastros</h3></div><span class="mono" id="merkleShort">Merkle: —</span></div>
+      <div class="event-table-wrap"><table class="event-table"><thead><tr><th>LSN</th><th>Fonte</th><th>Evento</th><th>Ator / Ativo</th><th>Resultado</th></tr></thead><tbody id="eventRows"><tr><td colspan="5" class="empty">Nenhum evento processado.</td></tr></tbody></table></div>
+    </section>
+
+    <section class="panel span-5">
+      <div class="panel-head"><div><span class="section-kicker">CORRELAÇÃO</span><h3>Grafo temporal</h3></div><span id="graphStats" class="mono">0 nós / 0 arestas</span></div>
+      <div id="graph" class="graph"><div class="empty graph-empty">O grafo surgirá conforme os sinais forem correlacionados.</div></div>
+    </section>
+
+    <section class="panel span-4">
+      <div class="panel-head"><div><span class="section-kicker">POLICY</span><h3>Controle pós-compromisso</h3></div></div>
+      <div class="policy-card"><div class="policy-row"><span>Identidade ligada a incidente</span><b id="compromisedCheck">NÃO</b></div><div class="policy-row"><span>Operação HIGH sem approval</span><b class="deny">DENY</b></div><div class="policy-row"><span>Replay de approval</span><b class="deny">DENY</b></div><div class="policy-row"><span>Identity / parameter binding</span><b class="deny">ENFORCED</b></div></div>
+      <div class="approval" id="approvalBox"><span>HITL</span><b>Nenhuma aprovação pendente</b><small>Ações críticas podem exigir decisão humana.</small></div>
+    </section>
+
+    <section class="panel span-4">
+      <div class="panel-head"><div><span class="section-kicker">HRKL</span><h3>Integridade e rastreabilidade</h3></div></div>
+      <div class="integrity-orbit"><div><span>LSN</span><b id="lastLsn">0</b></div><div><span>Eventos</span><b id="eventCount">0</b></div><div><span>Merkle</span><b id="merkleState">—</b></div></div>
+      <div class="hash-box"><span>Raiz Merkle atual</span><code id="merkleRoot">—</code></div>
+      <button id="tamperBtn" class="btn danger full">Executar sabotagem controlada</button><div id="tamperResult" class="mini-result">A sabotagem altera uma cópia do bundle e verifica se a prova quebra.</div>
+    </section>
+
+    <section class="panel span-4">
+      <div class="panel-head"><div><span class="section-kicker">EVIDENCE</span><h3>Pacote verificável</h3></div></div>
+      <div class="evidence-stack"><div><span>Hash-chain</span><b id="chainVerify">NOT RUN</b></div><div><span>Merkle</span><b id="merkleVerify">NOT RUN</b></div><div><span>Timestamp externo</span><b class="warn">NOT CONFIGURED</b></div><div><span>Assinatura institucional</span><b class="warn">NOT CONFIGURED</b></div></div>
+      <button id="exportBtn" class="btn success full">Gerar Evidence Bundle</button><div id="exportResult" class="mini-result">Bundle ainda não exportado.</div>
+    </section>
+
+    <section class="panel span-12 qualification-panel">
+      <div class="panel-head"><div><span class="section-kicker">QUALIFICATION</span><h3>Scorecard da POC</h3></div><span class="badge" id="qualificationBadge">EM EXECUÇÃO</span></div>
+      <div id="qualification" class="qualification-grid"></div>
+    </section>
+  </main>
+  <footer><b>STF POC / HeraclitusDB</b><span>Dados sintéticos • sem infraestrutura real • sem credenciais reais • loopback-only</span></footer>
+</div>
+<div id="toast" class="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>
