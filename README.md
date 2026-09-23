@@ -116,6 +116,8 @@ A revisão adicionou threat model, anti-bypass, consumo atômico de aprovação,
 - [Baseline técnico do HeraclitusDB](docs/HERACLITUS-BASELINE.md)
 - [Referências institucionais](docs/REFERENCES.md)
 - [Relatório da revisão](docs/REVIEW-2026-09-23.md)
+- [Plano de implementação](docs/IMPLEMENTATION-PLAN.md)
+- [Checklist da reunião técnica](docs/MEETING-CHECKLIST.md)
 
 ### Regra de ouro
 
