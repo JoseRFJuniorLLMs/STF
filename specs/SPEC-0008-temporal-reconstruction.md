@@ -88,3 +88,54 @@ Cada resposta de time-travel na demo deve registrar:
 - build identity.
 
 Isso permite relacionar a consulta ao bundle final.
+
+
+---
+
+## 8. Reducers versionados
+
+A reconstrução usa reducer explicitamente versionado:
+
+```text
+event schema v1 + reducer v1 -> state digest X
+```
+
+Mudança de regra não altera silenciosamente resultados históricos.
+
+## 9. Determinismo
+
+Reexecutar o mesmo intervalo após restart, em processo novo e, quando possível, a partir do bundle. O state digest lógico deve permanecer igual.
+
+## 10. Lacunas e forks
+
+LSN faltante, evento incompatível duplicado, proof inválida ou intervalo truncado resultam em `completeness=PARTIAL/INVALID`.
+
+## 11. Resposta as-of
+
+```json
+{
+  "resource_id":"DOC-0001",
+  "as_of_lsn":103,
+  "state":{},
+  "state_digest":"...",
+  "history_root":"...",
+  "completeness":"COMPLETE",
+  "reducer_version":"1"
+}
+```
+
+## 12. Causalidade
+
+Exibir quando disponível:
+
+```text
+tool_requested
+ -> policy_evaluated
+ -> approval_requested
+ -> approval_granted
+ -> tool_executed
+```
+
+## 13. Semântica temporal
+
+LSN é a ordem canônica dentro do escopo testado. HLC auxilia ordenação temporal. `claimed_time` é dado de origem e não prova tempo confiável sem ancoragem externa.
