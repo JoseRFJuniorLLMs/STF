@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/poc-integrada-stf-heraclitusdb.svg" alt="POC integrada STF, agente de IA atacante e HeraclitusDB alertando" width="100%" />
+</p>
+
 # STF — POC HeraclitusDB
 
 > **Prova de conceito independente e integralmente sintética.** Este repositório não é produto oficial, homologado, certificado ou endossado pelo Supremo Tribunal Federal. Nenhum teste deve atingir infraestrutura real do STF. A aproximação arquitetural usa apenas informações públicas e oficiais.
