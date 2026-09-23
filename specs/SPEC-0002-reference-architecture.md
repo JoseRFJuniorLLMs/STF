@@ -1,221 +1,116 @@
-# SPEC-0002 — Arquitetura de Referência e Fronteiras de Integração
+# SPEC-0002 — Arquitetura Integrada de Referência
 
 **Status:** Proposed  
-**Classe:** Architecture / Integration  
-**Prioridade:** P0  
-**Dependências:** SPEC-0001
+**Prioridade:** P0
 
-## 1. Princípio
-
-A POC trata o HeraclitusDB como camada lateral de confiança, não como substituto de sistemas existentes.
+## 1. Arquitetura
 
 ```text
-Aplicação simulada ───────┐
-Eventos de segurança ─────┼────> Adapter ───> HeraclitusDB
-Agente / MCP ─────────────┘                     |
-                                                +--> HRKL / histórico
-                                                +--> políticas
-                                                +--> evidência
-                                                +--> consultas temporais
-                                                |
-                                                v
-                                         Evidence Exporter
-                                                |
-                                                v
-                                         Offline Verifier
+                         CYBER RANGE ISOLADO
+                               |
+                +--------------+--------------+
+                |                             |
+                v                             v
+         Attack Simulator              Benign Traffic
+                |                             |
+                +--------------+--------------+
+                               |
+          +--------------------+--------------------+
+          |         |          |         |          |
+         FW        IAM        HOST      DB        APP
+          |         |          |         |          |
+          +--------------------+--------------------+
+                               |
+                               v
+                         TELEMETRY ADAPTERS
+                               |
+                               v
+                         HERACLITUS HRKL
+                               |
+                               v
+                            SENTINEL
+                    normalize / detect / graph
+                               |
+                               v
+                         INCIDENT CONTEXT
+                               |
+                               v
+                  +------------+------------+
+                  |                         |
+                  v                         v
+          SOC alert/response         PHASE 2 POLICY
+                                            |
+                                            v
+                                 Synthetic Judicial App
+                                            |
+                                      Agent Gateway
+                                            |
+                                 Policy / Approval / HITL
+                                            |
+                                            v
+                                     Synthetic DB
+                                            |
+                                            v
+                                      HRKL Evidence
+                                            |
+                                            v
+                                  OFFLINE VERIFIER
 ```
 
-## 2. Componentes
+## 2. Zonas
 
-### 2.1 Producer Simulator
+A — telemetry producers  
+B — normalization/persistence  
+C — detection/correlation  
+D — incident context  
+E — application/agent enforcement  
+F — evidence/export  
+G — independent verifier
 
-Gera eventos sintéticos equivalentes a:
+## 3. Princípio de observabilidade
 
-- autenticação;
-- consulta;
-- acesso a documento;
-- classificação;
-- solicitação de ação;
-- aprovação;
-- execução;
-- erro;
-- exportação.
-
-Não simula semântica jurídica real.
-
-### 2.2 POC Adapter
-
-Responsável por transformar eventos sintéticos para o envelope canônico da SPEC-0003.
-
-O adapter MUST:
-
-- não alterar payload sem registrar transformação;
-- preservar identidade de origem;
-- calcular digest do payload;
-- atribuir correlation_id;
-- rejeitar evento sem campos obrigatórios.
-
-### 2.3 HeraclitusDB
-
-A POC deve usar apenas capacidades identificadas como existentes no baseline do projeto principal. Recursos de roadmap podem ser implementados localmente como protótipos POC, mas devem ser marcados como experimentais.
-
-### 2.4 Agent Gateway
-
-Intercepta operações do agente antes do efeito externo.
-
-Modos:
-
-- observe: registra sem bloquear;
-- shadow: calcula decisão, mas não bloqueia;
-- enforce: decisão negativa impede execução.
-
-A demonstração P0 utiliza enforce para ações sensíveis.
-
-### 2.5 Evidence Exporter
-
-Produz pacote autocontido conforme SPEC-0007.
-
-### 2.6 Offline Verifier
-
-Processo separado do exporter. Idealmente binário ou comando independente, executável sem acesso de rede.
-
-## 3. Fronteiras de confiança
+Heraclitus só pode detectar o que recebe.
 
 ```text
-[UNTRUSTED INPUT]
-  producer / agent / user input
-          |
-          v
-[VALIDATION BOUNDARY]
-          |
-          v
-[HERACLITUS TRUST DOMAIN]
-          |
-          +--> persistent history
-          +--> policy decision
-          +--> evidence
-          |
-          v
-[EXPORT BOUNDARY]
-          |
-          v
-[INDEPENDENT VERIFIER]
+NO TELEMETRY
+   =>
+NO CLAIM OF DETECTION
 ```
 
-O verificador não deve assumir que o exporter é honesto. Ele valida estrutura, digests e provas disponíveis.
+## 4. Princípio de enforcement
 
-## 4. Princípios de falha
-
-- erro de validação de evento => REJECT;
-- falta de aprovação exigida => DENY;
-- aprovação inválida => DENY;
-- falha na persistência crítica => operação sensível não deve ser reportada como PASS;
-- confiança externa ausente => UNVERIFIED ou NOT_CONFIGURED;
-- resultado desconhecido após falha => UNKNOWN, nunca sucesso inventado.
-
-## 5. Topologia da POC
-
-Execução recomendada:
+Heraclitus/Gateway só pode impedir efeito quando a rota do efeito atravessa um ponto governado.
 
 ```text
-poc-network
-├── producer
-├── heraclitus
-├── agent-gateway
-├── demo-upstream
-└── exporter
-
-offline-verifier
-└── executado fora de poc-network no teste final
+DIRECT CREDENTIAL + DIRECT ROUTE
+   =>
+GATEWAY CANNOT GUARANTEE BLOCK
 ```
 
-## 6. Segurança de rede
+A POC remove essa rota por construção.
 
-Na POC:
+## 5. Ponte Fase 1 -> Fase 2
 
-- serviços devem escutar apenas onde necessário;
-- portas publicadas devem ser documentadas;
-- nenhuma credencial real pode existir;
-- acesso de saída deve ser desnecessário para os testes principais;
-- verificação offline deve funcionar com rede desabilitada.
+`IncidentContext` mínimo:
 
-## 7. Não objetivos
+- incident_id;
+- campaign_id;
+- principals;
+- hosts;
+- resources;
+- severity;
+- confidence;
+- evidence_refs;
+- state OPEN/CLOSED;
+- detected_at;
+- policy_tags.
 
-Esta arquitetura não pretende provar:
+A policy da Fase 2 pode consultar esse contexto.
 
-- HA de produção;
-- DR institucional;
-- dimensionamento para carga do STF;
-- compatibilidade com PJe;
-- federação de identidade real;
-- HSM real;
-- ACT real;
-- operação multi-datacenter.
+## 6. Infra aproximada
 
-Esses itens pertencem a eventual piloto posterior.
+A arquitetura usa classes publicamente documentadas no STF, mas vendors sensíveis ou não confirmados permanecem adapters genéricos.
 
+## 7. Failure domains
 
----
-
-## 8. Data Flow Diagram e zonas
-
-```text
-ZONE A — INPUT NÃO CONFIÁVEL
- producer / agent / operador
-          |
-          v
-ZONE B — ENFORCEMENT
- schema -> identity -> policy -> approval binding
-          |
-          v
-ZONE C — EFFECT
- synthetic upstream
-          |
-          v
-ZONE D — EVIDENCE
- HRKL / audit / Merkle / exporter
-          |
-          v
-ZONE E — INDEPENDENT VERIFICATION
- offline verifier
-```
-
-A propriedade central é: **ações HIGH não possuem rota válida da Zone A para a Zone C sem atravessar a Zone B**.
-
-## 9. Identidades de processo
-
-Producer, agent-gateway, Heraclitus, demo-upstream, exporter e verifier possuem identidades lógicas distintas. O agente não recebe credencial direta do upstream.
-
-## 10. Matriz de comunicação
-
-A implementação deve gerar `docs/NETWORK.md` com origem, destino, protocolo, porta, finalidade e necessidade de cada fluxo. Nenhuma porta pode existir apenas por default de container.
-
-O verifier tem como contrato P0: **nenhuma comunicação de rede necessária**.
-
-## 11. Failure domains
-
-- gateway indisponível => HIGH não executa;
-- Heraclitus indisponível antes da evidência crítica => HIGH não retorna sucesso;
-- upstream indisponível => FAILED/UNKNOWN;
-- exporter indisponível => histórico preservado permanece válido;
-- verifier indisponível => pacote não é alterado;
-- UI indisponível => CLI mantém todos os testes.
-
-## 12. Estados de efeito
-
-```text
-REQUESTED
-POLICY_DENIED
-WAITING_APPROVAL
-APPROVED
-EXECUTING
-SUCCEEDED
-FAILED
-UNKNOWN
-```
-
-`APPROVED` nunca é sinônimo de `SUCCEEDED`.
-
-## 13. Integrações futuras
-
-PJe, SEI, SIEM e demais sistemas entram exclusivamente por adapters versionados. O core da POC não recebe semântica específica de produto institucional.
+Falhas de Sentinel não podem corromper HRKL; falha de policy em ação HIGH deve negar; falha do upstream resulta FAILED/UNKNOWN; falha do exporter não altera história; verifier não possui rota de escrita à origem.

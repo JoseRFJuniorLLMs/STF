@@ -1,136 +1,196 @@
 # STF — POC HeraclitusDB
 
-> **Repositório independente de prova de conceito.** Este projeto não é produto oficial, homologado, certificado ou endossado pelo Supremo Tribunal Federal. A POC usa exclusivamente dados sintéticos e existe para avaliação técnica de mecanismos de integridade, evidência, auditoria e governança de agentes de IA.
+> **Prova de conceito independente e integralmente sintética.** Este repositório não é produto oficial, homologado, certificado ou endossado pelo Supremo Tribunal Federal. Nenhum teste deve atingir infraestrutura real do STF. A aproximação arquitetural usa apenas informações públicas e oficiais.
 
-## Objetivo
+# POC única, duas fases
 
-Demonstrar, de forma reproduzível e verificável, que uma camada de confiança baseada no HeraclitusDB pode:
-
-- preservar eventos em histórico append-only;
-- detectar adulteração, exclusão e reordenação de registros;
-- reconstruir estados históricos;
-- governar ações sensíveis de agentes de IA;
-- exigir aprovação humana para operações classificadas;
-- bloquear replay, autorização expirada e troca indevida de identidade;
-- exportar um pacote de evidências;
-- permitir verificação independente e offline das propriedades locais da prova;
-- operar sem integração com sistemas reais do STF na fase de POC.
-
-A pergunta central da demonstração é:
-
-> **Se um sistema, operador ou agente de IA executar uma operação sensível, conseguimos provar exatamente o que aconteceu, detectar adulteração posterior e impedir ações não autorizadas?**
-
-## Escopo da POC
-
-A POC não substitui PJe, bancos corporativos, SIEM, IAM ou sistemas administrativos. Ela simula uma integração lateral, com dados sintéticos, para validar propriedades de segurança e auditabilidade antes de qualquer discussão de piloto institucional.
+A POC demonstra uma única campanha de ataque sintética do primeiro sinal observável até a tentativa de adulteração e apagamento de rastros.
 
 ```text
-Aplicação simulada ──┐
-Agente de IA ────────┼──> HeraclitusDB ──> Evidência ──> Verificador offline
-Eventos de segurança ┘          |
-                                +──> Policy / HITL / Anti-Replay
+                     CAMPANHA ADVERSARIAL SINTÉTICA
+                                 |
+                 +---------------+---------------+
+                 |                               |
+                 v                               v
+        FASE 1 — INVASÃO                FASE 2 — PÓS-COMPROMISSO
+        detectar/correlacionar          impedir/provar abuso
+                 |                               |
+                 v                               v
+ Firewall/WAF/Identity/Host            Aplicação / Banco / Agente
+ DB audit/App/Network                  Policy / HITL / Gateway
+                 |                               |
+                 +---------------+---------------+
+                                 |
+                                 v
+                            HERACLITUSDB
+                                 |
+                 +---------------+---------------+
+                 |               |               |
+                 v               v               v
+             SENTINEL           HRKL          EVIDENCE
+             detecção        append-only     bundle offline
+             correlação      LSN / HLC       verifier
+             grafo           Merkle
+```
+
+## Pergunta central
+
+> **Se um atacante assistido por IA comprometer uma infraestrutura simulada semelhante, em classes de sistemas, ao ambiente publicamente documentado do STF, o HeraclitusDB consegue correlacionar a intrusão desde o primeiro sinal observável, acompanhar sua progressão, impedir ações críticas sob enforcement e preservar uma linha do tempo verificável mesmo diante de tentativa de adulteração?**
+
+## Fase 1 — invasão
+
+A Fase 1 não executa exploração contra sistemas reais. Um **Attack Simulator** controlado produz telemetria realista de uma campanha autorizada em cyber range isolado.
+
+Fontes sintéticas:
+
+- firewall/WAF;
+- autenticação/IAM;
+- Windows/Linux;
+- rede/DNS/proxy;
+- EDR/host telemetry;
+- database audit;
+- application audit;
+- API/gateway;
+- threat intelligence sintética.
+
+Objetivo:
+
+```text
+sinal de borda
+   -> autenticação anômala
+   -> atividade de host
+   -> descoberta/acesso
+   -> possível movimento lateral
+   -> acesso a aplicação/banco
+   -> INCIDENTE CORRELACIONADO
+```
+
+O sistema deve demonstrar que eventos isolados de fontes diferentes podem formar uma mesma campanha por identidade, host, recurso, causalidade, tempo e evidência.
+
+## Fase 2 — atacante já dentro
+
+O mesmo `campaign_id` continua.
+
+O atacante sintético tenta:
+
+- acessar informação restrita;
+- modificar metadados ou estado de processo fictício;
+- executar operação privilegiada;
+- exportar conteúdo;
+- abusar de agente/tool;
+- reutilizar aprovação;
+- alterar parâmetros depois da aprovação;
+- apagar, truncar, reordenar ou adulterar evidência.
+
+O HeraclitusDB deve demonstrar:
+
+- policy enforcement;
+- Human-in-the-Loop;
+- anti-replay;
+- identity/parameter binding;
+- `upstream_delta=0` quando uma ação é negada;
+- detecção de adulteração;
+- reconstrução histórica;
+- Evidence Bundle verificável offline.
+
+## Perfil público aproximado do STF
+
+A POC modela apenas **classes publicamente documentadas**, sem reproduzir topologia real.
+
+Fontes oficiais públicas indicam, entre outros elementos:
+
+- STF Digital e sistemas processuais eletrônicos;
+- SEI;
+- peticionamento eletrônico;
+- integração MNI;
+- sistemas corporativos;
+- infraestrutura de data center;
+- servidores de IA e aquisição de HPC;
+- ambientes Linux;
+- VDI;
+- LAN/WLAN;
+- proteção de dados/backup;
+- data warehouse, data lake e data marts;
+- Power BI e SAP BusinessObjects;
+- JFrog Artifactory/Xray;
+- Sourcegraph;
+- OnlyOffice self-hosted;
+- soluções de IA como Victor, Rafa, VitórIA e Maria.
+
+Veja [STF-PUBLIC-INFRA-BASELINE.md](docs/STF-PUBLIC-INFRA-BASELINE.md).
+
+**Não assumimos** fabricante atual de firewall, WAF, SIEM, EDR ou banco transacional quando isso não estiver publicamente confirmado e atual.
+
+## Resultado final da POC
+
+```text
+PHASE1_TELEMETRY_INGEST          PASS
+PHASE1_RULE_DETECTION            PASS
+PHASE1_CROSS_SOURCE_CORRELATION  PASS
+PHASE1_INCIDENT_GRAPH            PASS
+PHASE1_PROVENANCE                PASS
+
+PHASE2_UNAPPROVED_WRITE          DENY
+PHASE2_HITL_WRITE                PASS
+PHASE2_REPLAY                    DENY
+PHASE2_IDENTITY_SWAP             DENY
+PHASE2_PARAMETER_SWAP            DENY
+PHASE2_UPSTREAM_ON_DENY          0
+
+HISTORY_TAMPER                   DETECTED
+LOG_DELETE                       DETECTED
+EVENT_REORDER                    DETECTED
+TIME_TRAVEL                      PASS
+EVIDENCE_EXPORT                  PASS
+OFFLINE_VERIFY                   PASS
+
+REAL_STF_DATA                    NOT_USED
+REAL_STF_NETWORK                 NOT_USED
+INSTITUTIONAL_IAM                NOT_CONFIGURED
+INSTITUTIONAL_HSM                NOT_CONFIGURED
+EXTERNAL_TRUST                   UNVERIFIED
 ```
 
 ## SPECs
 
-| SPEC | Título | Finalidade |
-|---|---|---|
-| [SPEC-0001](specs/SPEC-0001-scope-success-criteria.md) | Escopo e critérios de sucesso | Define o que a POC deve e não deve provar |
-| [SPEC-0002](specs/SPEC-0002-reference-architecture.md) | Arquitetura de referência | Define fronteiras, componentes e integrações |
-| [SPEC-0003](specs/SPEC-0003-synthetic-event-model.md) | Modelo de eventos sintéticos | Define dados, identidades e cenários |
-| [SPEC-0004](specs/SPEC-0004-integrity-tamper-detection.md) | Integridade e adulteração | Define provas de imutabilidade e detecção |
-| [SPEC-0005](specs/SPEC-0005-agent-governance-hitl.md) | Governança de agentes e HITL | Define políticas e aprovação humana |
-| [SPEC-0006](specs/SPEC-0006-adversarial-security-tests.md) | Testes adversariais | Define replay, bypass, expiração e identidade |
-| [SPEC-0007](specs/SPEC-0007-evidence-bundle-offline-verifier.md) | Evidence Bundle e verificador offline | Define exportação e verificação independente |
-| [SPEC-0008](specs/SPEC-0008-temporal-reconstruction.md) | Reconstrução temporal | Define consultas e replay histórico |
-| [SPEC-0009](specs/SPEC-0009-reproducible-airgap-deployment.md) | Implantação reproduzível e air-gap | Define execução isolada e cadeia de build |
-| [SPEC-0010](specs/SPEC-0010-demo-runbook.md) | Runbook da demonstração | Define roteiro executável de 30–45 minutos |
-| [SPEC-0011](specs/SPEC-0011-observability-performance.md) | Observabilidade e desempenho | Define métricas mínimas da POC |
-| [SPEC-0012](specs/SPEC-0012-governance-privacy-pilot-transition.md) | Governança, privacidade e transição para piloto | Define limites jurídicos/técnicos e próximos gates |
-| [SPEC-0013](specs/SPEC-0013-threat-model-security-assumptions.md) | Threat model | Ativos, adversários e trust boundaries |
-| [SPEC-0014](specs/SPEC-0014-cryptographic-trust-time.md) | Criptografia e tempo | Hash, assinatura, TSA e confiança externa |
-| [SPEC-0015](specs/SPEC-0015-build-provenance-supply-chain.md) | Build provenance | SBOM, hashes e supply chain |
-| [SPEC-0016](specs/SPEC-0016-ci-qualification-mutation-gates.md) | CI e qualification | Gates, negative assertions e mutation tests |
-| [SPEC-0017](specs/SPEC-0017-fault-injection-crash-recovery.md) | Fault injection | Crash, disk full, timeout e UNKNOWN |
-| [SPEC-0018](specs/SPEC-0018-integration-contracts-apis.md) | Integrações | APIs, adapters, versioning e idempotência |
-| [SPEC-0019](specs/SPEC-0019-demo-ux-scorecard-reporting.md) | Demo UX | Scorecard, drill-down e relatório |
-| [SPEC-0020](specs/SPEC-0020-risk-register-pilot-readiness.md) | Pilot readiness | Riscos, dependências e gate para piloto |
+### Base transversal
 
-## Princípios
+- SPEC-0001 — escopo e critérios de sucesso
+- SPEC-0002 — arquitetura end-to-end
+- SPEC-0003 — evento canônico e campaign identity
+- SPEC-0004 — integridade e tamper detection
+- SPEC-0005 — Agent Gateway e HITL
+- SPEC-0006 — campanha adversarial
+- SPEC-0007 — Evidence Bundle
+- SPEC-0008 — reconstrução temporal
+- SPEC-0009 — implantação isolada
+- SPEC-0010 — runbook integrado
+- SPEC-0011 — observabilidade
+- SPEC-0012 — governança/piloto
+- SPEC-0013 — threat model integrado
+- SPEC-0014..0020 — confiança, supply chain, CI, fault, APIs, UX e riscos
 
-1. **Dados sintéticos apenas.**
-2. **Sem acesso ao ambiente produtivo do STF.**
-3. **Sem afirmações de homologação, certificação ou conformidade institucional.**
-4. **Falha explícita é melhor que sucesso presumido.**
-5. **Ausência de âncora externa de confiança nunca pode aparecer como PASS.**
-6. **Toda afirmação demonstrada deve ter evidência reproduzível.**
-7. **A POC deve ser executável por terceiro a partir de instruções versionadas.**
-8. **O verificador deve funcionar sem confiar no processo que produziu a evidência.**
+### Fase 1 / ponte para Fase 2
 
-## Relação com o HeraclitusDB
+- [SPEC-0021](specs/SPEC-0021-security-telemetry-ingestion.md) — ingestão de telemetria
+- [SPEC-0022](specs/SPEC-0022-intrusion-detection-correlation.md) — detecção e correlação
+- [SPEC-0023](specs/SPEC-0023-attack-graph-incident-lifecycle.md) — grafo da campanha e incidente
+- [SPEC-0024](specs/SPEC-0024-soc-response-containment.md) — alerta, resposta e containment sintético
+- [SPEC-0025](specs/SPEC-0025-post-compromise-process-abuse.md) — abuso pós-compromisso
+- [SPEC-0026](specs/SPEC-0026-two-phase-end-to-end-qualification.md) — qualification ponta a ponta
+- [SPEC-0027](specs/SPEC-0027-stf-public-environment-profile.md) — perfil público aproximado
 
-A POC reutiliza capacidades atuais do HeraclitusDB quando disponíveis e cria adaptadores experimentais apenas onde necessário. Recursos que no projeto principal ainda estejam marcados como `Draft`, `Proposed` ou `roadmap` continuam com essa classificação aqui.
-
-Em particular, o pacote forense completo e o protocolo de administração confiável possuem SPECs próprias no HeraclitusDB e não devem ser apresentados como recursos de produção antes de seus gates correspondentes.
-
-## Resultado esperado
-
-Ao final da POC, um avaliador independente deve conseguir executar cenários positivos e negativos e obter resultados objetivos como:
-
-```text
-APPEND HISTORY             PASS
-TAMPER DETECTION           PASS
-DELETE DETECTION           PASS
-REORDER DETECTION          PASS
-TIME TRAVEL                PASS
-UNAPPROVED ACTION          DENY
-REPLAYED APPROVAL          DENY
-EXPIRED APPROVAL           DENY
-IDENTITY MISMATCH          DENY
-EVIDENCE EXPORT            PASS
-OFFLINE LOCAL VERIFY       PASS
-EXTERNAL TIMESTAMP         NOT CONFIGURED
-INSTITUTIONAL SIGNATURE    NOT CONFIGURED
-```
-
-A POC é considerada tecnicamente concluída somente quando os critérios da SPEC-0001 e o runbook da SPEC-0010 puderem ser reproduzidos em ambiente limpo.
-
-
----
-
-## Qualification Pack — revisão 23/09/2026
-
-A POC agora é organizada em três níveis:
-
-```text
-P0  reunião técnica: prova reproduzível e adversarial
-P1  antes de piloto: resiliência, supply chain e integração
-P2  institucional: IAM, HSM/KMS, trust externo, HA/DR e operação
-```
-
-A revisão adicionou threat model, anti-bypass, consumo atômico de aprovação, proteção TOCTOU, `upstream_delta` como oráculo independente, hardening do verifier contra pacote hostil, fault injection, estados UNKNOWN, build provenance, SBOM, CI/mutation testing e matriz de risco.
-
-### Documentos de controle
-
-- [Matriz de rastreabilidade](docs/TRACEABILITY.md)
-- [Baseline técnico do HeraclitusDB](docs/HERACLITUS-BASELINE.md)
-- [Referências institucionais](docs/REFERENCES.md)
-- [Relatório da revisão](docs/REVIEW-2026-09-23.md)
-- [Plano de implementação](docs/IMPLEMENTATION-PLAN.md)
-- [Checklist da reunião técnica](docs/MEETING-CHECKLIST.md)
-
-### Regra de ouro
-
-Nenhuma afirmação da apresentação entra sem:
+## Regra de ouro
 
 ```text
 CLAIM
-  -> SPEC
-  -> TEST
-  -> EXPECTED
-  -> OBSERVED
-  -> EVIDENCE
-  -> LIMITATION
+ -> SOURCE/ASSUMPTION
+ -> SPEC
+ -> TEST
+ -> EXPECTED
+ -> OBSERVED
+ -> EVIDENCE
+ -> LIMITATION
 ```
 
-A demo deve falhar corretamente quando um controle é removido. Esse é o ponto. Um painel que permanece verde enquanto a segurança é sabotada é só decoração cara.
+A POC é forte quando um ataque ou sabotagem muda corretamente o resultado para DENY, DETECTED, FAIL ou UNKNOWN. Um dashboard eternamente verde é só um protetor de tela com autoestima.

@@ -1,222 +1,129 @@
-# SPEC-0010 — Runbook da Demonstração Técnica
+# SPEC-0010 — Runbook Integrado da Demonstração
 
 **Status:** Proposed  
-**Classe:** Demo / Acceptance Runbook  
-**Prioridade:** P0  
-**Dependências:** SPEC-0001 a SPEC-0009
+**Prioridade:** P0
 
-## 1. Objetivo
+## 1. Duração alvo
 
-Definir uma demonstração de 30 a 45 minutos que seja técnica, reproduzível e verificável.
+40–50 minutos.
 
-## 2. Regra
+## 2. Preflight
 
-A demo não depende de slides para provar propriedades. Slides podem explicar; scripts e resultados devem provar.
+- commits fixados;
+- hashes;
+- network isolation;
+- upstream counter = 0;
+- Sentinel ready;
+- policies loaded;
+- fixtures;
+- offline verifier;
+- run_id novo.
 
-## 3. Preparação
+## 3. Ato 1 — primeira telemetria
 
-Antes da reunião:
+Mostrar fluxo benigno por alguns segundos.
 
-- ambiente limpo;
-- hashes validados;
-- fixtures carregáveis;
-- logs zerados;
-- clock registrado;
-- versão do HeraclitusDB registrada;
-- branch/commit da POC registrados;
-- plano B local sem internet.
+Depois iniciar campanha:
 
-## 4. Sequência
+```text
+./poc campaign start STF-POC-CAMPAIGN-001
+```
 
-### Fase A — Introdução, 3–5 min
+Exibir eventos chegando de fontes diferentes sem afirmar ainda “invasão confirmada”.
 
-Explicar:
+## 4. Ato 2 — detecção
 
-- camada lateral;
-- dados sintéticos;
-- nenhum acesso a produção;
-- objetivo de provar controle e evidência.
-
-### Fase B — Ingestão e histórico, 5 min
-
-Executar cenário base.
+Uma regra/sinal é acionada.
 
 Mostrar:
 
-```text
-events accepted
-LSN range
-Merkle root
-current state
-```
+- raw event;
+- source LSN;
+- SecuritySignal;
+- rule/reason;
+- evidence ref.
 
-### Fase C — Time travel, 3 min
+## 5. Ato 3 — correlação
 
-Consultar estado antes e depois de alteração.
+Novos eventos de identity, host, DB e app formam o grafo.
 
-Mostrar diferença entre:
+Mostrar um evento benigno próximo que **não** entra no incidente.
 
-- aprovação;
-- execução;
-- estado corrente.
+Abrir:
 
-### Fase D — Agente, 7 min
+`STF-POC-INCIDENT-001`.
 
-Executar:
+## 6. Ato 4 — comprometimento suspeito
 
-1. tool LOW => ALLOW;
-2. tool HIGH => REQUIRE_HITL;
-3. rejeitar => DENY;
-4. repetir com nova solicitação;
-5. aprovar => PASS.
-
-### Fase E — Ataques, 7 min
-
-Executar:
-
-- replay;
-- expiração;
-- identity mismatch;
-- alteração de parâmetros.
-
-Todos devem produzir DENY.
-
-### Fase F — Evidência, 5 min
-
-Exportar bundle.
-
-Desligar/parar origem quando possível.
-
-Rodar verificador independente.
-
-### Fase G — Sabotagem, 5 min
-
-Editar um objeto do bundle.
-
-Rodar verificador novamente.
-
-Exigir FAIL/DETECTED.
-
-## 5. Comandos alvo
-
-A implementação deverá convergir para interface semelhante a:
-
-```bash
-./poc up
-./poc seed
-./poc scenario happy
-./poc scenario agent
-./poc attack replay
-./poc attack identity
-./poc export POC-STF-001
-./poc verify ./out/POC-STF-001
-./poc tamper ./out/POC-STF-001
-./poc verify ./out/POC-STF-001
-```
-
-Os nomes podem mudar. A propriedade “um comando por etapa” permanece.
-
-## 6. Tela final
-
-A última saída deve consolidar:
+Marcar contexto:
 
 ```text
-HISTORY_APPEND_ONLY       PASS
-TIME_TRAVEL               PASS
-HIGH_ACTION_WITHOUT_HITL  DENY
-HIGH_ACTION_WITH_HITL     PASS
-REPLAY                     DENY
-EXPIRED_APPROVAL           DENY
-IDENTITY_MISMATCH          DENY
-EVIDENCE_EXPORT            PASS
-OFFLINE_VERIFY             PASS
-TAMPER_AFTER_EXPORT        DETECTED
-EXTERNAL_TIMESTAMP         NOT_CONFIGURED
-INSTITUTIONAL_SIGNATURE    NOT_CONFIGURED
+principal=service-account-17
+incident=OPEN
+severity=HIGH
+policy_tag=COMPROMISE_SUSPECTED
 ```
 
-## 7. Falha em demo
+Nenhuma conta real.
 
-Nunca esconder falha.
-
-Se um cenário não atingir o esperado:
-
-- manter saída;
-- marcar FAIL;
-- registrar correlation_id;
-- não substituir por explicação verbal.
-
-Isso preserva credibilidade e transforma a POC em diagnóstico útil.
-
-
----
-
-## 8. Preflight obrigatório
+## 7. Ato 5 — atacante tenta alterar processo fictício
 
 ```text
-POC_COMMIT                 PASS
-HERACLITUS_BASELINE        PASS
-WORKTREE_CLEAN             PASS
-ARTIFACT_HASHES            PASS
-FIXTURES                   PASS
-POLICY_VERSION             PASS
-UPSTREAM_COUNTER_ZERO      PASS
-NETWORK_PROFILE            PASS
-OFFLINE_VERIFIER_READY     PASS
+case://SYNTHETIC/RE-000001
+action=change_metadata
 ```
 
-## 9. Run ID
+Sem approval:
 
-Cada apresentação gera `run_id` único:
+`DENY + upstream_delta=0`.
 
-```text
-out/<run_id>/logs
-out/<run_id>/tests
-out/<run_id>/evidence
-out/<run_id>/metrics
-```
+## 8. Ato 6 — HITL
 
-Nenhum artefato de execução anterior pode contaminar a atual.
+Nova operação explicitamente autorizável.
 
-## 10. Roteiro de 38 minutos
+Mostrar approval binding e permitir execução única.
 
-- 0–4: problema e limites;
-- 4–8: arquitetura/trust boundaries;
-- 8–13: ingestão + Merkle;
-- 13–17: time travel;
-- 17–24: agente + HITL;
-- 24–30: replay/identity/TOCTOU;
-- 30–34: export + offline verify;
-- 34–37: sabotagem;
-- 37–38: scorecard.
+Depois replay:
 
-## 11. Demo anti-teatro
+`DENY + upstream_delta=0`.
 
-Antes do ataque, mostrar EXPECTED. Em seguida executar comando sem editar configuração. Mostrar OBSERVED e upstream_delta.
+## 9. Ato 7 — parameter/identity swap
 
-Exemplo:
+Alterar argumento ou identidade após aprovação.
 
-```text
-EXPECTED replay: DENY / upstream_delta=0
-OBSERVED: DENY / REPLAY_DETECTED / upstream_delta=0
-TEST: PASS
-```
+Esperado: DENY.
 
-## 12. Plano B
+## 10. Ato 8 — apagar rastros
 
-Manter ambiente local, resultado da última execução qualificada e gravação curta opcional apenas como contingência. Material gravado nunca será apresentado como execução ao vivo.
+Executar sabotagens controladas em cópia/lab:
 
-## 13. Perguntas que a POC responde
+- modify;
+- delete;
+- reorder.
 
-- O que foi executado?
-- Quem/qual agente pediu?
-- Qual política decidiu?
-- Houve aprovação?
-- Algo mudou entre approval e execute?
-- Quantas vezes o upstream foi atingido?
-- A prova continua válida com a origem desligada?
-- O que a POC não prova?
+Esperado: DETECTED.
 
-## 14. Encerramento
+## 11. Ato 9 — timeline
 
-Exibir scorecard gerado automaticamente e limitações no mesmo painel. Checks UNVERIFIED/NOT_CONFIGURED não podem ser escondidos por slides.
+Consultar:
+
+- estado antes da intrusão;
+- após incidente;
+- antes da tentativa de write;
+- após operação permitida.
+
+## 12. Ato 10 — evidence
+
+Exportar pacote completo.
+
+Parar origem/retirar egress.
+
+Verificar offline.
+
+## 13. Tela final
+
+Mostrar Fase 1, Fase 2 e limitações separadamente. Nenhum `UNVERIFIED` pode ser ocultado.
+
+## 14. Regra
+
+Não executar exploit real nem apontar scanner para domínio/IP do STF. A “invasão” é uma campanha sintética em ambiente isolado que gera telemetria equivalente para testar defesa.

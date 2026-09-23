@@ -1,69 +1,68 @@
-# SPEC-0013 — Threat Model, Ativos e Hipóteses de Segurança
+# SPEC-0013 — Threat Model Integrado
 
 **Status:** Proposed  
-**Classe:** Security Architecture / Threat Modeling  
-**Prioridade:** P0  
-**Dependências:** SPEC-0002, SPEC-0005, SPEC-0007
+**Prioridade:** P0
 
-## 1. Objetivo
+## 1. Adversário principal
 
-Definir quem pode atacar a POC, quais ativos importam e quais propriedades estão sendo defendidas.
+`AI_ASSISTED_ATTACKER_SYNTHETIC`.
 
-## 2. Ativos
+É um agente de laboratório capaz de escolher ações em um cyber range, mas sem conexão ou credencial para qualquer ativo do STF.
 
-- histórico canônico;
-- identidade de principal/agente;
-- policies e approvals;
-- credencial do upstream;
-- Evidence Bundle;
-- build artifacts;
-- trust store;
-- configuração;
-- resultados de teste.
+## 2. Capacidades simuladas
 
-## 3. Adversários
+- gerar tráfego suspeito;
+- autenticar com identidade fictícia comprometida;
+- iniciar processo fictício;
+- produzir movimento lateral simulado;
+- consultar banco sintético;
+- acessar app sintética;
+- solicitar alteração privilegiada;
+- tentar replay e tamper.
 
-### A1 — agente comprometido
-Produz requests arbitrários e tenta tool abuse, mas não possui credencial direta do upstream.
+A POC não precisa implementar código ofensivo real. Fixtures e ações controladas podem gerar a telemetria equivalente.
 
-### A2 — cliente malicioso
-Envia payloads inválidos, grandes, duplicados ou inconsistentes.
+## 3. Ativos
 
-### A3 — operador com privilégio parcial
-Pode aprovar ações do seu papel, mas não deve conseguir alterar retrospectivamente evidência sem detecção dentro do modelo testado.
+- edge;
+- identity;
+- hosts;
+- application;
+- DB;
+- process/case fictício;
+- policies;
+- approvals;
+- evidence;
+- build/trust.
 
-### A4 — atacante com acesso ao bundle
-Pode modificar, apagar, inserir ou reordenar arquivos.
+## 4. Trust boundaries
 
-### A5 — falha não maliciosa
-Crash, disk full, timeout e corrupção parcial são ameaças à integridade.
+TB1 edge->telemetry  
+TB2 telemetry->normalizer  
+TB3 raw->signal  
+TB4 signals->incident  
+TB5 incident->policy  
+TB6 agent->gateway  
+TB7 gateway->upstream  
+TB8 history->export  
+TB9 package->verifier
 
-## 4. Fora do modelo P0
+Cada boundary tem teste positivo e negativo.
 
-Não alegar defesa absoluta contra atacante que controla simultaneamente kernel, binário, storage, chaves, verifier e cadeia de distribuição.
+## 5. Objetivos
 
-Mitigações reais exigem fronteiras independentes como HSM, WORM, attestation, assinatura externa e trust anchors.
+- detectar sinais conhecidos;
+- evitar correlação espúria óbvia;
+- preservar provenance;
+- usar incidente como contexto de decisão;
+- bloquear writes não autorizados;
+- detectar cover-tracks;
+- verificar offline.
 
-## 5. Trust boundaries
+## 6. Limite essencial
 
-- TB-1 input -> validation;
-- TB-2 agent -> gateway;
-- TB-3 gateway -> upstream;
-- TB-4 runtime -> persistent history;
-- TB-5 exporter -> package;
-- TB-6 package -> verifier;
-- TB-7 local crypto -> external trust.
+Nenhuma ferramenta pode prometer detectar atividade que não gera/entrega telemetria.
 
-Cada boundary deve possuir ao menos um teste negativo.
+Nenhuma ferramenta pode impedir ação que contorna todos os pontos de enforcement.
 
-## 6. Objetivos de segurança
-
-SG-01 integridade histórica; SG-02 identidade lógica; SG-03 autorização antes de efeito; SG-04 single-use approval; SG-05 tamper detection; SG-06 offline verify; SG-07 fail-closed para HIGH; SG-08 bounded resources; SG-09 build provenance; SG-10 verdade sobre limitações.
-
-## 7. Abuse cases
-
-Forged approval, replay, approval swap, parameter substitution, direct-upstream bypass, policy downgrade, log truncation, path traversal, verifier exhaustion e falso PASS de confiança externa.
-
-## 8. Saída
-
-Cada run registra a versão do threat model usada em `out/<run_id>/threat-model-profile.json`.
+Essas duas limitações ficam visíveis na demo.

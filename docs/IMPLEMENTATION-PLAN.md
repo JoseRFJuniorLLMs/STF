@@ -1,144 +1,153 @@
-# Plano de Implementação — POC STF HeraclitusDB
-
-## Objetivo
-
-Transformar as 20 SPECs em uma POC executável sem tentar implementar tudo ao mesmo tempo.
+# Plano de Implementação — POC Integrada STF
 
 ## Fase 0 — congelar baseline
 
-Entregáveis:
+- fixar commit STF;
+- fixar commit HeraclitusDB;
+- registrar baseline público do STF;
+- gerar BUILD-INFO;
+- congelar fixtures e policies.
 
-- commit STF fixado;
-- commit HeraclitusDB fixado;
-- BUILD-INFO inicial;
-- toolchain fixada;
-- fixtures iniciais.
+## Fase 1A — telemetry fabric
 
-Gate: nenhum desenvolvimento começa com dependência apontando para branch flutuante.
+Implementar adapters sintéticos:
 
-## Fase 1 — vertical slice de integridade
+```text
+fw
+waf
+identity
+linux
+windows
+network
+db-audit
+application
+api
+backup
+```
 
-Implementar:
+Todos convergem para `SecurityEvent`.
 
-1. `poc up`;
-2. `poc seed`;
-3. ingestão de eventos sintéticos;
-4. captura LSN/HLC;
-5. checkpoint/seal necessário;
-6. root/proof;
-7. `poc integrity-test`;
-8. sabotagem modify/delete/reorder.
+Gate:
+- schema;
+- provenance;
+- source_lsn;
+- deterministic replay.
 
-Saída: AC-01..04 verdes.
+## Fase 1B — detecção
 
-## Fase 2 — time travel
+Usar Sentinel:
 
-Implementar reducer v1, state digest e `state_at(lsn)`.
+- normalização;
+- rules/Sigma subset quando aplicável;
+- SecuritySignal;
+- threat lookup sintético;
+- baseline/anomaly somente se qualificado.
 
-Saída: AC-05 e AC-16.
+Gate:
+- sinal conhecido => DETECTED;
+- regra inválida => fail-closed segundo profile;
+- replay => mesmos IDs lógicos.
 
-## Fase 3 — Agent Gateway
+## Fase 1C — correlação e incidente
 
-Integrar gateway existente do HeraclitusDB.
+Construir:
 
-Implementar ferramentas sintéticas LOW/MEDIUM/HIGH/BLOCKED, upstream counter e approval UI/CLI.
+- temporal graph;
+- campaign_id;
+- entity linking;
+- causal chain;
+- incident lifecycle.
 
-Saída: AC-06..10, AC-17..20.
+Gate:
+- sinais multi-source viram um incidente;
+- evento não relacionado não entra artificialmente na campanha;
+- todos os nós apontam para evidence refs.
 
-## Fase 4 — red team
+## Fase 1D — SOC response sintético
 
-Ligar runner/campanha existente aos cenários da SPEC-0006.
+Sem tocar rede real:
 
-Prioridade:
+- alert;
+- flag session;
+- mark principal compromised;
+- simulate containment;
+- feed incident context to Phase 2 policy.
 
-- replay;
-- concurrent double-spend;
-- identity swap;
-- parameter substitution;
-- invalid policy reload;
-- flood DENY;
-- oversized identity;
-- bypass.
+## Fase 2A — processo/aplicação fictícia
 
-Saída: upstream_delta como oráculo independente.
+Criar STF-Digital-like app sintética:
 
-## Fase 5 — Evidence Bundle v1
+- processo fictício;
+- documento fictício;
+- classificação fictícia;
+- database audit;
+- application audit.
 
-Implementar exporter POC e verifier separado.
+## Fase 2B — privileged action control
 
-Ordem do verifier conforme SPEC-0007, incluindo path validation e resource bounds.
+Integrar Agent Gateway:
 
-Saída: AC-11..13, AC-21/22/28/29.
+- LOW;
+- MEDIUM;
+- HIGH;
+- BLOCKED;
+- HITL;
+- anti-replay;
+- identity binding;
+- parameters digest;
+- upstream counter.
 
-## Fase 6 — air-gap kit
+Policy considera `incident_context`.
 
-Gerar:
+## Fase 2C — cover tracks
 
-- binários;
-- imagens;
-- hashes;
-- fixtures;
-- policies;
+Sabotagens:
+
+- modify;
+- delete;
+- reorder;
+- truncate;
+- bundle tamper;
+- approval replay.
+
+## Fase 2D — evidence
+
+Exportar a campanha inteira:
+
+```text
+edge signal
+ -> incident
+ -> compromised principal
+ -> privileged request
+ -> policy
+ -> approval
+ -> outcome
+ -> tamper attempt
+```
+
+Verificar offline.
+
+## Fase 3 — qualification
+
+- CI;
+- mutation tests;
+- fault injection;
+- air-gap kit;
 - SBOM;
-- BUILD-INFO;
-- RUNBOOK.
+- scorecard;
+- report.
 
-Executar verifier sem egress.
-
-Saída: AC-15, AC-25, AC-26.
-
-## Fase 7 — fault injection
-
-Crash, disk full, timeout, exporter parcial, policy store down e restart.
-
-Saída: AC-24 + SPEC-0017.
-
-## Fase 8 — qualification
-
-CI executa todos P0, negative assertions e mutation tests.
-
-Gerar qualification-summary.json.
-
-## Fase 9 — UX da reunião
-
-Construir scorecard local sobre dados estruturados existentes. A UI não cria status; apenas renderiza resultados.
-
-## Estrutura alvo
+## Ordem crítica
 
 ```text
-STF/
-├── README.md
-├── specs/
-├── docs/
-├── fixtures/
-├── policies/
-├── poc/
-│   ├── cli/
-│   ├── adapter/
-│   ├── producer/
-│   ├── upstream/
-│   ├── exporter/
-│   └── verifier/
-├── tests/
-│   ├── integration/
-│   ├── adversarial/
-│   ├── mutation/
-│   └── fault/
-├── deploy/
-├── scripts/
-└── .github/workflows/
+telemetry
+ -> detection
+ -> correlation
+ -> incident
+ -> phase2 policy
+ -> action
+ -> tamper
+ -> evidence
 ```
 
-## Ordem de prioridade
-
-```text
-integrity
-  -> verifier
-  -> agent/HITL
-  -> red team
-  -> air-gap
-  -> fault injection
-  -> UX
-```
-
-Primeiro provar. Depois embelezar.
+A ponte `incident -> policy` é o elemento que transforma duas demos em **uma única POC**.

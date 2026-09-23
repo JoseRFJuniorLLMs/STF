@@ -1,161 +1,79 @@
-# SPEC-0003 — Modelo Canônico de Eventos Sintéticos
+# SPEC-0003 — Modelo Canônico de Evento e Campanha
 
 **Status:** Proposed  
-**Classe:** Data Model / Provenance  
-**Prioridade:** P0  
-**Dependências:** SPEC-0002
+**Prioridade:** P0
 
 ## 1. Objetivo
 
-Definir eventos sintéticos suficientes para provar integridade, proveniência, decisão de política, aprovação humana e reconstrução temporal sem usar qualquer dado real do STF.
+Unificar telemetria da Fase 1 e eventos de controle da Fase 2 sem perder proveniência.
 
-## 2. Envelope canônico
-
-Todo evento deve possuir:
+## 2. Envelope
 
 ```json
 {
-  "schema_version": "stf-poc-event/1",
-  "event_id": "uuid",
-  "correlation_id": "uuid",
-  "event_type": "action.requested",
-  "actor": {
-    "type": "human|agent|service",
-    "id": "synthetic-id"
+  "schema_version":"stf-poc-event/2",
+  "event_id":"uuid",
+  "campaign_id":"STF-POC-CAMPAIGN-001",
+  "incident_id":"STF-POC-INCIDENT-001|null",
+  "correlation_id":"uuid",
+  "causation_id":"uuid|null",
+  "phase":"INTRUSION|POST_COMPROMISE",
+  "source":{
+    "class":"FIREWALL|WAF|IDENTITY|HOST|NETWORK|DB|APP|AGENT|POLICY",
+    "system":"synthetic",
+    "adapter_version":"1"
   },
-  "resource": {
-    "type": "synthetic-document",
-    "id": "DOC-0001",
-    "classification": "PUBLIC|INTERNAL|RESTRICTED"
-  },
-  "claimed_time": "RFC3339",
-  "payload": {},
-  "payload_sha256": "hex",
-  "labels": ["synthetic", "poc"]
+  "actor":{"type":"human|agent|service","id":"synthetic-id"},
+  "asset":{"type":"host|account|database|application|case","id":"synthetic-id"},
+  "activity":"...",
+  "outcome":"...",
+  "claimed_time":"RFC3339",
+  "payload":{},
+  "payload_sha256":"...",
+  "labels":["synthetic","poc"]
 }
 ```
 
-## 3. Eventos mínimos
+## 3. Fase 1
 
-A POC deve suportar:
+Tipos mínimos:
 
-- identity.authenticated;
-- document.created;
-- document.read;
-- document.classification_changed;
+- network.connection;
+- waf.signal;
+- identity.login;
+- identity.failure;
+- host.process;
+- host.file;
+- network.lateral;
+- db.query;
+- db.write_attempt;
+- app.resource_access;
+- security.signal;
+- incident.opened;
+- incident.updated.
+
+## 4. Fase 2
+
 - agent.tool_requested;
 - policy.evaluated;
-- approval.requested;
-- approval.granted;
-- approval.rejected;
-- approval.expired;
-- tool.executed;
-- tool.denied;
-- evidence.export_requested;
-- evidence.export_completed.
+- approval.requested/granted/rejected/expired;
+- app.case_update_requested;
+- db.update_requested/executed/denied;
+- evidence.exported;
+- tamper.detected.
 
-## 4. Cenário base
+## 5. Canonicalização
 
-Documento sintético:
+JSON canônico versionado. Mesmo `event_id` com bytes diferentes => CONFLICT.
 
-```text
-DOC-0001
-classificação inicial: INTERNAL
-conteúdo: "CONTEUDO SINTETICO STF POC 0001"
-```
+## 6. Proveniência
 
-Atores:
+Todo `SecuritySignal` aponta para raw event(s). Todo incidente aponta para signals. Toda decisão da Fase 2 aponta para incident context quando utilizado.
 
-```text
-human:analyst-01
-human:approver-01
-agent:research-01
-service:demo-upstream
-```
+## 7. Campaign identity
 
-## 5. Regras
+`campaign_id` é criado pelo simulador para a campanha conhecida. Em sistemas reais, correlação não pode presumir de antemão que eventos pertencem à mesma campanha. Por isso, testes também devem usar eventos benignos/estranhos e provar que não são incorporados incorretamente.
 
-- IDs não podem conter nome, CPF, matrícula ou outro identificador real.
-- Conteúdo sintético deve ser claramente marcado.
-- Um evento nunca pode sobrescrever outro evento.
-- Alterações de estado geram novos eventos.
-- O estado corrente é derivado da sequência histórica.
+## 8. Dados
 
-## 6. Estado derivado
-
-Exemplo:
-
-```text
-LSN 10 document.created INTERNAL
-LSN 11 document.read
-LSN 12 classification_changed RESTRICTED
-LSN 13 agent.tool_requested
-```
-
-Consulta no LSN 11 deve retornar INTERNAL.
-
-Consulta no LSN 13 deve retornar RESTRICTED.
-
-## 7. Digest
-
-O payload deve possuir SHA-256 para interoperabilidade da POC. Se a infraestrutura subjacente usar BLAKE3/Merkle, ambos podem coexistir.
-
-Nenhum digest substitui outro implicitamente.
-
-## 8. Dataset determinístico
-
-O repositório deverá futuramente conter fixtures versionadas:
-
-```text
-fixtures/
-├── scenario-happy-path.jsonl
-├── scenario-tamper.jsonl
-├── scenario-agent-deny.jsonl
-└── scenario-replay.jsonl
-```
-
-A mesma seed deve produzir os mesmos eventos lógicos, exceto campos explicitamente variáveis e normalizados na validação.
-
-
----
-
-## 9. Canonicalização
-
-Digests devem operar sobre bytes canônicos versionados. Para JSON, usar canonicalização determinística compatível com RFC 8785 ou equivalente documentado.
-
-O digest não pode depender de indentação, ordem incidental de chaves, locale, timezone implícito ou serializer não versionado.
-
-## 10. Proveniência ampliada
-
-Adicionar quando aplicável:
-
-```json
-{
-  "source":{"system":"synthetic-producer","instance_id":"producer-01","adapter_version":"1"},
-  "causation_id":"uuid",
-  "session_id":"synthetic-session",
-  "policy_version":"policy/1",
-  "sequence":42
-}
-```
-
-`correlation_id` agrupa uma operação; `causation_id` identifica o evento causador.
-
-## 11. Imutabilidade semântica
-
-- event_id não é reutilizado;
-- mesmo event_id com bytes diferentes => CONFLICT;
-- reenvio idêntico pode ser idempotente, mas permanece observável;
-- correção gera novo evento, nunca update in-place.
-
-## 12. Schema evolution
-
-Breaking change incrementa `schema_version`. Versão desconhecida é recusada, salvo migrador explicitamente versionado.
-
-## 13. Fixtures adicionais
-
-Criar datasets determinísticos para duplicate event, reordered events, malformed identity, stale approval, policy reload, oversized payload, partial export e crash recovery.
-
-## 14. Classificação
-
-PUBLIC/INTERNAL/RESTRICTED são rótulos **sintéticos de POC**. Qualquer categoria institucional futura será mapeada por configuração aprovada, nunca por constantes presumidas.
+Todos os identificadores são fictícios. Nenhum processo, usuário, IP interno ou credencial real do STF é usado.
