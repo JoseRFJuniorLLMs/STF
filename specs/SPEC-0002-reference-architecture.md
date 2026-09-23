@@ -153,3 +153,69 @@ Esta arquitetura não pretende provar:
 - operação multi-datacenter.
 
 Esses itens pertencem a eventual piloto posterior.
+
+
+---
+
+## 8. Data Flow Diagram e zonas
+
+```text
+ZONE A — INPUT NÃO CONFIÁVEL
+ producer / agent / operador
+          |
+          v
+ZONE B — ENFORCEMENT
+ schema -> identity -> policy -> approval binding
+          |
+          v
+ZONE C — EFFECT
+ synthetic upstream
+          |
+          v
+ZONE D — EVIDENCE
+ HRKL / audit / Merkle / exporter
+          |
+          v
+ZONE E — INDEPENDENT VERIFICATION
+ offline verifier
+```
+
+A propriedade central é: **ações HIGH não possuem rota válida da Zone A para a Zone C sem atravessar a Zone B**.
+
+## 9. Identidades de processo
+
+Producer, agent-gateway, Heraclitus, demo-upstream, exporter e verifier possuem identidades lógicas distintas. O agente não recebe credencial direta do upstream.
+
+## 10. Matriz de comunicação
+
+A implementação deve gerar `docs/NETWORK.md` com origem, destino, protocolo, porta, finalidade e necessidade de cada fluxo. Nenhuma porta pode existir apenas por default de container.
+
+O verifier tem como contrato P0: **nenhuma comunicação de rede necessária**.
+
+## 11. Failure domains
+
+- gateway indisponível => HIGH não executa;
+- Heraclitus indisponível antes da evidência crítica => HIGH não retorna sucesso;
+- upstream indisponível => FAILED/UNKNOWN;
+- exporter indisponível => histórico preservado permanece válido;
+- verifier indisponível => pacote não é alterado;
+- UI indisponível => CLI mantém todos os testes.
+
+## 12. Estados de efeito
+
+```text
+REQUESTED
+POLICY_DENIED
+WAITING_APPROVAL
+APPROVED
+EXECUTING
+SUCCEEDED
+FAILED
+UNKNOWN
+```
+
+`APPROVED` nunca é sinônimo de `SUCCEEDED`.
+
+## 13. Integrações futuras
+
+PJe, SEI, SIEM e demais sistemas entram exclusivamente por adapters versionados. O core da POC não recebe semântica específica de produto institucional.
