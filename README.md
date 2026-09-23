@@ -47,6 +47,14 @@ Eventos de segurança ┘          |
 | [SPEC-0010](specs/SPEC-0010-demo-runbook.md) | Runbook da demonstração | Define roteiro executável de 30–45 minutos |
 | [SPEC-0011](specs/SPEC-0011-observability-performance.md) | Observabilidade e desempenho | Define métricas mínimas da POC |
 | [SPEC-0012](specs/SPEC-0012-governance-privacy-pilot-transition.md) | Governança, privacidade e transição para piloto | Define limites jurídicos/técnicos e próximos gates |
+| [SPEC-0013](specs/SPEC-0013-threat-model-security-assumptions.md) | Threat model | Ativos, adversários e trust boundaries |
+| [SPEC-0014](specs/SPEC-0014-cryptographic-trust-time.md) | Criptografia e tempo | Hash, assinatura, TSA e confiança externa |
+| [SPEC-0015](specs/SPEC-0015-build-provenance-supply-chain.md) | Build provenance | SBOM, hashes e supply chain |
+| [SPEC-0016](specs/SPEC-0016-ci-qualification-mutation-gates.md) | CI e qualification | Gates, negative assertions e mutation tests |
+| [SPEC-0017](specs/SPEC-0017-fault-injection-crash-recovery.md) | Fault injection | Crash, disk full, timeout e UNKNOWN |
+| [SPEC-0018](specs/SPEC-0018-integration-contracts-apis.md) | Integrações | APIs, adapters, versioning e idempotência |
+| [SPEC-0019](specs/SPEC-0019-demo-ux-scorecard-reporting.md) | Demo UX | Scorecard, drill-down e relatório |
+| [SPEC-0020](specs/SPEC-0020-risk-register-pilot-readiness.md) | Pilot readiness | Riscos, dependências e gate para piloto |
 
 ## Princípios
 
@@ -86,3 +94,41 @@ INSTITUTIONAL SIGNATURE    NOT CONFIGURED
 ```
 
 A POC é considerada tecnicamente concluída somente quando os critérios da SPEC-0001 e o runbook da SPEC-0010 puderem ser reproduzidos em ambiente limpo.
+
+
+---
+
+## Qualification Pack — revisão 23/09/2026
+
+A POC agora é organizada em três níveis:
+
+```text
+P0  reunião técnica: prova reproduzível e adversarial
+P1  antes de piloto: resiliência, supply chain e integração
+P2  institucional: IAM, HSM/KMS, trust externo, HA/DR e operação
+```
+
+A revisão adicionou threat model, anti-bypass, consumo atômico de aprovação, proteção TOCTOU, `upstream_delta` como oráculo independente, hardening do verifier contra pacote hostil, fault injection, estados UNKNOWN, build provenance, SBOM, CI/mutation testing e matriz de risco.
+
+### Documentos de controle
+
+- [Matriz de rastreabilidade](docs/TRACEABILITY.md)
+- [Baseline técnico do HeraclitusDB](docs/HERACLITUS-BASELINE.md)
+- [Referências institucionais](docs/REFERENCES.md)
+- [Relatório da revisão](docs/REVIEW-2026-09-23.md)
+
+### Regra de ouro
+
+Nenhuma afirmação da apresentação entra sem:
+
+```text
+CLAIM
+  -> SPEC
+  -> TEST
+  -> EXPECTED
+  -> OBSERVED
+  -> EVIDENCE
+  -> LIMITATION
+```
+
+A demo deve falhar corretamente quando um controle é removido. Esse é o ponto. Um painel que permanece verde enquanto a segurança é sabotada é só decoração cara.
