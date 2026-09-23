@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+<defs>
+  <linearGradient id="blue" x1="0" x2="1"><stop stop-color="#0b4f91"/><stop offset="1" stop-color="#062f62"/></linearGradient>
+  <linearGradient id="soft" x1="0" x2="1"><stop stop-color="#f7fbff"/><stop offset="1" stop-color="#edf6ff"/></linearGradient>
+  <filter id="shadow"><feDropShadow dx="0" dy="3" stdDeviation="5" flood-opacity=".16"/></filter>
+  <marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0 0 L0 6 L9 3 z" fill="#123f70"/></marker>
+  <style>
+    .f{font-family:Inter,Segoe UI,Arial,sans-serif;fill:#15365b}.w{font-family:Inter,Segoe UI,Arial,sans-serif;fill:#fff}
+    .b{font-weight:700}.xl{font-size:40px}.l{font-size:30px}.m{font-size:22px}.s{font-size:18px}
+    .box{fill:url(#soft);stroke:#9cc2e5;stroke-width:2}.line{stroke:#123f70;stroke-width:4;fill:none;marker-end:url(#a)}
+  </style>
+</defs>
+<rect width="1600" height="900" fill="#ffffff"/>
+<g filter="url(#shadow)">
+  <rect x="360" y="24" width="880" height="105" rx="18" fill="url(#blue)"/>
+  <text x="800" y="88" text-anchor="middle" class="w xl b">CAMPANHA ADVERSARIAL SINTÉTICA</text>
+</g>
+<path d="M800 129 V155 H430 V190" class="line"/>
+<path d="M800 155 H1170 V190" class="line"/>
+
+<g filter="url(#shadow)">
+  <rect x="105" y="190" width="650" height="120" rx="18" class="box"/>
+  <circle cx="225" cy="250" r="44" fill="#dceeff"/>
+  <path d="M202 260 Q225 215 248 260 L244 280 H206z" fill="#123f70"/>
+  <circle cx="215" cy="249" r="4" fill="#fff"/><circle cx="235" cy="249" r="4" fill="#fff"/>
+  <text x="305" y="242" class="f l b">FASE 1 — INVASÃO</text>
+  <text x="305" y="278" class="f m">detectar/correlacionar</text>
+
+  <rect x="105" y="345" width="650" height="165" rx="18" class="box"/>
+  <text x="430" y="410" text-anchor="middle" class="f l b">Firewall / WAF / Identity / Host</text>
+  <text x="430" y="454" text-anchor="middle" class="f l">DB audit / App / Network</text>
+  <text x="430" y="484" text-anchor="middle" class="f s">telemetria multi-fonte • sinais • correlação</text>
+</g>
+<path d="M430 310 V345" class="line"/>
+
+<g filter="url(#shadow)">
+  <rect x="845" y="190" width="650" height="120" rx="18" class="box"/>
+  <circle cx="965" cy="250" r="44" fill="#e7f3ef"/>
+  <circle cx="965" cy="250" r="20" fill="#123f70"/><path d="M965 213v16M965 271v16M928 250h16M986 250h16M939 224l12 12M979 264l12 12M991 224l-12 12M951 264l-12 12" stroke="#123f70" stroke-width="8"/>
+  <text x="1045" y="242" class="f l b">FASE 2 — PÓS-COMPROMISSO</text>
+  <text x="1045" y="278" class="f m">impedir/provar abuso</text>
+
+  <rect x="845" y="345" width="650" height="165" rx="18" class="box"/>
+  <text x="1170" y="410" text-anchor="middle" class="f l b">Aplicação / Banco / Agente</text>
+  <text x="1170" y="454" text-anchor="middle" class="f l">Policy / HITL / Gateway</text>
+  <text x="1170" y="484" text-anchor="middle" class="f s">controle • aprovação • anti-replay • prova</text>
+</g>
+<path d="M1170 310 V345" class="line"/>
+
+<path d="M430 510 V545 H800 V575" class="line"/>
+<path d="M1170 510 V545 H800" class="line"/>
+
+<g filter="url(#shadow)">
+  <rect x="430" y="575" width="740" height="115" rx="18" fill="url(#blue)"/>
+  <ellipse cx="545" cy="625" rx="38" ry="14" fill="#67b6ff"/><rect x="507" y="625" width="76" height="34" fill="#67b6ff"/><ellipse cx="545" cy="659" rx="38" ry="14" fill="#2d87df"/>
+  <text x="660" y="648" class="w xl b">HERACLITUSDB</text>
+</g>
+
+<path d="M800 690 V725 H300 V755" class="line"/>
+<path d="M800 725 V755" class="line"/>
+<path d="M800 725 H1300 V755" class="line"/>
+
+<g filter="url(#shadow)">
+  <rect x="85" y="755" width="430" height="125" rx="18" class="box"/>
+  <circle cx="160" cy="818" r="38" fill="#2f83ca"/>
+  <circle cx="153" cy="811" r="18" fill="none" stroke="#fff" stroke-width="5"/><path d="M167 825l18 18" stroke="#fff" stroke-width="5"/>
+  <text x="230" y="803" class="f l b">SENTINEL</text><text x="230" y="835" class="f m">detecção • correlação • grafo</text>
+
+  <rect x="585" y="755" width="430" height="125" rx="18" class="box"/>
+  <circle cx="660" cy="818" r="38" fill="#2f83ca"/>
+  <rect x="644" y="793" width="32" height="48" rx="3" fill="none" stroke="#fff" stroke-width="4"/><path d="M650 807h20M650 818h20M650 829h14" stroke="#fff" stroke-width="3"/>
+  <text x="730" y="803" class="f l b">HRKL</text><text x="730" y="835" class="f m">append-only • LSN/HLC • Merkle</text>
+
+  <rect x="1085" y="755" width="430" height="125" rx="18" class="box"/>
+  <circle cx="1160" cy="818" r="38" fill="#2f83ca"/>
+  <path d="M1160 789l25 10v18c0 18-11 31-25 38-14-7-25-20-25-38v-18z" fill="none" stroke="#fff" stroke-width="4"/><path d="M1148 819l9 9 17-20" fill="none" stroke="#fff" stroke-width="4"/>
+  <text x="1230" y="803" class="f l b">EVIDENCE</text><text x="1230" y="835" class="f m">bundle offline • verifier</text>
+</g>
+</svg>
