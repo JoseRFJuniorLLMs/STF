@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <linearGradient id="hdr" x1="0" x2="1"><stop stop-color="#0b2d50"/><stop offset="1" stop-color="#0d4f88"/></linearGradient>
+    <linearGradient id="hero" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#0d355e"/><stop offset="1" stop-color="#071e36"/></linearGradient>
+    <linearGradient id="danger" x1="0" x2="1"><stop stop-color="#8d0d1b"/><stop offset="1" stop-color="#d32632"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-opacity=".18"/></filter>
+    <marker id="arrowBlue" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#1e6eb5"/></marker>
+    <marker id="arrowRed" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#d92836"/></marker>
+    <style>
+      .t{font-family:Inter,Segoe UI,Arial,sans-serif;fill:#12324f}.w{font-family:Inter,Segoe UI,Arial,sans-serif;fill:white}.h{font-weight:700}.s{font-size:14px}.xs{font-size:12px}.m{font-size:18px}.l{font-size:28px}.xl{font-size:38px}.box{fill:white;stroke:#c8d9e7;stroke-width:1.5}.bline{stroke:#1e6eb5;stroke-width:2;fill:none;marker-end:url(#arrowBlue)}.rline{stroke:#d92836;stroke-width:4;fill:none;marker-end:url(#arrowRed)}
+    </style>
+  </defs>
+  <rect width="1600" height="900" fill="#f4f8fc"/>
+  <rect width="1600" height="78" fill="url(#hdr)"/>
+  <text x="800" y="38" text-anchor="middle" class="w xl h">POC Integrada — Infra do STF, Agente de IA Atacando e HeraclitusDB Alertando</text>
+  <text x="800" y="62" text-anchor="middle" class="w s">Representação sintética e aproximada com base em classes de sistemas publicamente documentadas — sem detalhes sensíveis</text>
+  <rect x="1390" y="10" width="190" height="54" rx="8" fill="#09223c" stroke="#4f9bd6"/>
+  <text x="1485" y="30" text-anchor="middle" class="w xs h">AMBIENTE SINTÉTICO</text><text x="1485" y="47" text-anchor="middle" class="w xs">Sem dados reais</text><text x="1485" y="61" text-anchor="middle" class="w xs">Sem detalhes sensíveis</text>
+
+  <g filter="url(#shadow)">
+    <rect x="18" y="92" width="250" height="650" rx="12" fill="#fff6f6" stroke="#e12432" stroke-width="2"/>
+    <rect x="18" y="92" width="250" height="52" rx="12" fill="url(#danger)"/>
+    <text x="143" y="116" text-anchor="middle" class="w m h">Agente de IA Atacante</text><text x="143" y="134" text-anchor="middle" class="w xs">fora do ambiente do STF</text>
+    <circle cx="82" cy="196" r="38" fill="#1f1e29" stroke="#e12432" stroke-width="4"/>
+    <path d="M58 204 Q82 160 106 204 L100 226 H64z" fill="#0d0d14"/><circle cx="70" cy="195" r="4" fill="#ff3c46"/><circle cx="94" cy="195" r="4" fill="#ff3c46"/>
+    <circle cx="183" cy="196" r="38" fill="#30131a" stroke="#e12432" stroke-width="3"/><path d="M166 177 C144 190 158 220 177 214 C185 230 211 217 203 199 C216 180 191 166 181 179 C177 170 169 170 166 177" fill="none" stroke="#ff5b65" stroke-width="4"/>
+    <text x="143" y="252" text-anchor="middle" class="t s h">Automação, exploração e persistência</text>
+    <rect x="34" y="278" width="218" height="215" rx="8" fill="#fff" stroke="#e12432"/>
+    <rect x="34" y="278" width="218" height="35" rx="8" fill="#ae1724"/><text x="143" y="302" text-anchor="middle" class="w m h">FASE 1 — Invasão</text>
+    <text x="55" y="337" class="t s">◎ Reconhecimento</text><text x="55" y="369" class="t s">▣ Acesso inicial</text><text x="55" y="401" class="t s">● Autenticação anômala</text><text x="55" y="433" class="t s">⌘ Movimento lateral</text><text x="55" y="465" class="t s">▤ Acesso a aplicação / banco</text>
+    <rect x="34" y="508" width="218" height="218" rx="8" fill="#fff" stroke="#e12432"/>
+    <rect x="34" y="508" width="218" height="35" rx="8" fill="#ae1724"/><text x="143" y="532" text-anchor="middle" class="w m h">FASE 2 — Pós-compromisso</text>
+    <text x="55" y="568" class="t s">✎ Tentativa de alterar processo</text><text x="55" y="601" class="t s">▧ Exportar documento</text><text x="55" y="634" class="t s">⚙ Abusar de agente</text><text x="55" y="667" class="t s">↻ Reutilizar aprovação</text><text x="55" y="700" class="t s">⌫ Apagar rastros</text>
+  </g>
+  <path d="M267 190 C285 190 285 168 305 168" class="rline"/><path d="M267 425 C285 425 285 455 305 455" class="rline"/>
+
+  <g filter="url(#shadow)"><rect x="290" y="92" width="650" height="650" rx="12" fill="#eef7ff" stroke="#2475b9" stroke-width="2"/><rect x="290" y="92" width="650" height="48" rx="12" fill="#174f84"/><text x="615" y="124" text-anchor="middle" class="w l h">Infra do STF — perfil público aproximado</text></g>
+  <g>
+    <rect x="310" y="158" width="138" height="66" rx="8" class="box"/><text x="379" y="184" text-anchor="middle" class="t s h">Internet / Rede</text><text x="379" y="202" text-anchor="middle" class="t xs">Externa</text>
+    <rect x="463" y="158" width="138" height="66" rx="8" class="box"/><text x="532" y="184" text-anchor="middle" class="t s h">Firewall / WAF</text><text x="532" y="202" text-anchor="middle" class="t xs">Perímetro</text>
+    <rect x="616" y="158" width="138" height="66" rx="8" class="box"/><text x="685" y="184" text-anchor="middle" class="t s h">IAM / Autenticação</text><text x="685" y="202" text-anchor="middle" class="t xs">Identidade e acesso</text>
+    <rect x="769" y="158" width="150" height="66" rx="8" class="box"/><text x="844" y="184" text-anchor="middle" class="t s h">LAN / WLAN</text><text x="844" y="202" text-anchor="middle" class="t xs">Rede interna</text>
+    <path d="M448 191 H463" class="bline"/><path d="M601 191 H616" class="bline"/><path d="M754 191 H769" class="bline"/>
+  </g>
+  <g>
+    <rect x="310" y="240" width="190" height="70" rx="8" class="box"/><text x="405" y="268" text-anchor="middle" class="t m h">VDI / Windows</text><text x="405" y="290" text-anchor="middle" class="t xs">Ambiente de usuários</text>
+    <rect x="515" y="240" width="190" height="70" rx="8" class="box"/><text x="610" y="268" text-anchor="middle" class="t m h">Servidores Linux</text><text x="610" y="290" text-anchor="middle" class="t xs">Serviços e aplicações</text>
+    <rect x="720" y="240" width="199" height="70" rx="8" class="box"/><text x="820" y="268" text-anchor="middle" class="t m h">Cluster IA / HPC</text><text x="820" y="290" text-anchor="middle" class="t xs">Modelos e processamento</text>
+  </g>
+  <g>
+    <rect x="310" y="328" width="190" height="70" rx="8" class="box"/><text x="405" y="356" text-anchor="middle" class="t m h">STF Digital</text><text x="405" y="378" text-anchor="middle" class="t xs">Aplicações judiciais</text>
+    <rect x="515" y="328" width="190" height="70" rx="8" class="box"/><text x="610" y="356" text-anchor="middle" class="t m h">SEI</text><text x="610" y="378" text-anchor="middle" class="t xs">Administrativo</text>
+    <rect x="720" y="328" width="199" height="70" rx="8" class="box"/><text x="820" y="356" text-anchor="middle" class="t m h">MNI / Integrações</text><text x="820" y="378" text-anchor="middle" class="t xs">Órgãos e sistemas externos</text>
+  </g>
+  <g>
+    <rect x="310" y="416" width="190" height="70" rx="8" class="box"/><text x="405" y="444" text-anchor="middle" class="t m h">Banco transacional</text><text x="405" y="466" text-anchor="middle" class="t xs">processos e sistemas</text>
+    <rect x="515" y="416" width="190" height="70" rx="8" class="box"/><text x="610" y="442" text-anchor="middle" class="t s h">Data Warehouse / Lake</text><text x="610" y="463" text-anchor="middle" class="t xs">Data Marts / histórico</text>
+    <rect x="720" y="416" width="199" height="70" rx="8" class="box"/><text x="820" y="444" text-anchor="middle" class="t m h">Power BI / Analytics</text><text x="820" y="466" text-anchor="middle" class="t xs">visualização e análise</text>
+  </g>
+  <g>
+    <rect x="310" y="504" width="292" height="62" rx="8" class="box"/><text x="456" y="531" text-anchor="middle" class="t m h">Backup / Proteção de Dados</text><text x="456" y="551" text-anchor="middle" class="t xs">cópias, retenção, recuperação</text>
+    <rect x="617" y="504" width="302" height="62" rx="8" class="box"/><text x="768" y="531" text-anchor="middle" class="t s h">Ferramentas de desenvolvimento e artefatos</text><text x="768" y="551" text-anchor="middle" class="t xs">repositórios, CI/CD, artefatos</text>
+  </g>
+  <rect x="310" y="586" width="609" height="135" rx="8" fill="#fff" stroke="#5e98c8" stroke-dasharray="6 4"/><text x="330" y="610" class="t s h">Fontes de telemetria — logs, eventos, métricas e auditoria</text>
+  <g class="t xs">
+    <rect x="325" y="626" width="76" height="72" rx="6" fill="#eef5fb"/><text x="363" y="651" text-anchor="middle" class="h">FW / WAF</text><text x="363" y="670" text-anchor="middle">segurança</text>
+    <rect x="409" y="626" width="76" height="72" rx="6" fill="#eef5fb"/><text x="447" y="651" text-anchor="middle" class="h">IAM</text><text x="447" y="670" text-anchor="middle">identidade</text>
+    <rect x="493" y="626" width="92" height="72" rx="6" fill="#eef5fb"/><text x="539" y="651" text-anchor="middle" class="h">Windows/Linux</text><text x="539" y="670" text-anchor="middle">sistemas</text>
+    <rect x="593" y="626" width="92" height="72" rx="6" fill="#eef5fb"/><text x="639" y="651" text-anchor="middle" class="h">Rede/DNS</text><text x="639" y="670" text-anchor="middle">proxy</text>
+    <rect x="693" y="626" width="92" height="72" rx="6" fill="#eef5fb"/><text x="739" y="651" text-anchor="middle" class="h">Banco</text><text x="739" y="670" text-anchor="middle">auditoria</text>
+    <rect x="793" y="626" width="110" height="72" rx="6" fill="#eef5fb"/><text x="848" y="651" text-anchor="middle" class="h">Apps / Agente</text><text x="848" y="670" text-anchor="middle">APIs / gateway</text>
+  </g>
+
+  <g filter="url(#shadow)"><rect x="960" y="92" width="385" height="650" rx="16" fill="url(#hero)" stroke="#2d8bd0" stroke-width="3"/><text x="1152" y="132" text-anchor="middle" class="w xl h">HeraclitusDB</text><text x="1152" y="154" text-anchor="middle" class="w xs">Observabilidade, segurança e evidência para sistemas críticos</text></g>
+  <g>
+    <rect x="980" y="176" width="345" height="112" rx="10" fill="#0e416f" stroke="#4da5e8"/><text x="1000" y="206" class="w l h">Sentinel</text><text x="1000" y="231" class="w s">detecção, correlação, grafo temporal</text><text x="1000" y="255" class="w xs">• anomalias  • regras/Sigma  • sinais multi-fonte</text><text x="1000" y="274" class="w xs">• grafo temporal  • risco  • incidente correlacionado</text>
+    <rect x="980" y="302" width="345" height="112" rx="10" fill="#0e416f" stroke="#4da5e8"/><text x="1000" y="332" class="w l h">HRKL</text><text x="1000" y="357" class="w s">histórico append-only, LSN / HLC</text><text x="1000" y="381" class="w xs">• Merkle / BLAKE3  • trilha unificada  • time travel</text><text x="1000" y="400" class="w xs">• detecção de adulteração  • proveniência</text>
+    <rect x="980" y="428" width="345" height="112" rx="10" fill="#0e416f" stroke="#4da5e8"/><text x="1000" y="458" class="w l h">Agent Gateway / HITL</text><text x="1000" y="483" class="w s">policy, aprovação humana, anti-replay</text><text x="1000" y="507" class="w xs">• binding identidade/parâmetros  • DENY  • approval</text><text x="1000" y="526" class="w xs">• contexto do incidente  • upstream_delta</text>
+    <rect x="980" y="554" width="345" height="150" rx="10" fill="#0e416f" stroke="#4da5e8"/><text x="1000" y="584" class="w l h">Evidence Bundle</text><text x="1000" y="609" class="w s">prova, exportação, verificação offline</text><text x="1000" y="634" class="w xs">• eventos brutos  • sinais  • grafo do incidente</text><text x="1000" y="653" class="w xs">• policy / approvals  • Merkle  • build identity</text><text x="1000" y="672" class="w xs">• verificador independente  • limitações explícitas</text>
+  </g>
+  <path d="M918 650 H960" class="bline"/><path d="M918 363 H960" class="bline"/><path d="M918 451 H960" class="bline"/>
+
+  <g filter="url(#shadow)"><rect x="1360" y="92" width="222" height="650" rx="12" fill="#f8fbff" stroke="#5a9fd3"/><rect x="1360" y="92" width="222" height="46" rx="12" fill="#174f84"/><text x="1471" y="122" text-anchor="middle" class="w l h">Alerta e Resposta</text></g>
+  <g>
+    <rect x="1378" y="158" width="186" height="72" rx="8" fill="#fff0f1" stroke="#e12432" stroke-width="2"/><text x="1471" y="187" text-anchor="middle" fill="#b21825" font-family="Arial" font-size="22" font-weight="700">ALERTA SOC</text><text x="1471" y="211" text-anchor="middle" class="t xs">comportamento malicioso</text>
+    <rect x="1378" y="244" width="186" height="82" rx="8" fill="#fff7e9" stroke="#e48b18"/><text x="1471" y="272" text-anchor="middle" fill="#a95d0a" font-family="Arial" font-size="18" font-weight="700">INCIDENTE</text><text x="1471" y="294" text-anchor="middle" class="t s h">CORRELACIONADO</text><text x="1471" y="313" text-anchor="middle" class="t xs">múltiplas fontes</text>
+    <rect x="1378" y="340" width="186" height="96" rx="8" fill="#eef7ff" stroke="#4e9bd5"/><text x="1471" y="366" text-anchor="middle" class="t m h">Contexto do incidente</text><text x="1392" y="390" class="t xs">• usuário / host / app</text><text x="1392" y="409" class="t xs">• timeline / evidências</text><text x="1392" y="428" class="t xs">• risco / contenção</text>
+    <rect x="1378" y="451" width="88" height="70" rx="8" fill="#d92735"/><text x="1422" y="485" text-anchor="middle" class="w l h">DENY</text><text x="1422" y="506" text-anchor="middle" class="w xs">bloqueado</text>
+    <rect x="1476" y="451" width="88" height="70" rx="8" fill="#de8b16"/><text x="1520" y="485" text-anchor="middle" class="w l h">HITL</text><text x="1520" y="506" text-anchor="middle" class="w xs">aprovação</text>
+    <rect x="1378" y="535" width="186" height="72" rx="8" fill="#fff0f1" stroke="#e12432" stroke-width="2"/><text x="1471" y="565" text-anchor="middle" fill="#b21825" font-family="Arial" font-size="20" font-weight="700">TAMPER DETECTED</text><text x="1471" y="589" text-anchor="middle" class="t xs">alteração de histórico</text>
+    <rect x="1378" y="621" width="186" height="48" rx="8" fill="#edf9f4" stroke="#14906f"/><text x="1471" y="651" text-anchor="middle" fill="#0c6c56" font-family="Arial" font-size="17" font-weight="700">Pacote de Evidências</text>
+    <rect x="1378" y="681" width="186" height="44" rx="8" fill="#eef7ff" stroke="#4e9bd5"/><text x="1471" y="708" text-anchor="middle" class="t m h">Offline Verifier</text>
+  </g>
+  <path d="M1345 194 H1378" class="rline"/><path d="M1345 485 H1378" class="rline"/><path d="M1345 570 H1378" class="rline"/>
+
+  <rect x="18" y="760" width="1564" height="122" rx="10" fill="#fff" stroke="#8db7d8"/><text x="34" y="786" class="t m h">Linha do tempo da campanha</text>
+  <g class="t xs">
+    <g><rect x="34" y="801" width="172" height="60" rx="7" fill="#eef7ff" stroke="#6aa4d3"/><text x="120" y="824" text-anchor="middle" class="h">1  Primeiro sinal observável</text><text x="120" y="846" text-anchor="middle">evento incomum em logs</text></g>
+    <g><rect x="224" y="801" width="160" height="60" rx="7" fill="#eef7ff" stroke="#6aa4d3"/><text x="304" y="824" text-anchor="middle" class="h">2  Security Signals</text><text x="304" y="846" text-anchor="middle">múltiplas fontes</text></g>
+    <g><rect x="402" y="801" width="160" height="60" rx="7" fill="#eef7ff" stroke="#6aa4d3"/><text x="482" y="824" text-anchor="middle" class="h">3  Incidente aberto</text><text x="482" y="846" text-anchor="middle">correlação</text></g>
+    <g><rect x="580" y="801" width="172" height="60" rx="7" fill="#eef7ff" stroke="#6aa4d3"/><text x="666" y="824" text-anchor="middle" class="h">4  Identidade comprometida</text><text x="666" y="846" text-anchor="middle">contexto de risco</text></g>
+    <g><rect x="770" y="801" width="172" height="60" rx="7" fill="#fff7e9" stroke="#e0a349"/><text x="856" y="824" text-anchor="middle" class="h">5  Tentativa de alteração</text><text x="856" y="846" text-anchor="middle">processo / dado sensível</text></g>
+    <g><rect x="960" y="801" width="150" height="60" rx="7" fill="#fff7e9" stroke="#e0a349"/><text x="1035" y="824" text-anchor="middle" class="h">6  Policy / HITL</text><text x="1035" y="846" text-anchor="middle">bloqueio / aprovação</text></g>
+    <g><rect x="1128" y="801" width="185" height="60" rx="7" fill="#fff0f1" stroke="#df6370"/><text x="1220" y="824" text-anchor="middle" class="h">7  Apagar rastros</text><text x="1220" y="846" text-anchor="middle">tamper / replay</text></g>
+    <g><rect x="1331" y="801" width="225" height="60" rx="7" fill="#edf9f4" stroke="#4aa787"/><text x="1443" y="824" text-anchor="middle" class="h">8  Evidência verificável</text><text x="1443" y="846" text-anchor="middle">bundle + offline verifier</text></g>
+  </g>
+</svg>
