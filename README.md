@@ -88,14 +88,21 @@ O atacante sintético tenta:
 
 O HeraclitusDB deve demonstrar:
 
-- policy enforcement;
-- Human-in-the-Loop;
-- anti-replay;
-- identity/parameter binding;
-- `upstream_delta=0` quando uma ação é negada;
-- detecção de adulteração;
-- reconstrução histórica;
-- Evidence Bundle verificável offline.
+- **Policy enforcement (aplicação automática de políticas):** o sistema deve conseguir aplicar regras de segurança antes que uma ação aconteça. Em linguagem simples: não basta registrar que algo errado ocorreu; o HeraclitusDB deve poder dizer **“essa ação não é permitida”** e impedir que ela prossiga quando estiver em um ponto de controle. Exemplo: uma identidade ligada a um incidente de segurança tenta alterar dados de um processo fictício e a política determina `DENY`.
+
+- **Human-in-the-Loop — HITL (aprovação humana):** algumas ações são sensíveis demais para serem executadas automaticamente. Nesses casos, o sistema interrompe a operação e pede a decisão de uma pessoa autorizada. A ação só continua depois de uma aprovação válida. Exemplo: um agente de IA tenta exportar um documento classificado como restrito e o sistema exige aprovação humana antes da execução.
+
+- **Anti-replay (proteção contra reutilização de autorizações):** uma autorização válida não pode ser reaproveitada indefinidamente. Se uma aprovação foi criada para uma operação específica e já foi usada, uma segunda tentativa de reutilizar a mesma autorização deve ser bloqueada. Isso evita que um invasor copie uma autorização antiga e tente usá-la novamente.
+
+- **Identity/parameter binding (vínculo entre identidade, ação e parâmetros):** uma aprovação deve valer apenas para **quem pediu**, **o que foi pedido** e **com quais parâmetros**. Se o usuário, agente, documento, operação ou qualquer parâmetro importante mudar depois da aprovação, a autorização deixa de ser válida. Exemplo: uma aprovação concedida para o Agente A exportar o Documento X não pode ser usada pelo Agente B nem para exportar o Documento Y.
+
+- **`upstream_delta=0` quando uma ação é negada:** não basta a tela mostrar `DENY`. A POC também verifica se o sistema de destino realmente **não recebeu nem executou** a ação. O `upstream_delta` representa quantas execuções chegaram ao serviço protegido. Se a política bloqueou a operação, o valor esperado é zero. Assim, um `DENY` acompanhado de `upstream_delta=0` prova que o bloqueio aconteceu antes do efeito real.
+
+- **Detecção de adulteração:** se alguém tentar modificar, apagar, truncar ou reordenar eventos já registrados, o sistema deve perceber que o histórico foi alterado. O HeraclitusDB usa mecanismos de integridade, como hashes e estruturas Merkle, para comparar o que foi preservado com o que está sendo apresentado posteriormente.
+
+- **Reconstrução histórica (time travel):** o sistema deve conseguir responder não apenas **“como os dados estão agora?”**, mas também **“como estavam em determinado momento do passado?”**. Isso permite reconstruir a sequência de um incidente: o estado antes da invasão, durante a movimentação do atacante, antes de uma tentativa de alteração e depois de uma ação autorizada ou bloqueada.
+
+- **Evidence Bundle verificável offline (pacote de evidências verificável sem acesso ao sistema original):** ao final da POC, o HeraclitusDB deve conseguir exportar um pacote contendo os eventos, sinais de segurança, decisões de política, aprovações, provas de integridade e referências da campanha. Esse pacote deve poder ser verificado por uma ferramenta independente, inclusive com o HeraclitusDB original desligado e sem acesso à rede. A ideia é simples: **a evidência não deve exigir confiança cega no mesmo sistema que a produziu**.
 
 ## Perfil público aproximado do STF
 
