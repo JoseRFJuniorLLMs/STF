@@ -121,3 +121,49 @@ Funcionamento é condição necessária. Não é governança.
 A mensagem técnica da POC deve permanecer:
 
 > A solução deve produzir evidências verificáveis e controles testáveis, em vez de exigir confiança cega no próprio sistema que está sendo auditado.
+
+
+---
+
+## 11. Referências institucionais e normativas
+
+Referências relevantes, sem alegação automática de conformidade:
+
+- Política Corporativa de Segurança da Informação do STF — Resolução STF nº 612/2018;
+- estrutura de proteção de dados/LGPD do STF;
+- Resolução CNJ nº 615/2025, alterada pela Resolução nº 674/2026, sobre desenvolvimento, governança, auditoria e monitoramento de IA;
+- Resolução CNJ nº 396/2021 como referência de segurança cibernética do ecossistema do Judiciário.
+
+**Cuidado de aplicabilidade:** a Resolução CNJ nº 396/2021 contém exceções expressas relacionadas ao STF. Não deve ser apresentada como obrigação direta do STF sem análise jurídica/institucional específica.
+
+## 12. Privacy by construction
+
+Mesmo com dados sintéticos, antecipar minimização, redaction, purpose tags, retenção, export control, access logging e derivação rastreável.
+
+## 13. Matriz controle-evidência
+
+Cada mapeamento contém:
+
+```text
+control_id
+source
+requirement_summary
+implementation
+test
+evidence
+status
+owner
+external_dependency
+```
+
+PASS somente com teste/evidência.
+
+## 14. Gate para dados reais
+
+Synthetic -> real exige definição institucional de finalidade/base, classificação, minimização, acesso, retenção, transferência, logs, descarte e risco.
+
+## 15. Transferência tecnológica
+
+Separar código, dependências, licenças, documentação, marcas, atribuições, componentes experimentais e itens que exigem aceite específico.
+
+Gratuidade não elimina obrigações de licenças de terceiros.
