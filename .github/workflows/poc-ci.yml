@@ -1,0 +1,21 @@
+name: STF POC CI
+on:
+  push:
+    paths: ['poc/**', '.github/workflows/poc-ci.yml']
+  pull_request:
+    paths: ['poc/**', '.github/workflows/poc-ci.yml']
+jobs:
+  qualify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Python compile
+        run: python -m py_compile poc/server.py poc/verify.py poc/heraclitus_adapter.py
+      - name: Unit tests
+        run: python -m unittest discover -s poc/tests -v
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Dashboard JavaScript syntax
+        run: node --check poc/dashboard/app.js
