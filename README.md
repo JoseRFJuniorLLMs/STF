@@ -14,6 +14,39 @@ A POC demonstra uma única campanha de ataque sintética do primeiro sinal obser
   <img src="assets/campanha-adversarial-sintetica.svg" alt="Campanha adversarial sintética em duas fases integrada ao HeraclitusDB" width="100%" />
 </p>
 
+## POC executável e dashboard
+
+A implementação funcional está em [`poc/`](poc/README.md). Ela usa somente a biblioteca padrão do Python e foi desenhada para rodar **apenas em loopback**, sem scanner, exploit real, credencial institucional ou conexão com infraestrutura do STF.
+
+```bash
+cd poc
+python server.py
+```
+
+Abra no navegador:
+
+```text
+http://127.0.0.1:8787
+```
+
+No dashboard é possível executar a campanha **passo a passo** ou inteira e acompanhar:
+
+- os sinais vindos de firewall/WAF, IAM, host, rede, banco e aplicação;
+- o risco acumulado e a abertura do incidente;
+- a identidade fictícia associada ao comprometimento;
+- o grafo temporal de atores, ativos, eventos e incidente;
+- a tentativa de alteração do processo sintético e o `DENY`;
+- o contador de efeitos reais (`upstream_hits`);
+- o Human-in-the-Loop e o consumo único da aprovação;
+- replay, troca de identidade e alteração de parâmetros bloqueados;
+- LSN, hash-chain e raiz Merkle;
+- tentativa de adulteração;
+- Evidence Bundle;
+- verificação offline;
+- scorecard final da qualificação.
+
+O servidor também possui um adapter read-only preparado para superfícies reais do HeraclitusDB em **loopback**, como `/sentinel/status`, `/api/v1/agent/status` e `/api/v1/agent/red-team/events`. O modo standalone permanece funcional quando um HeraclitusDB real não está disponível.
+
 ## Pergunta central
 
 > **Se um atacante assistido por IA comprometer uma infraestrutura simulada semelhante, em classes de sistemas, ao ambiente publicamente documentado do STF, o HeraclitusDB consegue correlacionar a intrusão desde o primeiro sinal observável, acompanhar sua progressão, impedir ações críticas sob enforcement e preservar uma linha do tempo verificável mesmo diante de tentativa de adulteração?**
