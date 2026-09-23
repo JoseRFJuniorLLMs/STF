@@ -1,7 +1,7 @@
 name: STF POC CI
 on:
   push:
-    paths: ['poc/**', '.github/workflows/poc-ci.yml']
+    paths: ['poc/**', 'README.md', '.github/workflows/poc-ci.yml']
   pull_request:
     paths: ['poc/**', '.github/workflows/poc-ci.yml']
 jobs:
