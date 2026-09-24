@@ -30,6 +30,8 @@ from policy import decide as policy_decide
 from faults import simulate as simulate_fault
 from synthetic_upstream import SyntheticUpstream
 from heraclitus_adapter import HeraclitusAdapter
+from heraclitus_core import CoreUnavailable, HeraclitusCore
+from processos import ProcessLedger
 
 ROOT = Path(__file__).resolve().parent
 DASHBOARD = ROOT / "dashboard"
@@ -1903,6 +1905,19 @@ class PocEngine:
         }
 
 ENGINE=PocEngine()
+# Log processual: núcleo gRPC da MESMA instância do laboratório que serve o
+# Agent Black Box (8080). Nunca a instância 7474, que é a memória do Claude.
+PROCESSOS=ProcessLedger(HeraclitusCore(os.environ.get("HERACLITUS_CORE_ADDR","127.0.0.1:17474")))
+
+def _processos_erro(exc:Exception)->tuple[dict[str,Any],int]:
+    if isinstance(exc,CoreUnavailable):
+        return {"connected":False,"addr":PROCESSOS.core.addr,"error":str(exc)},503
+    if isinstance(exc,KeyError): return {"connected":True,"error":f"processo desconhecido: {exc.args[0]}"},404
+    if isinstance(exc,LookupError): return {"connected":True,"error":str(exc)},409
+    if isinstance(exc,ValueError): return {"connected":True,"error":str(exc)},400
+    # grpc.RpcError (ex.: chave de idempotência reutilizada com outro conteúdo).
+    detail=getattr(exc,"details",None)
+    return {"connected":True,"error":(detail() if callable(detail) else None) or str(exc)},502
 
 class Handler(BaseHTTPRequestHandler):
     server_version="STFPOC/1.0"
@@ -2009,6 +2024,23 @@ class Handler(BaseHTTPRequestHandler):
                 snapshot=HeraclitusAdapter(base).snapshot()
                 return self._json({"status":snapshot["status"],"snapshot":snapshot})
             except Exception as e: return self._json({"status":"UNAVAILABLE","error":str(e)})
+        if path in ("/api/processos","/api/processos/detalhe"):
+            raw_as_of=query.get("as_of",[""])[0]
+            try:
+                as_of=int(raw_as_of) if raw_as_of else None
+                if as_of is not None and as_of<0: raise ValueError
+            except ValueError:
+                return self._json({"error":"invalid_as_of"},400)
+            try:
+                if path=="/api/processos":
+                    return self._json({"connected":True,"addr":PROCESSOS.core.addr,"as_of_lsn":as_of,**PROCESSOS.listar(as_of)})
+                detalhe=PROCESSOS.detalhe(query.get("id",[""])[0],as_of)
+                if detalhe is None: return self._json({"error":"processo_desconhecido"},404)
+                return self._json({"connected":True,"addr":PROCESSOS.core.addr,**detalhe})
+            except Exception as e:
+                body,status=_processos_erro(e)
+                # Banco fora do ar é um ESTADO que a aba mostra, não um erro HTTP.
+                return self._json(body,200 if status==503 else status)
         return self._static(path)
     def do_POST(self)->None:
         if not self._mutation_allowed():
@@ -2101,6 +2133,18 @@ class Handler(BaseHTTPRequestHandler):
                 "sha256":sha256_hex(target.read_bytes()),"verification":result["verification"],"bundle":bundle,
                 "real_heraclitus_export": real_export
             })
+        if path in ("/api/processos/protocolar","/api/processos/tramitar"):
+            try:
+                if path=="/api/processos/protocolar": return self._json({"connected":True,**PROCESSOS.protocolar()})
+                body=self._read_json_body() if int(self.headers.get("Content-Length","0") or 0) else {}
+                processo_id=body.get("id")
+                if processo_id is not None and not isinstance(processo_id,str): raise ValueError("id must be a string")
+                res=PROCESSOS.tramitar(processo_id)
+                return self._json({"connected":True,"lsn":res["lsn"],"event_id":res["event_id"],"deduplicated":res["deduplicated"],
+                                   "processo_id":res["processo_id"],"seq":res["seq"],"evento":res["conteudo"]})
+            except Exception as e:
+                body,status=_processos_erro(e)
+                return self._json(body,status)
         return self._json({"error":"not_found"},404)
     def _static(self,path:str)->None:
         rel="index.html" if path in ("/","") else path.lstrip("/")
@@ -2114,8 +2158,11 @@ def main()->None:
     ap=argparse.ArgumentParser(description="STF HeraclitusDB synthetic POC dashboard")
     ap.add_argument("--host",default="127.0.0.1"); ap.add_argument("--port",type=int,default=8787)
     ap.add_argument("--heraclitus",default=os.environ.get("HERACLITUS_URL", "http://127.0.0.1:8080"))
+    ap.add_argument("--heraclitus-core",default=PROCESSOS.core.addr,help="núcleo gRPC do HeraclitusDB para o log processual")
     args=ap.parse_args()
     if args.host not in LOCAL_HOSTS: raise SystemExit("Safety gate: this POC binds only to loopback addresses")
+    if args.heraclitus_core!=PROCESSOS.core.addr:
+        PROCESSOS.core=HeraclitusCore(args.heraclitus_core)
     if args.heraclitus:
         ENGINE.connect_heraclitus(args.heraclitus)
     server=ThreadingHTTPServer((args.host,args.port),Handler)

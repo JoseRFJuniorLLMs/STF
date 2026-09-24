@@ -12,7 +12,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - name: Python compile
-        run: python -m py_compile poc/server.py poc/verify.py poc/heraclitus_adapter.py poc/telemetry.py poc/correlation.py poc/detector.py poc/policy.py poc/faults.py poc/smoke.py poc/synthetic_upstream.py
+        run: python -m py_compile poc/server.py poc/verify.py poc/heraclitus_adapter.py poc/telemetry.py poc/correlation.py poc/detector.py poc/policy.py poc/faults.py poc/smoke.py poc/synthetic_upstream.py poc/heraclitus_core.py poc/processos.py
       - name: Unit tests
         run: python -m unittest discover -s poc/tests -v
       - name: HTTP smoke test
@@ -20,4 +20,4 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
       - name: Dashboard JavaScript syntax
-        run: node --check poc/dashboard/app.js
+        run: node --check poc/dashboard/app.js && node --check poc/dashboard/processos.js

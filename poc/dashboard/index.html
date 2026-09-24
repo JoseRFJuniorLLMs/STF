@@ -67,6 +67,16 @@
     </div>
   </header>
 
+  <!-- ABAS PRINCIPAIS -->
+  <nav class="main-tabs" role="tablist" aria-label="Áreas do painel">
+    <button class="main-tab active" id="tabDefesa" role="tab" aria-selected="true" aria-controls="viewDefesa" data-view="defesa">🛡️ Defesa cibernética</button>
+    <button class="main-tab" id="tabProcessos" role="tab" aria-selected="false" aria-controls="viewProcessos" data-view="processos">
+      ⚖️ Acompanhamento processual
+      <span class="main-tab-badge" id="procNovosBadge" title="Andamentos novos desde a última visita" hidden>0</span>
+    </button>
+  </nav>
+
+  <div class="view" id="viewDefesa" role="tabpanel" aria-labelledby="tabDefesa">
   <!-- ÁREA DE TRABALHO: PAINEL DE ATAQUES (SANFONADO) + GRAFO -->
   <main class="workspace" id="workspace">
 
@@ -375,6 +385,39 @@
       </figure>
     </div>
   </section>
+  </div>
+
+  <!-- ACOMPANHAMENTO PROCESSUAL (LOG IMUTÁVEL NO HERACLITUSDB) -->
+  <div class="view" id="viewProcessos" role="tabpanel" aria-labelledby="tabProcessos" hidden>
+    <section class="panel proc-panel">
+      <div class="panel-head">
+        <h2>Acompanhamento processual <small class="head-hint">log gravado no HeraclitusDB • núcleo <span id="procAddr" class="mono">127.0.0.1:17474</span></small></h2>
+        <div class="proc-head-actions">
+          <span id="procStatus" class="tag-status wsl-status">CONECTANDO...</span>
+          <label class="proc-auto" title="Acrescenta um andamento a um processo a cada 6 segundos">
+            <input type="checkbox" id="procAutoToggle" /> Tramitação automática
+          </label>
+          <button class="btn small primary" id="procProtocolarBtn" hidden>Protocolar processos sintéticos</button>
+        </div>
+      </div>
+      <p class="proc-note">
+        Processos fictícios. A aba mostra só o log — protocolo, andamentos com os códigos da Tabela Processual Unificada do CNJ,
+        deslocamentos e petições — no formato do Acompanhamento Processual do STF e da API pública do DataJud.
+        Cada linha é um evento imutável gravado no HeraclitusDB e lido de volta dele.
+      </p>
+      <div class="proc-layout">
+        <aside class="proc-list-col">
+          <input type="search" id="procBusca" class="proc-search" placeholder="Número, classe ou número único" aria-label="Buscar processo" />
+          <div class="proc-list" id="procList" role="listbox" aria-label="Processos">
+            <div class="proc-empty">Consultando o HeraclitusDB...</div>
+          </div>
+        </aside>
+        <section class="proc-detail" id="procDetail" aria-live="polite">
+          <div class="proc-empty">Selecione um processo para ver o log.</div>
+        </section>
+      </div>
+    </section>
+  </div>
 
 </div>
 
@@ -383,5 +426,6 @@
 
 <div id="toast" class="toast"></div>
 <script src="app.js"></script>
+<script src="processos.js"></script>
 </body>
 </html>

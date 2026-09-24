@@ -1896,3 +1896,240 @@ body.panel-fullscreen-active .topbar .attack-hint {
   min-width: 18px; height: 16px; padding: 0 4px; border-radius: 8px;
   display: inline-grid; place-items: center; color: #fff; font-size: 9.5px; font-weight: 900;
 }
+
+/* ========================================================
+   ABAS PRINCIPAIS
+   ======================================================== */
+.main-tabs {
+  display: flex;
+  gap: 4px;
+  margin: -4px 0 14px;
+  border-bottom: 2px solid var(--gov-border);
+  overflow-x: auto;
+}
+.main-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+  color: var(--gov-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+  margin-bottom: -2px;
+}
+.main-tab:hover { color: var(--gov-blue-primary); background: #eef3fa; }
+.main-tab.active {
+  background: #ffffff;
+  color: var(--gov-blue-primary);
+  border-color: var(--gov-border);
+  border-bottom: 2px solid #ffffff;
+  box-shadow: inset 0 3px 0 var(--gov-gold-light);
+}
+.main-tab:focus-visible { outline: 2px solid var(--gov-blue-light); outline-offset: 2px; }
+.main-tab-badge {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--gov-red);
+  color: #ffffff;
+  font-size: 10.5px;
+  font-weight: 900;
+  text-align: center;
+}
+.main-tab-badge[hidden], .view[hidden] { display: none; }
+
+/* ========================================================
+   ACOMPANHAMENTO PROCESSUAL
+   ======================================================== */
+.proc-panel .mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+.proc-panel .nowrap { white-space: nowrap; }
+.proc-panel .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.proc-head-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.proc-head-actions .btn[hidden] { display: none; }
+.proc-auto {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--gov-text-secondary);
+  cursor: pointer;
+}
+.proc-note {
+  margin: 12px 18px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--gov-text-secondary);
+}
+.proc-layout {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: 16px;
+  padding: 14px 18px 18px;
+}
+.proc-list-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.proc-search {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--gov-border);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--gov-text);
+}
+.proc-search:focus { outline: 2px solid var(--gov-blue-light); outline-offset: 0; border-color: var(--gov-blue-light); }
+.proc-list { display: flex; flex-direction: column; gap: 8px; max-height: 720px; overflow-y: auto; }
+.proc-empty {
+  padding: 28px 18px;
+  text-align: center;
+  color: var(--gov-muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+  border: 1px dashed var(--gov-border);
+  border-radius: 8px;
+  background: #fafcff;
+}
+.proc-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 11px 13px;
+  border: 1px solid var(--gov-border);
+  border-left: 4px solid var(--gov-border);
+  border-radius: 6px;
+  background: #ffffff;
+  font: inherit;
+  color: var(--gov-text);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.proc-card:hover { background: #f5f8fd; border-color: var(--gov-blue-light); }
+.proc-card.active { border-color: var(--gov-blue-primary); border-left-color: var(--gov-gold-light); background: #f0f5fc; }
+.proc-card:focus-visible { outline: 2px solid var(--gov-blue-light); outline-offset: 1px; }
+.proc-card-top { display: flex; align-items: center; gap: 8px; }
+.proc-card-top strong { font-size: 14px; color: var(--gov-blue-primary); }
+.proc-card-top .proc-sit { margin-left: auto; }
+.proc-card-nu { font-size: 11px; color: var(--gov-text-secondary); margin-top: 2px; }
+.proc-card-meta { font-size: 11px; color: var(--gov-muted); margin-top: 4px; }
+.proc-card-last { font-size: 11.5px; margin-top: 6px; color: var(--gov-text); font-weight: 600; }
+.proc-card-last span { color: var(--gov-muted); font-weight: 700; margin-right: 4px; }
+.proc-card-foot { font-size: 10px; color: var(--gov-muted); margin-top: 5px; }
+.proc-novo {
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--gov-red);
+  color: #ffffff;
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+}
+.proc-sit {
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-size: 9.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  border: 1px solid;
+}
+.proc-sit.EM_TRAMITACAO { background: #eaf1fb; color: var(--gov-blue-light); border-color: #a8cbf7; }
+.proc-sit.TRANSITADO { background: var(--gov-gold-bg); color: var(--gov-gold); border-color: #f2ce7e; }
+.proc-sit.BAIXADO { background: #f1f3f6; color: var(--gov-text-secondary); border-color: var(--gov-border); }
+
+.proc-detail { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.proc-capa {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--gov-border);
+  border-radius: 8px;
+  background: #fafcff;
+}
+.proc-capa-main { min-width: 0; }
+.proc-num { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.proc-num h3 { margin: 0; font-size: 20px; color: var(--gov-blue-primary); font-weight: 900; }
+.proc-nu { font-size: 12.5px; color: var(--gov-text-secondary); margin-top: 3px; }
+.proc-capa-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 22px;
+  margin: 12px 0 0;
+}
+.proc-capa-grid .wide { grid-column: 1 / -1; }
+.proc-capa-grid dt { font-size: 9.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gov-muted); }
+.proc-capa-grid dd { margin: 2px 0 0; font-size: 12.5px; color: var(--gov-text); }
+.proc-capa-side { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; }
+.proc-chain {
+  padding: 6px 10px;
+  border-radius: 5px;
+  font-size: 11.5px;
+  font-weight: 800;
+  border: 1px solid;
+  max-width: 280px;
+}
+.proc-chain.ok { background: var(--gov-green-bg); color: var(--gov-green); border-color: #94d9a3; }
+.proc-chain.broken { background: var(--gov-red-bg); color: var(--gov-red); border-color: #f8a8b1; }
+.proc-side-note { font-size: 10.5px; color: var(--gov-muted); }
+
+.proc-asof {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 9px 14px;
+  border: 1px solid var(--gov-border);
+  border-radius: 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--gov-text-secondary);
+}
+.proc-asof.active { background: var(--gov-gold-bg); border-color: #f2ce7e; color: var(--gov-gold); }
+.proc-asof input[type="range"] { flex: 1 1 220px; accent-color: var(--gov-blue-primary); }
+.proc-asof .mono { color: var(--gov-text); }
+
+.proc-subtabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.proc-count {
+  display: inline-block;
+  min-width: 18px;
+  margin-left: 4px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: rgba(12, 50, 111, 0.1);
+  font-size: 10px;
+  text-align: center;
+}
+.tab-btn.active .proc-count { background: rgba(255, 255, 255, 0.22); }
+.proc-table-wrap { max-height: 520px; }
+.proc-table td { vertical-align: top; }
+.proc-lsn { color: var(--gov-blue-light); font-weight: 800; }
+.proc-key { font-size: 10px; color: var(--gov-muted); }
+.proc-table tr.row-new td { animation: procRowNew 2.4s ease-out; }
+.proc-table tr.row-broken td { background: var(--gov-red-bg); color: var(--gov-red); }
+@keyframes procRowNew {
+  0%, 30% { background: #fff4d6; }
+  100% { background: transparent; }
+}
+.proc-foot-note { margin: 0; font-size: 11px; color: var(--gov-muted); line-height: 1.5; }
+
+@media (max-width: 1100px) {
+  .proc-layout { grid-template-columns: minmax(0, 1fr); }
+  .proc-list { max-height: 320px; }
+}
+@media (max-width: 640px) {
+  .proc-capa { flex-direction: column; }
+  .proc-capa-side { align-items: flex-start; }
+  .proc-capa-grid { grid-template-columns: minmax(0, 1fr); }
+  .proc-layout { padding: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .proc-table tr.row-new td { animation: none; background: #fff4d6; }
+}

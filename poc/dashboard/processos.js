@@ -1,0 +1,467 @@
+// ========================================================
+// ACOMPANHAMENTO PROCESSUAL — LOG IMUTÁVEL NO HERACLITUSDB
+// Usa api(), esc(), toast() e $() definidos em app.js.
+// ========================================================
+const PROC_SITUACAO = {
+  EM_TRAMITACAO: 'Em tramitação',
+  TRANSITADO: 'Transitado em julgado',
+  BAIXADO: 'Baixado'
+};
+const PROC_SUBTABS = [
+  { id: 'andamentos', label: 'Andamentos' },
+  { id: 'peticoes', label: 'Protocolo e petições' },
+  { id: 'deslocamentos', label: 'Deslocamentos' },
+  { id: 'log', label: 'Log HeraclitusDB' }
+];
+
+let procLista = [];
+let procSelecionado = null;
+let procDetalhe = null;
+let procAsOf = null;            // null = estado atual; número = AS OF LSN
+let procSubtab = 'andamentos';
+let procPrimeiraCarga = true;
+let procAutoTimer = null;
+let procPollTimer = null;
+let procCarregando = false;
+const procUltimoLsnVisto = new Map();   // id -> último LSN já visto na lista
+const procNovos = new Set();            // ids com andamento novo ainda não aberto
+const procLsnRenderizado = new Map();   // id -> maior LSN já desenhado no detalhe
+
+const procDataFmt = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+});
+const procHoraFmt = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric',
+  hour: '2-digit', minute: '2-digit', second: '2-digit'
+});
+const procData = iso => (iso ? procDataFmt.format(new Date(iso)) : '—');
+const procHora = ms => (ms ? procHoraFmt.format(new Date(ms)) : '—');
+
+function procViewAtiva() {
+  return !$('#viewProcessos').hidden;
+}
+
+// --------------------------------------------------------------- abas topo
+function setupMainTabs() {
+  document.querySelectorAll('.main-tab').forEach(btn => {
+    btn.addEventListener('click', () => mostrarView(btn.dataset.view));
+  });
+  window.addEventListener('hashchange', () => mostrarView(location.hash === '#processos' ? 'processos' : 'defesa', false));
+  if (location.hash === '#processos') mostrarView('processos', false);
+}
+
+function mostrarView(view, atualizarHash = true) {
+  const processos = view === 'processos';
+  $('#viewDefesa').hidden = processos;
+  $('#viewProcessos').hidden = !processos;
+  document.querySelectorAll('.main-tab').forEach(btn => {
+    const ativo = btn.dataset.view === view;
+    btn.classList.toggle('active', ativo);
+    btn.setAttribute('aria-selected', String(ativo));
+  });
+  if (atualizarHash) history.replaceState(null, '', processos ? '#processos' : location.pathname + location.search);
+  if (processos) {
+    if (procSelecionado) procNovos.delete(procSelecionado);
+    atualizarBadgeNovos();
+    carregarProcessos();
+  } else if (typeof state !== 'undefined' && state) {
+    // O grafo e os gráficos medem o contentor: redesenhar depois de voltar a
+    // estar visível, senão ficam com a geometria de um elemento escondido.
+    renderGraph(state);
+    renderIncidentCharts();
+  }
+  agendarPoll();
+}
+
+function atualizarBadgeNovos() {
+  const badge = $('#procNovosBadge');
+  badge.textContent = procNovos.size;
+  badge.hidden = procNovos.size === 0;
+}
+
+// ----------------------------------------------------------------- leitura
+function agendarPoll() {
+  clearTimeout(procPollTimer);
+  // Aba aberta: acompanha de perto. Fechada: só para acender o contador.
+  procPollTimer = setTimeout(async () => {
+    await carregarProcessos();
+    agendarPoll();
+  }, procViewAtiva() ? 5000 : 20000);
+}
+
+function setProcStatus(texto, classe) {
+  const el = $('#procStatus');
+  el.textContent = texto;
+  el.className = 'tag-status ' + classe;
+}
+
+async function carregarProcessos() {
+  if (procCarregando) return;
+  procCarregando = true;
+  try {
+    const res = await api('/api/processos');
+    $('#procAddr').textContent = res.addr || '—';
+    if (!res.connected) {
+      setProcStatus('OFFLINE', 'critical');
+      $('#procProtocolarBtn').hidden = true;
+      procLista = [];
+      $('#procList').innerHTML = `<div class="proc-empty">HeraclitusDB indisponível em <code>${esc(res.addr || '')}</code>.<br><small>${esc(res.error || '')}</small></div>`;
+      if (!procDetalhe) $('#procDetail').innerHTML = '<div class="proc-empty">Sem ligação ao banco não há log para mostrar.</div>';
+      return;
+    }
+    setProcStatus(`CONECTADO • ${res.eventos} eventos`, 'normal');
+    $('#procProtocolarBtn').hidden = res.processos.length >= res.catalogo;
+    detectarNovidades(res.processos);
+    procLista = res.processos;
+    renderListaProcessos();
+    if (!procLista.length) {
+      $('#procDetail').innerHTML = '<div class="proc-empty">Nenhum processo no HeraclitusDB ainda.<br>Use <strong>Protocolar processos sintéticos</strong> para gravar o protocolo e os primeiros andamentos.</div>';
+      return;
+    }
+    const atual = procLista.find(p => p.id === procSelecionado);
+    if (!atual) {
+      if (procViewAtiva()) selecionarProcesso(procLista[0].id);
+    } else if (procAsOf === null && procDetalhe && atual.ultimo_lsn !== procDetalhe.processo.ultimo_lsn) {
+      carregarDetalhe();
+    }
+  } catch (e) {
+    setProcStatus('ERRO', 'critical');
+    $('#procList').innerHTML = `<div class="proc-empty">Falha ao consultar a POC: ${esc(e.message)}</div>`;
+  } finally {
+    procCarregando = false;
+  }
+}
+
+// Como o STF Push: cada andamento novo gera um aviso, e o processo fica
+// marcado até ser aberto.
+function detectarNovidades(processos) {
+  const avisos = [];
+  processos.forEach(p => {
+    const antes = procUltimoLsnVisto.get(p.id);
+    if (!procPrimeiraCarga && (antes === undefined || p.ultimo_lsn > antes)) {
+      const aberto = procViewAtiva() && p.id === procSelecionado && procAsOf === null;
+      if (!aberto) procNovos.add(p.id);
+      const ult = p.ultimo_andamento;
+      avisos.push(`${p.capa.numero}: ${ult ? ult.nome : 'novo registro'}`);
+    }
+    procUltimoLsnVisto.set(p.id, p.ultimo_lsn);
+  });
+  procPrimeiraCarga = false;
+  if (avisos.length) toast(`📬 Novo andamento — ${avisos.slice(0, 2).join(' • ')}${avisos.length > 2 ? ` (+${avisos.length - 2})` : ''}`);
+  atualizarBadgeNovos();
+}
+
+function renderListaProcessos() {
+  const termo = ($('#procBusca').value || '').trim().toLowerCase();
+  const visiveis = procLista.filter(p => !termo || [p.id, p.capa.numero, p.capa.numeroUnico, p.capa.classe.nome, p.capa.relator]
+    .some(v => String(v).toLowerCase().includes(termo)));
+  if (!procLista.length) {
+    $('#procList').innerHTML = '<div class="proc-empty">Nenhum processo protocolado no HeraclitusDB.</div>';
+    return;
+  }
+  if (!visiveis.length) {
+    $('#procList').innerHTML = '<div class="proc-empty">Nenhum processo corresponde à busca.</div>';
+    return;
+  }
+  $('#procList').innerHTML = visiveis.map(p => {
+    const ult = p.ultimo_andamento;
+    const ativo = p.id === procSelecionado;
+    return `
+      <button class="proc-card ${ativo ? 'active' : ''}" role="option" aria-selected="${ativo}" data-id="${esc(p.id)}">
+        <div class="proc-card-top">
+          <strong>${esc(p.capa.numero)}</strong>
+          ${procNovos.has(p.id) ? '<span class="proc-novo">NOVO</span>' : ''}
+          <span class="proc-sit ${esc(p.situacao)}">${esc(PROC_SITUACAO[p.situacao] || p.situacao)}</span>
+        </div>
+        <div class="proc-card-nu mono">${esc(p.capa.numeroUnico)}</div>
+        <div class="proc-card-meta">${esc(p.capa.orgaoJulgador)} • ${esc(p.capa.relator)}</div>
+        <div class="proc-card-last">
+          ${ult ? `<span>${procData(ult.dataHora)}</span> ${esc(ult.nome)}` : 'Protocolado'}
+        </div>
+        <div class="proc-card-foot">${p.eventos} eventos • LSN ${p.ultimo_lsn ?? '—'}</div>
+      </button>`;
+  }).join('');
+}
+
+function selecionarProcesso(id) {
+  if (id !== procSelecionado) procSubtab = 'andamentos';
+  procSelecionado = id;
+  procAsOf = null;
+  procNovos.delete(id);
+  atualizarBadgeNovos();
+  renderListaProcessos();
+  carregarDetalhe();
+}
+
+async function carregarDetalhe() {
+  if (!procSelecionado) return;
+  const id = procSelecionado;
+  const asOf = procAsOf;
+  try {
+    const q = `id=${encodeURIComponent(id)}${asOf !== null ? `&as_of=${asOf}` : ''}`;
+    const res = await api(`/api/processos/detalhe?${q}`);
+    if (id !== procSelecionado || asOf !== procAsOf) return; // resposta obsoleta
+    if (!res.connected) {
+      $('#procDetail').innerHTML = `<div class="proc-empty">HeraclitusDB indisponível: ${esc(res.error || '')}</div>`;
+      return;
+    }
+    procDetalhe = res;
+    renderDetalhe();
+  } catch (e) {
+    $('#procDetail').innerHTML = `<div class="proc-empty">Falha ao ler o log do processo: ${esc(e.message)}</div>`;
+  }
+}
+
+// ----------------------------------------------------------------- detalhe
+function renderDetalhe() {
+  const d = procDetalhe;
+  const p = d.processo;
+  const c = p.capa;
+  const integ = d.integridade;
+  const eventos = d.eventos;
+  const porTipo = tipo => eventos.filter(e => e.tipo === tipo);
+  const contagem = {
+    andamentos: porTipo('andamento').length,
+    peticoes: porTipo('protocolo').length + porTipo('peticao').length,
+    deslocamentos: porTipo('deslocamento').length,
+    log: eventos.length
+  };
+  const lsns = d.lsns || [];
+  const idxAtual = procAsOf === null ? lsns.length - 1 : Math.max(0, lsns.indexOf(procAsOf));
+  const historico = procAsOf !== null;
+
+  // Linhas acrescentadas desde o último desenho deste processo piscam uma vez.
+  const jaVisto = historico ? Infinity : (procLsnRenderizado.get(c.id) ?? Infinity);
+  if (!historico && eventos.length) procLsnRenderizado.set(c.id, eventos[eventos.length - 1].lsn);
+  const novo = lsn => (lsn > jaVisto ? ' row-new' : '');
+
+  $('#procDetail').innerHTML = `
+    <div class="proc-capa">
+      <div class="proc-capa-main">
+        <div class="proc-num">
+          <h3>${esc(c.numero)}</h3>
+          <span class="proc-sit ${esc(p.situacao)}">${esc(PROC_SITUACAO[p.situacao] || p.situacao)}</span>
+        </div>
+        <div class="proc-nu mono" title="Número único CNJ (Resolução 65/2008)">${esc(c.numeroUnico)}</div>
+        <dl class="proc-capa-grid">
+          <div><dt>Classe</dt><dd>${esc(c.classe.nome)}</dd></div>
+          <div><dt>Relator(a)</dt><dd>${esc(c.relator)}</dd></div>
+          <div><dt>Órgão julgador</dt><dd>${esc(c.orgaoJulgador)}</dd></div>
+          <div><dt>Origem</dt><dd>${esc(c.origem)}</dd></div>
+          <div class="wide"><dt>Assunto</dt><dd>${esc(c.assunto)}</dd></div>
+        </dl>
+      </div>
+      <div class="proc-capa-side">
+        <div class="proc-chain ${integ.integra ? 'ok' : 'broken'}" title="Cada evento aponta (parents) para o evento anterior do mesmo processo">
+          ${integ.integra ? `🔗 Cadeia íntegra — ${integ.elos} elos` : `⛓️‍💥 Cadeia quebrada: ${esc(integ.falha)}`}
+        </div>
+        <button class="btn small primary" id="procNextBtn" ${historico || p.pendentes <= 0 ? 'disabled' : ''}
+          title="${p.pendentes > 0 ? 'Grava o próximo andamento do roteiro no HeraclitusDB' : 'Tramitação concluída'}">
+          ▶ ${p.pendentes > 0 ? 'Próximo andamento' : 'Tramitação concluída'}
+        </button>
+        <small class="proc-side-note">${p.pendentes > 0 ? `${p.pendentes} passo(s) restantes no roteiro` : 'Sem passos restantes'}</small>
+      </div>
+    </div>
+
+    <div class="proc-asof ${historico ? 'active' : ''}">
+      <label for="procAsOfRange">Reconstruir como estava em</label>
+      <input type="range" id="procAsOfRange" min="0" max="${Math.max(0, lsns.length - 1)}" value="${idxAtual}" ${lsns.length < 2 ? 'disabled' : ''} />
+      <span id="procAsOfLabel" class="mono">${historico ? `AS OF LSN ${procAsOf} — evento ${idxAtual + 1} de ${lsns.length}` : `LSN ${lsns[lsns.length - 1] ?? '—'} — estado atual`}</span>
+      <button class="btn tiny ghost" id="procAsOfNow" ${historico ? '' : 'disabled'}>Voltar ao atual</button>
+    </div>
+
+    <div class="proc-subtabs" role="tablist">
+      ${PROC_SUBTABS.map(t => `
+        <button class="tab-btn ${t.id === procSubtab ? 'active' : ''}" role="tab" aria-selected="${t.id === procSubtab}" data-subtab="${t.id}">
+          ${t.label} <span class="proc-count">${contagem[t.id]}</span>
+        </button>`).join('')}
+    </div>
+    <div class="table-wrap proc-table-wrap">${renderSubtab(eventos, integ, novo)}</div>
+    ${procSubtab === 'log' ? `<p class="proc-foot-note">
+      <strong>Data do andamento</strong> é a data processual do roteiro sintético.
+      <strong>Registrado</strong> é o relógio híbrido (HLC) do HeraclitusDB no momento do <code>Append</code>.
+      A chave de idempotência impede que o mesmo andamento seja gravado duas vezes com conteúdo diferente.</p>` : ''}
+  `;
+}
+
+function renderSubtab(eventos, integ, novo) {
+  if (procSubtab === 'andamentos') {
+    const linhas = eventos.filter(e => e.tipo === 'andamento').reverse();
+    return tabela(['Data', 'Andamento', 'Complemento', 'Órgão julgador', 'TPU', 'LSN'], linhas, e => {
+      const m = e.conteudo.movimento;
+      return `<tr class="${novo(e.lsn)}">
+        <td class="nowrap">${procData(e.conteudo.dataHora)}</td>
+        <td><strong>${esc(m.nome)}</strong></td>
+        <td>${esc(m.complemento || '—')}</td>
+        <td>${esc(m.orgaoJulgador?.nome || '—')}</td>
+        <td class="mono" title="Código da Tabela Processual Unificada de movimentos (CNJ)">${m.codigo}</td>
+        <td class="mono proc-lsn">${e.lsn}</td>
+      </tr>`;
+    }, 'Nenhum andamento neste ponto do histórico.');
+  }
+  if (procSubtab === 'peticoes') {
+    const linhas = eventos.filter(e => e.tipo === 'protocolo' || e.tipo === 'peticao').reverse();
+    return tabela(['Protocolo', 'Tipo', 'Peticionante / meio', 'Peticionado em', 'Recebido em', 'Recebido por', 'LSN'], linhas, e => {
+      const inicial = e.tipo === 'protocolo';
+      const x = inicial ? e.conteudo.protocolo : e.conteudo.peticao;
+      return `<tr class="${novo(e.lsn)}">
+        <td class="mono nowrap">${esc(x.numero)}</td>
+        <td><strong>${inicial ? 'Protocolo inicial' : esc(x.tipo)}</strong></td>
+        <td>${esc(inicial ? x.meio : x.peticionante)}</td>
+        <td class="nowrap">${procData(x.peticionadoEm)}</td>
+        <td class="nowrap">${procData(x.recebidoEm)}</td>
+        <td>${esc(inicial ? x.recebidoPor : '—')}</td>
+        <td class="mono proc-lsn">${e.lsn}</td>
+      </tr>`;
+    }, 'Nenhum protocolo neste ponto do histórico.');
+  }
+  if (procSubtab === 'deslocamentos') {
+    const linhas = eventos.filter(e => e.tipo === 'deslocamento').reverse();
+    return tabela(['Enviado por', 'Recebido por', 'Guia', 'Enviado em', 'Recebido em', 'LSN'], linhas, e => {
+      const x = e.conteudo.deslocamento;
+      return `<tr class="${novo(e.lsn)}">
+        <td>${esc(x.enviadoPor)}</td>
+        <td>${esc(x.recebidoPor)}</td>
+        <td class="mono nowrap">${esc(x.guia)}</td>
+        <td class="nowrap">${procData(x.enviadoEm)}</td>
+        <td class="nowrap">${procData(x.recebidoEm)}</td>
+        <td class="mono proc-lsn">${e.lsn}</td>
+      </tr>`;
+    }, 'Nenhum deslocamento neste ponto do histórico.');
+  }
+  const linhas = [...eventos].reverse();
+  return tabela(['Seq', 'LSN', 'Registrado', 'Kind', 'Evento (ULID)', 'Elo anterior', 'Chave de idempotência'], linhas, e => {
+    const quebrado = !integ.integra && e.lsn === integ.lsn;
+    return `<tr class="${novo(e.lsn)}${quebrado ? ' row-broken' : ''}">
+      <td class="mono">${e.seq}</td>
+      <td class="mono proc-lsn">${e.lsn}</td>
+      <td class="nowrap">${procHora(e.ts_ms)}</td>
+      <td><code>${esc(e.kind)}</code></td>
+      <td class="mono" title="${esc(e.id)}">${esc(e.id)}</td>
+      <td class="mono" title="${esc((e.parents || []).join(', '))}">${e.parents && e.parents.length ? esc(e.parents[0]) : '— (raiz)'}</td>
+      <td class="mono proc-key">${esc(e.idempotency_key || '—')}</td>
+    </tr>`;
+  }, 'Nenhum evento neste ponto do histórico.');
+}
+
+function tabela(cabecalhos, linhas, linhaHtml, vazio) {
+  const corpo = linhas.length
+    ? linhas.map(linhaHtml).join('')
+    : `<tr><td colspan="${cabecalhos.length}" class="empty">${vazio}</td></tr>`;
+  return `<table class="simple-table proc-table">
+    <thead><tr>${cabecalhos.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+    <tbody>${corpo}</tbody>
+  </table>`;
+}
+
+// ----------------------------------------------------------------- escrita
+// POST que devolve a mensagem do servidor (o api() de app.js só diz "HTTP n").
+async function procPost(path, body) {
+  const r = await fetch(path.replace(/^\//, ''), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-STF-POC': '1' },
+    body: JSON.stringify(body || {})
+  });
+  const dados = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const erro = new Error(dados.error || 'HTTP ' + r.status);
+    erro.status = r.status;
+    throw erro;
+  }
+  return dados;
+}
+
+async function protocolarProcessos() {
+  const btn = $('#procProtocolarBtn');
+  btn.disabled = true;
+  try {
+    const res = await procPost('/api/processos/protocolar');
+    toast(`📥 ${res.gravados} evento(s) gravados no HeraclitusDB`);
+    procPrimeiraCarga = true; // o que o próprio utilizador gravou não é "novo"
+    await carregarProcessos();
+  } catch (e) {
+    toast('Falha ao protocolar: ' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function proximoAndamento() {
+  const btn = $('#procNextBtn');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await procPost('/api/processos/tramitar', { id: procSelecionado });
+    procUltimoLsnVisto.set(res.processo_id, res.lsn);
+    const m = res.evento.movimento;
+    toast(`✍️ ${res.evento.processo}: ${m ? m.nome : res.evento.tipo} — gravado no LSN ${res.lsn}`);
+    // Detalhe primeiro: a lista, ao ver o mesmo LSN, já não o redesenha (e a
+    // linha nova continua a piscar).
+    await carregarDetalhe();
+    await carregarProcessos();
+  } catch (e) {
+    toast('Não foi possível tramitar: ' + e.message);
+    if (btn) btn.disabled = false;
+  }
+}
+
+function alternarTramitacaoAutomatica(ligar) {
+  clearInterval(procAutoTimer);
+  procAutoTimer = null;
+  if (!ligar) return;
+  const passo = async () => {
+    try {
+      await procPost('/api/processos/tramitar');
+      await carregarProcessos();
+    } catch (e) {
+      // 409 = nenhum processo com passos restantes: o roteiro acabou.
+      $('#procAutoToggle').checked = false;
+      alternarTramitacaoAutomatica(false);
+      toast(e.status === 409 ? 'Tramitação automática concluída: todos os roteiros chegaram ao fim.' : 'Tramitação automática parada: ' + e.message);
+    }
+  };
+  passo();
+  procAutoTimer = setInterval(passo, 6000);
+}
+
+// ------------------------------------------------------------------ eventos
+function setupProcessos() {
+  setupMainTabs();
+  $('#procProtocolarBtn').addEventListener('click', protocolarProcessos);
+  $('#procAutoToggle').addEventListener('change', e => alternarTramitacaoAutomatica(e.target.checked));
+  $('#procBusca').addEventListener('input', renderListaProcessos);
+  $('#procList').addEventListener('click', e => {
+    const card = e.target.closest('.proc-card');
+    if (card) selecionarProcesso(card.dataset.id);
+  });
+  const detalhe = $('#procDetail');
+  detalhe.addEventListener('click', e => {
+    const sub = e.target.closest('[data-subtab]');
+    if (sub) {
+      procSubtab = sub.dataset.subtab;
+      renderDetalhe();
+      return;
+    }
+    if (e.target.closest('#procNextBtn')) proximoAndamento();
+    if (e.target.closest('#procAsOfNow')) {
+      procAsOf = null;
+      carregarDetalhe();
+    }
+  });
+  detalhe.addEventListener('input', e => {
+    if (e.target.id !== 'procAsOfRange' || !procDetalhe) return;
+    const lsns = procDetalhe.lsns;
+    const i = Number(e.target.value);
+    $('#procAsOfLabel').textContent = i === lsns.length - 1 ? `LSN ${lsns[i]} — estado atual` : `AS OF LSN ${lsns[i]} — evento ${i + 1} de ${lsns.length}`;
+  });
+  detalhe.addEventListener('change', e => {
+    if (e.target.id !== 'procAsOfRange' || !procDetalhe) return;
+    const lsns = procDetalhe.lsns;
+    const i = Number(e.target.value);
+    procAsOf = i === lsns.length - 1 ? null : lsns[i];
+    carregarDetalhe();
+  });
+  carregarProcessos();
+  agendarPoll();
+}
+
+setupProcessos();
