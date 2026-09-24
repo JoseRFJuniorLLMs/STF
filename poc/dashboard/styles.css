@@ -1898,6 +1898,63 @@ body.panel-fullscreen-active .topbar .attack-hint {
 }
 
 /* ========================================================
+   MAPA DE ATIVIDADE (ESTILO GITHUB, AZUL STF) + AVANÇO NO TEMPO
+   ======================================================== */
+:root {
+  --heat-0: #edf1f6;
+  --heat-1: #c6d7ee;
+  --heat-2: #86abdc;
+  --heat-3: #3d72bd;
+  --heat-4: #0c326f; /* azul-marinho institucional */
+}
+.heatmap-wrap { display: flex; flex-direction: column; gap: 6px; }
+.chart-body svg.heatmap-svg { width: 100%; }
+/* o SVG do mapa é ampliado ~2x para ocupar a largura: letra menor no viewBox */
+.chart-body svg.heatmap-svg .axis-text { font-size: 6.5px; }
+.heat-cell { stroke: rgba(12, 50, 111, 0.07); stroke-width: 1; }
+.heat-0 { fill: var(--heat-0); background: var(--heat-0); }
+.heat-1 { fill: var(--heat-1); background: var(--heat-1); }
+.heat-2 { fill: var(--heat-2); background: var(--heat-2); }
+.heat-3 { fill: var(--heat-3); background: var(--heat-3); }
+.heat-4 { fill: var(--heat-4); background: var(--heat-4); }
+rect.heat-breach { stroke: var(--chart-pass); stroke-width: 2; }
+rect.heat-now { stroke: var(--gov-gold-light); stroke-width: 2; }
+rect.heat-cell:hover { stroke: var(--gov-text); stroke-width: 1.5; }
+.heat-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--gov-muted);
+}
+.heat-scale { display: inline-flex; align-items: center; gap: 3px; }
+i.heat-cell {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  border: 1px solid rgba(12, 50, 111, 0.07);
+}
+i.heat-cell.heat-breach { border: 2px solid var(--chart-pass); }
+i.heat-cell.heat-now { border: 2px solid var(--gov-gold-light); }
+.timeline-sub {
+  margin: 14px 0 2px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--gov-blue-primary);
+}
+.timeline-sub small { font-weight: 600; color: var(--gov-muted); margin-left: 6px; }
+@media (prefers-reduced-motion: no-preference) {
+  rect.heat-now { animation: heatNow 1.6s ease-in-out infinite; }
+}
+@keyframes heatNow {
+  0%, 100% { stroke-opacity: 1; }
+  50% { stroke-opacity: 0.25; }
+}
+
+/* ========================================================
    ABAS PRINCIPAIS
    ======================================================== */
 .main-tabs {

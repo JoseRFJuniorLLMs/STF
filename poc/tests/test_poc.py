@@ -211,4 +211,19 @@ class PocEngineTests(unittest.TestCase):
         self.assertEqual(len(e.events),before)
         self.assertEqual(state["execution_mode"],"API_LAB")
 
+class DesfechoUnicoTests(unittest.TestCase):
+    """A mesma regra no grafo (contadores) e nos gráficos (classifyDecision)."""
+    def test_eventos_de_controlo_nao_contam_como_tentativa(self):
+        e=mod.PocEngine(); e.run_all()
+        controlo=[ev for ev in e.events if ev.details.get("attack") is False]
+        self.assertTrue(controlo)
+        total=sum(c["attempts"] for c in e.equipment_counters.values())
+        self.assertEqual(total,len(e.events)-len(controlo))
+    def test_hitl_retido_conta_como_bloqueado(self):
+        self.assertTrue(mod.is_blocked({"outcome":"REQUIRE_HITL"}))
+        self.assertTrue(mod.is_blocked({"outcome":"deny"}))
+        self.assertFalse(mod.is_blocked({"outcome":"OBSERVED"}))
+        self.assertFalse(mod.is_attack({"attack":False}))
+        self.assertTrue(mod.is_attack({}))
+
 if __name__=="__main__": unittest.main()

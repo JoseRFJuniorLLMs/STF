@@ -562,6 +562,18 @@ def merkle_root(hashes: list[str]) -> str:
         level = [hashlib.sha256(level[i] + level[i + 1]).digest() for i in range(0, len(level), 2)]
     return level[0].hex()
 
+# Regra ÚNICA de desfecho, a mesma do grafo e dos gráficos (classifyDecision em
+# app.js): conta como tentativa todo evento de ataque; é "bloqueado" o que a
+# defesa parou ou reteve (HITL não executa nada); tudo o resto "invadiu" —
+# inclusive a intrusão só observada da fase 1, por decisão do dono da POC.
+BLOCKED_OUTCOMES = {"DENY", "DETECTED", "REJECTED", "BLOCKED", "FAIL", "REQUIRE_HITL"}
+
+def is_attack(spec: dict[str, Any]) -> bool:
+    return spec.get("attack", True) is not False
+
+def is_blocked(spec: dict[str, Any]) -> bool:
+    return str(spec.get("outcome", "")).upper() in BLOCKED_OUTCOMES or bool(spec.get("blocked"))
+
 def locked_method(fn):
     @wraps(fn)
     def wrapped(self, *args, **kwargs):
@@ -649,14 +661,17 @@ class PocEngine:
         return "hdb_api"
 
     def _update_equipment_counter(self, spec: dict[str, Any], lsn: int) -> None:
+        # Tráfego benigno, aprovação humana e exportação/verificação de evidências
+        # não são tentativas de ataque: contá-los fazia o grafo mostrar "invadiu".
+        if not is_attack(spec):
+            return
         eq_id = spec.get("equipment_id") or self._map_equipment(spec.get("asset", ""))
         if not hasattr(self, "equipment_counters") or not self.equipment_counters:
             return
         if eq_id in self.equipment_counters:
             c = self.equipment_counters[eq_id]
             c["attempts"] += 1
-            outcome = str(spec.get("outcome", "")).upper()
-            if outcome in {"DENY", "DETECTED", "REJECTED", "BLOCKED", "FAIL"} or spec.get("blocked"):
+            if is_blocked(spec):
                 c["unauthorized_blocked"] += 1
             c["last_attempt"] = spec.get("summary") or spec.get("type") or "Tentativa de acesso"
             c["last_lsn"] = lsn
@@ -714,7 +729,7 @@ class PocEngine:
 
     def _build_scenario(self) -> list[dict[str, Any]]:
         scenario = [
-            {"phase":"FASE 1","source":"Firewall","type":"network.connection","severity":"INFO","actor":"external-client-42","asset":"edge","summary":"Tráfego benigno de referência aceito","outcome":"ALLOW","risk":0,"signal":False},
+            {"attack":False,"phase":"FASE 1","source":"Firewall","type":"network.connection","severity":"INFO","actor":"external-client-42","asset":"edge","summary":"Tráfego benigno de referência aceito","outcome":"ALLOW","risk":0,"signal":False},
             {"phase":"FASE 1","source":"Firewall/WAF","type":"edge.suspicious","severity":"MEDIUM","actor":"ai-attacker-synthetic","asset":"public-edge","summary":"Padrão de acesso incomum observado no perímetro sintético","outcome":"OBSERVED","risk":12,"signal":True,"reason":"EDGE_ANOMALY"},
             {"phase":"FASE 1","source":"IAM","type":"identity.login","severity":"HIGH","actor":COMPROMISED_PRINCIPAL,"asset":"identity-provider","summary":"Autenticação em contexto novo para conta de serviço fictícia","outcome":"OBSERVED","risk":18,"signal":True,"reason":"NEW_AUTH_CONTEXT"},
             {"phase":"FASE 1","source":"Linux Host","type":"host.process","severity":"HIGH","actor":COMPROMISED_PRINCIPAL,"asset":"srv-app-07","summary":"Execução incomum em host de laboratório","outcome":"OBSERVED","risk":16,"signal":True,"reason":"UNUSUAL_PROCESS"},
@@ -723,14 +738,14 @@ class PocEngine:
             {"phase":"FASE 1","source":"STF-Digital-like App","type":"app.resource_access","severity":"CRITICAL","actor":COMPROMISED_PRINCIPAL,"asset":SYNTHETIC_CASE,"summary":"Acesso a recurso restrito correlacionado à campanha","outcome":"OBSERVED","risk":20,"signal":True,"reason":"RESTRICTED_RESOURCE_ACCESS"},
             {"phase":"FASE 2","source":"Policy Gateway","type":"app.case_update_requested","severity":"CRITICAL","actor":COMPROMISED_PRINCIPAL,"asset":SYNTHETIC_CASE,"summary":"Tentativa de alterar metadados do processo fictício","outcome":"PENDING_POLICY","policy_action":"case_write","policy":True},
             {"phase":"FASE 2","source":"Agent Gateway","type":"agent.tool_requested","severity":"HIGH","actor":COMPROMISED_PRINCIPAL,"asset":"document://SYNTHETIC/DOC-001","summary":"Agente solicita exportação de documento restrito","outcome":"PENDING_POLICY","policy_action":"export_restricted","policy_params":{"document":"DOC-001","format":"pdf"},"approval":True},
-            {"phase":"FASE 2","source":"HITL","type":"approval.granted","severity":"INFO","actor":"human:approver-01","asset":"document://SYNTHETIC/DOC-001","summary":"Aprovação humana vinculada à identidade, ação e parâmetros","outcome":"APPROVED","approve":True},
+            {"attack":False,"phase":"FASE 2","source":"HITL","type":"approval.granted","severity":"INFO","actor":"human:approver-01","asset":"document://SYNTHETIC/DOC-001","summary":"Aprovação humana vinculada à identidade, ação e parâmetros","outcome":"APPROVED","approve":True},
             {"phase":"FASE 2","source":"Agent Gateway","type":"tool.executed","severity":"MEDIUM","actor":COMPROMISED_PRINCIPAL,"asset":"document://SYNTHETIC/DOC-001","summary":"Operação aprovada executada exatamente uma vez","outcome":"PENDING_POLICY","policy_action":"export_restricted","policy_params":{"document":"DOC-001","format":"pdf"},"execute":True},
             {"phase":"FASE 2","source":"Agent Gateway","type":"approval.replay","severity":"CRITICAL","actor":COMPROMISED_PRINCIPAL,"asset":"document://SYNTHETIC/DOC-001","summary":"Tentativa de reutilizar aprovação já consumida","outcome":"PENDING_POLICY","policy_action":"export_restricted","policy_params":{"document":"DOC-001","format":"pdf"},"replay":True},
             {"phase":"FASE 2","source":"Agent Gateway","type":"identity.swap","severity":"CRITICAL","actor":"agent:other-identity","asset":"document://SYNTHETIC/DOC-001","summary":"Outra identidade tenta usar autorização da campanha","outcome":"PENDING_POLICY","policy_action":"export_restricted","policy_params":{"document":"DOC-001","format":"pdf"},"approval_ref":"APR-001"},
             {"phase":"FASE 2","source":"Agent Gateway","type":"parameters.swap","severity":"CRITICAL","actor":COMPROMISED_PRINCIPAL,"asset":"document://SYNTHETIC/DOC-999","summary":"Parâmetros são alterados depois da aprovação","outcome":"PENDING_POLICY","policy_action":"export_restricted","policy_params":{"document":"DOC-999","format":"pdf"},"approval_ref":"APR-001"},
             {"phase":"FASE 2","source":"HRKL","type":"tamper.attempt","severity":"CRITICAL","actor":"ai-attacker-synthetic","asset":"evidence-log","summary":"Tentativa de modificar e reordenar evidência histórica","outcome":"DETECTED","reason":"MERKLE_ROOT_MISMATCH","tamper":True},
-            {"phase":"FASE 2","source":"Evidence","type":"evidence.exported","severity":"INFO","actor":"service:evidence-exporter","asset":"evidence://STF-POC-001","summary":"Pacote de evidências gerado para verificação independente","outcome":"PASS","evidence":True},
-            {"phase":"FASE 2","source":"Offline Verifier","type":"evidence.verified","severity":"INFO","actor":"service:offline-verifier","asset":"evidence://STF-POC-001","summary":"Integridade local verificada sem depender do sistema de origem","outcome":"PASS","verify":True},
+            {"attack":False,"phase":"FASE 2","source":"Evidence","type":"evidence.exported","severity":"INFO","actor":"service:evidence-exporter","asset":"evidence://STF-POC-001","summary":"Pacote de evidências gerado para verificação independente","outcome":"PASS","evidence":True},
+            {"attack":False,"phase":"FASE 2","source":"Offline Verifier","type":"evidence.verified","severity":"INFO","actor":"service:offline-verifier","asset":"evidence://STF-POC-001","summary":"Integridade local verificada sem depender do sistema de origem","outcome":"PASS","verify":True},
         ]
         # Enrich the six suspicious Phase-1 steps with heterogeneous raw telemetry
         # and the canonical result produced by the adapter. Index 0 is benign baseline.
@@ -753,7 +768,8 @@ class PocEngine:
         if adapter is not None:
             camp = getattr(self, "campaign_id", CAMPAIGN_ID)
             red_team_payload = {
-                "attack_id": spec.get("attack_id") or f"STF-ATK-{local_lsn:02d}",
+                # STF-CTRL-* = evento de controlo (não é ataque); os gráficos não o contam.
+                "attack_id": spec.get("attack_id") or (f"STF-ATK-{local_lsn:02d}" if is_attack(spec) else f"STF-CTRL-{local_lsn:02d}"),
                 "campaign_id": camp,
                 "vector": spec.get("type", "network.attack"),
                 "target": spec.get("asset", "unknown"),
@@ -761,7 +777,7 @@ class PocEngine:
                 "result": spec.get("outcome", "OBSERVED"),
                 "expected": spec.get("expected") or spec.get("outcome"),
                 "reason_code": spec.get("reason"),
-                "blocked": spec.get("outcome") == "DENY",
+                "blocked": is_blocked(spec),
                 "upstream_delta": spec.get("upstream", 0) or 0,
                 "sequence": local_lsn,
             }
@@ -1056,7 +1072,7 @@ class PocEngine:
             approval["state"]="APPROVED"; approval["approved_by"]=approver
             self.pending_approval=approval
             spec={
-                "phase":"FASE 2","source":"HITL","type":"approval.granted","severity":"INFO",
+                "attack":False,"phase":"FASE 2","source":"HITL","type":"approval.granted","severity":"INFO",
                 "actor":approver,"asset":approval["target"],
                 "summary":"Aprovação humana sintética concedida via API local",
                 "outcome":"APPROVED","reason":"HUMAN_APPROVAL_GRANTED",
@@ -1846,7 +1862,7 @@ class PocEngine:
     def record_export(self)->dict[str,Any]:
         with self.lock:
             export_ev=self._append({
-                "phase":"FASE 2","source":"Evidence","type":"evidence.exported","severity":"INFO",
+                "attack":False,"phase":"FASE 2","source":"Evidence","type":"evidence.exported","severity":"INFO",
                 "actor":"service:evidence-exporter","asset":"evidence://STF-POC-001",
                 "summary":"Evidence Bundle exportado via API local","outcome":"PASS",
             },INCIDENT_ID if self.incident else None)
@@ -1854,7 +1870,7 @@ class PocEngine:
             pre_bundle=self.evidence_bundle()
             pre_verify=self.verify_bundle(pre_bundle)
             verifier_ev=self._append({
-                "phase":"FASE 2","source":"Offline Verifier","type":"evidence.verified","severity":"INFO",
+                "attack":False,"phase":"FASE 2","source":"Offline Verifier","type":"evidence.verified","severity":"INFO",
                 "actor":"service:offline-verifier","asset":"evidence://STF-POC-001",
                 "summary":"Bundle verificado localmente após exportação",
                 "outcome":"PASS" if pre_verify["overall"]=="PASS" else "FAIL",
