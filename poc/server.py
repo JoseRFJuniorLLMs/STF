@@ -35,6 +35,7 @@ CAMPAIGN_ID = "STF-POC-CAMPAIGN-001"
 INCIDENT_ID = "STF-POC-INCIDENT-001"
 SYNTHETIC_CASE = "case://SYNTHETIC/RE-000001"
 COMPROMISED_PRINCIPAL = "service-account-17"
+LOCAL_HOSTS={"127.0.0.1","localhost","::1"}
 
 def canonical_bytes(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
@@ -822,6 +823,8 @@ class PocEngine:
             final_verify=self.verify_bundle(final_bundle)
             self.offline_verify=final_verify["overall"]
             self.export_count+=1
+            final_bundle=self.evidence_bundle()
+            final_verify=self.verify_bundle(final_bundle)
             return {"bundle":final_bundle,"verification":final_verify}
 
     @locked_method
@@ -868,6 +871,15 @@ class Handler(BaseHTTPRequestHandler):
         value=json.loads(raw.decode("utf-8"))
         if not isinstance(value,dict): raise ValueError("JSON body must be an object")
         return value
+    def _mutation_allowed(self)->bool:
+        host_header=self.headers.get("Host","")
+        host=urlparse("//"+host_header).hostname
+        if host not in LOCAL_HOSTS:
+            return False
+        origin=self.headers.get("Origin")
+        if origin and urlparse(origin).hostname not in LOCAL_HOSTS:
+            return False
+        return self.headers.get("X-STF-POC")=="1"
     def do_GET(self)->None:
         parsed=urlparse(self.path)
         path=parsed.path
@@ -919,6 +931,8 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e: return self._json({"status":"UNAVAILABLE","error":str(e)})
         return self._static(path)
     def do_POST(self)->None:
+        if not self._mutation_allowed():
+            return self._json({"error":"forbidden_mutation","detail":"local origin and X-STF-POC header required"},403)
         parsed=urlparse(self.path)
         path=parsed.path
         query=parse_qs(parsed.query)
@@ -926,27 +940,33 @@ class Handler(BaseHTTPRequestHandler):
             kind=query.get("kind",[""])[0]
             try:
                 raw=self._read_json_body()
-                return self._json(ENGINE.ingest_telemetry(kind,raw),201)
+                result=ENGINE.ingest_telemetry(kind,raw)
+                status=201 if result.get("status")=="INGESTED" else 200 if result.get("status")=="IDEMPOTENT" else 409
+                return self._json(result,status)
             except (ValueError,KeyError,TypeError) as e:
                 return self._json({"error":"invalid_telemetry","detail":str(e)},400)
         if path=="/api/action":
             try:
                 body=self._read_json_body()
-                action=str(body.get("action",""))
-                principal=str(body.get("principal",COMPROMISED_PRINCIPAL))
-                target=str(body.get("target",""))
+                action=body.get("action")
+                principal=body.get("principal",COMPROMISED_PRINCIPAL)
+                target=body.get("target")
                 parameters=body.get("parameters") or {}
-                if not action or not target or not isinstance(parameters,dict): raise ValueError("action, target and object parameters are required")
-                return self._json(ENGINE.submit_action(action,principal,target,parameters),200)
+                if not isinstance(action,str) or not action.strip(): raise ValueError("action must be a non-empty string")
+                if not isinstance(principal,str) or not principal.strip(): raise ValueError("principal must be a non-empty string")
+                if not isinstance(target,str) or not target.strip(): raise ValueError("target must be a non-empty string")
+                if not isinstance(parameters,dict): raise ValueError("parameters must be an object")
+                return self._json(ENGINE.submit_action(action.strip(),principal.strip(),target.strip(),parameters),200)
             except (ValueError,KeyError,TypeError) as e:
                 return self._json({"error":"invalid_action","detail":str(e)},400)
         if path=="/api/approval/grant":
             try:
                 body=self._read_json_body()
-                approval_id=str(body.get("approval_id",""))
-                approver=str(body.get("approver","human:approver-api"))
-                if not approval_id: raise ValueError("approval_id required")
-                result=ENGINE.grant_approval(approval_id,approver)
+                approval_id=body.get("approval_id")
+                approver=body.get("approver","human:approver-api")
+                if not isinstance(approval_id,str) or not approval_id.strip(): raise ValueError("approval_id must be a non-empty string")
+                if not isinstance(approver,str) or not approver.strip(): raise ValueError("approver must be a non-empty string")
+                result=ENGINE.grant_approval(approval_id.strip(),approver.strip())
                 return self._json(result,200 if result.get("status")=="APPROVED" else 409)
             except (ValueError,KeyError,TypeError) as e:
                 return self._json({"error":"invalid_approval","detail":str(e)},400)
@@ -960,9 +980,12 @@ class Handler(BaseHTTPRequestHandler):
             kind=query.get("kind",["policy_store_down"])[0]
             return self._json(simulate_fault(kind))
         if path=="/api/export":
-            bundle=ENGINE.evidence_bundle(); target=OUT/"evidence-stf-poc-001.json"
+            result=ENGINE.record_export(); bundle=result["bundle"]; target=OUT/"evidence-stf-poc-001.json"
             target.write_text(json.dumps(bundle,ensure_ascii=False,indent=2),encoding="utf-8")
-            return self._json({"status":"PASS","path":target.name,"sha256":sha256_hex(target.read_bytes()),"bundle":bundle})
+            return self._json({
+                "status":result["verification"]["overall"],"path":target.name,
+                "sha256":sha256_hex(target.read_bytes()),"verification":result["verification"],"bundle":bundle,
+            })
         return self._json({"error":"not_found"},404)
     def _static(self,path:str)->None:
         rel="index.html" if path in ("/","") else path.lstrip("/")
@@ -975,7 +998,7 @@ class Handler(BaseHTTPRequestHandler):
 def main()->None:
     ap=argparse.ArgumentParser(description="STF HeraclitusDB synthetic POC dashboard")
     ap.add_argument("--host",default="127.0.0.1"); ap.add_argument("--port",type=int,default=8787); args=ap.parse_args()
-    if args.host not in {"127.0.0.1","localhost","::1"}: raise SystemExit("Safety gate: this POC binds only to loopback addresses")
+    if args.host not in LOCAL_HOSTS: raise SystemExit("Safety gate: this POC binds only to loopback addresses")
     server=ThreadingHTTPServer((args.host,args.port),Handler)
     print(f"STF POC dashboard: http://{args.host}:{args.port}"); print("Safety mode: SYNTHETIC / LOOPBACK ONLY")
     try: server.serve_forever()
