@@ -1,9 +1,10 @@
 """Read-only loopback adapter to real HeraclitusDB REST surfaces confirmed in source."""
 from __future__ import annotations
-import json, urllib.request
+import json, urllib.request, urllib.error
 from urllib.parse import urlparse, quote
 
 ALLOWED_HOSTS={"127.0.0.1","localhost","::1"}
+MAX_RESPONSE_BYTES=2*1024*1024
 STATIC_PATHS={
     "sentinel_status":"/sentinel/status",
     "sentinel_incidents":"/sentinel/incidents",
@@ -14,6 +15,10 @@ STATIC_PATHS={
     "agent_status":"/api/v1/agent/status",
     "red_team":"/api/v1/agent/red-team/events?limit=50",
 }
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(req.full_url,code,"redirect rejected by loopback safety gate",headers,fp)
 
 def extract_incident_ids(value):
     if isinstance(value,list):
@@ -40,9 +45,21 @@ class HeraclitusAdapter:
         p=urlparse(self.base_url)
         if p.scheme not in {"http","https"} or p.hostname not in ALLOWED_HOSTS:
             raise ValueError("Safety gate: Heraclitus adapter accepts only loopback URLs")
+        self._opener=urllib.request.build_opener(_NoRedirect())
     def get(self,path:str):
-        with urllib.request.urlopen(self.base_url+path,timeout=self.timeout) as r:
-            return json.loads(r.read().decode())
+        url=self.base_url+path
+        parsed=urlparse(url)
+        if parsed.hostname not in ALLOWED_HOSTS:
+            raise ValueError("Safety gate: request escaped loopback")
+        req=urllib.request.Request(url,headers={"Accept":"application/json"})
+        with self._opener.open(req,timeout=self.timeout) as r:
+            final=urlparse(r.geturl())
+            if final.hostname not in ALLOWED_HOSTS:
+                raise ValueError("Safety gate: final URL escaped loopback")
+            raw=r.read(MAX_RESPONSE_BYTES+1)
+            if len(raw)>MAX_RESPONSE_BYTES:
+                raise ValueError("Heraclitus response exceeds safety limit")
+            return json.loads(raw.decode())
     def _read(self,path):
         try: return {"status":"PASS","data":self.get(path),"path":path}
         except Exception as e: return {"status":"UNAVAILABLE","error":str(e),"path":path}
@@ -55,8 +72,7 @@ class HeraclitusAdapter:
             ids=extract_incident_ids(incidents.get("data"))
             out["incident_ids"]=ids
             if ids:
-                incident_id=ids[0]
-                safe=quote(incident_id,safe="")
+                safe=quote(ids[0],safe="")
                 for name,suffix in {"detail":"","evidence":"/evidence","why":"/why"}.items():
                     out["incident_drilldown"][name]=self._read(f"/sentinel/incidents/{safe}{suffix}")
         return out
