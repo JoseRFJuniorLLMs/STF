@@ -29,4 +29,13 @@ class PolicyTests(unittest.TestCase):
         d=decide(action="something_new",incident=None,principal="x",target="y")
         self.assertEqual(d.reason_code,"UNKNOWN_ACTION_FAIL_CLOSED");self.assertEqual(d.outcome,"DENY")
 
+
+    def test_expired_approval_is_denied(self):
+        expired=dict(APR); expired["expires_at_epoch"]=10
+        d=decide(action="export_restricted",incident=INC,principal="service-account-17",
+                 target=APR["target"],parameters_digest=APR["parameters_digest"],
+                 approval=expired,now=20)
+        self.assertEqual(d.reason_code,"APPROVAL_EXPIRED")
+        self.assertEqual(d.outcome,"DENY")
+
 if __name__=="__main__": unittest.main()
