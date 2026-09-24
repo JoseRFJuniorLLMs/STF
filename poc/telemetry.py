@@ -58,7 +58,7 @@ def normalize(kind:str, raw:dict[str,Any])->dict[str,Any]:
 def sample_campaign():
     return [
       ("firewall",{"event_id":"RAW-FW-001","src_ip":"203.0.113.42","dst_service":"portal-synthetic","action":"OBSERVED","severity":"MEDIUM","waf_score":71}),
-      ("identity",{"event_id":"RAW-IAM-002","principal":"service-account-17","context":"new-device","result":"OBSERVED","severity":"HIGH","mfa":"not-applicable","device_trust":"unknown"}),
+      ("identity",{"event_id":"RAW-IAM-002","principal":"service-account-17","source_ip":"203.0.113.42","context":"new-device","result":"OBSERVED","severity":"HIGH","mfa":"not-applicable","device_trust":"unknown"}),
       ("host",{"event_id":"RAW-HOST-003","principal":"service-account-17","host":"srv-app-07","process":"synthetic-worker","os":"Linux","severity":"HIGH","parent":"app-service"}),
       ("network",{"event_id":"RAW-NET-004","principal":"service-account-17","src_host":"srv-app-07","dst_host":"srv-db-02","dst_port":5432,"severity":"HIGH"}),
       ("db",{"event_id":"RAW-DB-005","principal":"service-account-17","database":"db-judicial-lab","operation":"query","object":"synthetic_case_metadata","rows":47,"severity":"HIGH"}),
