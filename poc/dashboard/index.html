@@ -1,219 +1,282 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>STF POC | HeraclitusDB Cyber Defense</title>
-<link rel="stylesheet" href="styles.css" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>STF POC | HeraclitusDB — Governança e Defesa Cibernética</title>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
 <div class="shell">
+
+  <!-- TOPBAR / CABEÇALHO SUPERIOR -->
   <header class="topbar">
-    <div class="brand"><div class="brand-mark">H</div><div><div class="eyebrow">POC INTEGRADA • AMBIENTE SINTÉTICO</div><h1>HeraclitusDB Cyber Defense</h1><p>Intrusão → correlação → pós-compromisso → bloqueio → evidência</p></div></div>
-    <div class="top-actions"><div class="mode-pill"><span class="dot"></span><span id="mode">LOOPBACK ONLY</span></div><select id="runSpeed" class="speed-select" title="Velocidade da campanha"><option value="220">Rápido</option><option value="500" selected>Normal</option><option value="900">Apresentação</option><option value="1400">Lento</option></select><button class="btn ghost" id="presentationBtn">Modo apresentação: OFF</button><button class="btn ghost" id="pauseBtn">Pausar</button><button class="btn ghost" id="resetBtn">Reiniciar</button><button class="btn" id="stepBtn">Próximo passo</button><button class="btn primary" id="runBtn">Executar campanha</button></div>
+    <div class="brand">
+      <div class="brand-mark">STF</div>
+      <div>
+        <div class="eyebrow">SUPREMO TRIBUNAL FEDERAL • INFRAESTRUTURA SIMULADA</div>
+        <h1>HeraclitusDB — Governança de IA e Defesa Cibernética</h1>
+      </div>
+    </div>
+
+    <!-- Indicadores Principais -->
+    <div class="header-badges">
+      <div class="badge-item">
+        <span class="badge-label">RISCO:</span>
+        <strong id="riskValue">0</strong>
+        <span id="riskLabel" class="tag-status normal">NORMAL</span>
+      </div>
+      <div class="badge-item">
+        <span class="badge-label">INCIDENTE:</span>
+        <strong id="incidentState">NÃO ABERTO</strong>
+      </div>
+      <div class="badge-item">
+        <span class="badge-label">UPSTREAM HITS:</span>
+        <strong id="upstreamHits">0</strong>
+      </div>
+      <div class="badge-item">
+        <span class="badge-label">HERACLITUS (WSL):</span>
+        <span id="integrationBadge" class="tag-status wsl-status">CONECTANDO...</span>
+      </div>
+    </div>
+
+    <!-- Ações Rápidas -->
+    <div class="top-actions">
+      <button class="btn ghost" id="resetBtn">Reiniciar</button>
+      <button class="btn" id="stepBtn">Próximo Passo</button>
+      <button class="btn primary" id="runBtn">Executar Campanha Completa</button>
+    </div>
   </header>
 
-  <section class="campaign-head panel">
-    <div><span class="section-kicker">CAMPANHA</span><h2 id="campaignId">STF-POC-CAMPAIGN-001</h2><p id="lastAction">Ambiente pronto.</p></div>
-    <div class="progress-wrap"><div class="progress-meta"><span id="stepText">0 / 17 eventos</span><span id="progressPct">0%</span></div><div class="progress" id="campaignProgress" role="progressbar" aria-label="Progresso do roteiro sintético" aria-valuemin="0" aria-valuemax="17" aria-valuenow="0"><div id="progressBar"></div></div></div>
-    <div class="risk-box"><span>RISCO CORRELACIONADO</span><strong id="riskValue">0</strong><small id="riskLabel">NORMAL</small></div>
-  </section>
-
-  <section class="guided-demo panel" aria-labelledby="guideTitle">
-    <div class="guide-topline">
-      <div>
-        <span class="section-kicker">ACOMPANHE A CAMPANHA</span>
-        <h2 id="guideTitle">O que o atacante tenta. O que o sistema observa.</h2>
-        <p>Uma história sintética em duas fases: sinais da intrusão alimentam a decisão que governa uma ação crítica.</p>
-      </div>
-      <span class="simulation-stamp">SIMULAÇÃO LOCAL <small>Sem ataque ou dados reais do STF</small></span>
-    </div>
-
-    <div class="guide-summary">
-      <div class="guide-current">
-        <div class="guide-current-top"><span id="guideMode">ROTEIRO DEMONSTRATIVO</span><span id="guideStep">AGUARDANDO INÍCIO</span></div>
-        <div class="guide-headline" aria-live="polite"><span id="guideStatus" class="story-status awaiting">PRONTO</span><h3 id="guideHeadline">Pronto para acompanhar a campanha</h3></div>
-        <p id="guideSubtitle">Avance um evento por vez ou execute a sequência completa. Cada resultado abaixo vem do estado atual da POC.</p>
-        <div class="guide-controls"><button id="guideNextBtn" class="btn primary" type="button">Iniciar pelo primeiro evento <span aria-hidden="true">→</span></button><button id="guideRunBtn" class="btn" type="button">Executar sequência</button><span id="guideNextHint">Próximo: tráfego benigno de referência</span></div>
-      </div>
-      <div class="story-columns" aria-label="Intenção, sinal e resposta do passo atual">
-        <div class="story-column intent"><span>01 · INTENÇÃO SIMULADA</span><p id="storyIntent">O roteiro ainda não gerou atividade.</p></div>
-        <div class="story-column observed"><span>02 · SINAL OBSERVADO</span><p id="storyObserved">Aguardando a primeira telemetria sintética.</p></div>
-        <div class="story-column response"><span>03 · RESPOSTA DO HARNESS</span><p id="storyResponse">Nenhuma decisão foi calculada.</p></div>
+  <!-- MAPA DE STATUS DA INFRAESTRUTURA DO STF -->
+  <section class="stf-infra-bar">
+    <div class="infra-node-item" id="node-fw">
+      <div class="infra-node-icon">🛡️</div>
+      <div class="infra-node-info">
+        <span class="infra-node-title">Firewall / WAF</span>
+        <small class="infra-node-status" id="status-fw">PERÍMETRO NORMAL</small>
       </div>
     </div>
-
-    <div class="journey-heading"><div><span class="section-kicker">MAPA DA CAMPANHA</span><h3>Da atividade simulada à evidência verificável</h3></div><span>Fase 1: observar e correlacionar <b>→</b> Fase 2: decidir e provar</span></div>
-    <ol id="journeyMap" class="journey-map" aria-label="Etapas da campanha sintética"></ol>
-    <div class="journey-legend"><span><i class="legend-dot simulated"></i> SIMULADO: evento gerado no laboratório</span><span><i class="legend-dot detected"></i> DETECTADO: sinal ou incidente calculado</span><span><i class="legend-dot blocked"></i> BLOQUEADO: ação negada com efeito zero</span><span><i class="legend-dot verified"></i> VERIFICADO: integridade local conferida</span></div>
-    <p class="guide-disclosure">O roteiro e o API Lab executam o mesmo harness Python local. O API Lab recebe logs sintéticos pela API de loopback; o painel de integração, mais abaixo, mostra separadamente a leitura opcional de um HeraclitusDB real.</p>
+    <div class="infra-arrow">→</div>
+    <div class="infra-node-item" id="node-ministro">
+      <div class="infra-node-icon">⚖️</div>
+      <div class="infra-node-info">
+        <span class="infra-node-title">Máquinas Ministros (VDI)</span>
+        <small class="infra-node-status" id="status-ministro">AUTENTICAÇÃO SEGURA</small>
+      </div>
+    </div>
+    <div class="infra-arrow">→</div>
+    <div class="infra-node-item" id="node-linux">
+      <div class="infra-node-icon">🐧</div>
+      <div class="infra-node-info">
+        <span class="infra-node-title">Servidores Linux</span>
+        <small class="infra-node-status" id="status-linux">BACKEND REGULAR</small>
+      </div>
+    </div>
+    <div class="infra-arrow">→</div>
+    <div class="infra-node-item" id="node-pje">
+      <div class="infra-node-icon">🏛️</div>
+      <div class="infra-node-info">
+        <span class="infra-node-title">PJe / STF Digital</span>
+        <small class="infra-node-status" id="status-pje">AUTOS ÍNTEGROS</small>
+      </div>
+    </div>
+    <div class="infra-arrow">→</div>
+    <div class="infra-node-item" id="node-db">
+      <div class="infra-node-icon">🗄️</div>
+      <div class="infra-node-info">
+        <span class="infra-node-title">Banco Judicial</span>
+        <small class="infra-node-status" id="status-db">TRANSACIONAL ÍNTEGRO</small>
+      </div>
+    </div>
+    <div class="infra-arrow">→</div>
+    <div class="infra-node-item" id="node-ia">
+      <div class="infra-node-icon">🤖</div>
+      <div class="infra-node-info">
+        <span class="infra-node-title">Agentes IA (VitórIA/Rafa)</span>
+        <small class="infra-node-status" id="status-ia">GOVERNANÇA HITL</small>
+      </div>
+    </div>
   </section>
 
-  <section class="kpis">
-    <div class="kpi panel"><span>Security Signals</span><strong id="signalCount">0</strong><small>multi-fonte</small></div>
-    <div class="kpi panel"><span>Incidente</span><strong id="incidentState">NÃO ABERTO</strong><small id="incidentId">aguardando correlação</small></div>
-    <div class="kpi panel"><span>Upstream hits</span><strong id="upstreamHits">0</strong><small>efeitos realmente executados</small></div>
-    <div class="kpi panel"><span>Integridade</span><strong id="integrityState">NOT RUN</strong><small>hash-chain + Merkle</small></div>
-    <div class="kpi panel"><span>Tamper</span><strong id="tamperState">NOT TESTED</strong><small>alteração histórica</small></div>
-    <div class="kpi panel"><span>Offline verify</span><strong id="offlineState">NOT RUN</strong><small>evidência independente</small></div>
-  </section>
+  <!-- CORPO PRINCIPAL: 2 PAINÉIS (ESQUERDO E DIREITO) -->
+  <main class="main-two-columns">
 
-  <main class="grid">
-    <section class="panel span-8">
-      <div class="panel-head"><div><span class="section-kicker">ATAQUE</span><h3>Mapa da campanha</h3></div><div class="legend"><span><i class="sev info"></i>Info</span><span><i class="sev medium"></i>Médio</span><span><i class="sev high"></i>Alto</span><span><i class="sev critical"></i>Crítico</span></div></div>
-      <div class="phase-strip"><div class="phase phase1"><b>FASE 1</b><span>INVASÃO</span><small>detectar / correlacionar</small></div><div class="phase-arrow">→</div><div class="phase phase2"><b>FASE 2</b><span>PÓS-COMPROMISSO</span><small>impedir / provar abuso</small></div></div>
-      <div id="attackPath" class="attack-path"></div>
-    </section>
-
-    <section class="panel span-4 incident-panel">
-      <div class="panel-head"><div><span class="section-kicker">SOC</span><h3>Contexto do incidente</h3></div><span id="incidentBadge" class="badge neutral">CANDIDATE</span></div>
-      <div class="incident-hero"><div class="shield">!</div><div><b id="incidentSeverity">Sem incidente</b><span id="incidentSummary">Aguardando sinais suficientes.</span></div></div>
-      <dl class="facts"><div><dt>Principal</dt><dd id="principal">—</dd></div><div><dt>Estado</dt><dd id="incidentStatus">—</dd></div><div><dt>Risk score</dt><dd id="incidentRisk">0</dd></div><div><dt>Tags</dt><dd id="policyTags">—</dd></div></dl>
-      <div class="callout"><b>Regra de ouro</b><span>Sem telemetria, não existe claim de detecção. Sem enforcement, não existe claim de bloqueio.</span></div>
-    </section>
-
-    <section class="panel span-12 decision-pipeline-panel">
-      <div class="panel-head"><div><span class="section-kicker">DECISION PIPELINE</span><h3>Detecção → Correlação → Policy</h3></div><span class="badge" id="pipelineBadge">AGUARDANDO</span></div>
-      <div class="decision-pipeline">
-        <div class="decision-column">
-          <div class="decision-title"><span>01</span><div><b>Detecção</b><small>regras sobre telemetria normalizada</small></div></div>
-          <div id="detectionRules" class="decision-list"><div class="empty">Nenhuma regra disparada.</div></div>
+    <!-- PAINEL ESQUERDO: LISTA DE ATAQUES -->
+    <section class="panel panel-left attacks-panel">
+      <div class="panel-head">
+        <div>
+          <span class="section-kicker">PAINEL ESQUERDO</span>
+          <h2>Lista de Ataques</h2>
         </div>
-        <div class="decision-arrow">→</div>
-        <div class="decision-column">
-          <div class="decision-title"><span>02</span><div><b>Correlação</b><small>entidades e fontes compartilhadas</small></div></div>
-          <div id="correlationDecision" class="correlation-decision"><div class="empty">Sem componente qualificado.</div></div>
-        </div>
-        <div class="decision-arrow">→</div>
-        <div class="decision-column">
-          <div class="decision-title"><span>03</span><div><b>Policy</b><small>enforcement, HITL e anti-replay</small></div></div>
-          <div id="policyDecisions" class="decision-list"><div class="empty">Nenhuma decisão de policy.</div></div>
+        <div class="head-meta">
+          <span class="counter-badge" id="attackProgress">0 / 17 executados</span>
         </div>
       </div>
-    </section>
-
-    <section class="panel span-7">
-      <div class="panel-head"><div><span class="section-kicker">TRILHA</span><h3>Eventos e rastros</h3></div><span class="mono" id="merkleShort">Merkle: —</span></div>
-      <div class="event-table-wrap"><table class="event-table"><thead><tr><th>LSN</th><th>Fonte</th><th>Evento</th><th>Ator / Ativo</th><th>Resultado</th></tr></thead><tbody id="eventRows"><tr><td colspan="5" class="empty">Nenhum evento processado.</td></tr></tbody></table></div>
-    </section>
-
-    <section class="panel span-5">
-      <div class="panel-head"><div><span class="section-kicker">CORRELAÇÃO</span><h3>Grafo temporal</h3></div><span id="graphStats" class="mono">0 nós / 0 arestas</span></div>
-      <div id="graph" class="graph"><div class="empty graph-empty">O grafo surgirá conforme os sinais forem correlacionados.</div></div>
-    </section>
-
-    <section class="panel span-4">
-      <div class="panel-head"><div><span class="section-kicker">POLICY</span><h3>Controle pós-compromisso</h3></div></div>
-      <div class="policy-card"><div class="policy-row"><span>Identidade ligada a incidente</span><b id="compromisedCheck">NÃO</b></div><div class="policy-row"><span>Operação HIGH sem approval</span><b class="deny">DENY</b></div><div class="policy-row"><span>Replay de approval</span><b class="deny">DENY</b></div><div class="policy-row"><span>Identity / parameter binding</span><b class="deny">ENFORCED</b></div></div>
-      <div class="approval" id="approvalBox"><span>HITL</span><b>Nenhuma aprovação pendente</b><small>Ações críticas podem exigir decisão humana.</small></div>
-    </section>
-
-    <section class="panel span-4">
-      <div class="panel-head"><div><span class="section-kicker">HRKL</span><h3>Integridade e rastreabilidade</h3></div></div>
-      <div class="integrity-orbit"><div><span>LSN</span><b id="lastLsn">0</b></div><div><span>Eventos</span><b id="eventCount">0</b></div><div><span>Merkle</span><b id="merkleState">—</b></div></div>
-      <div class="hash-box"><span>Raiz Merkle dos eventos</span><code id="merkleRoot">—</code><span>Package root</span><code id="packageRoot">—</code></div>
-      <div class="tamper-controls"><select id="tamperKind"><option value="modify">Modificar evento</option><option value="delete">Apagar evento</option><option value="reorder">Reordenar eventos</option><option value="truncate">Truncar histórico</option></select><button id="tamperBtn" class="btn danger">Executar sabotagem</button></div><div id="tamperResult" class="mini-result">A sabotagem altera uma cópia do bundle e verifica se a prova quebra.</div>
-    </section>
-
-    <section class="panel span-4">
-      <div class="panel-head"><div><span class="section-kicker">EVIDENCE</span><h3>Pacote verificável</h3></div></div>
-      <div class="evidence-stack"><div><span>Hash-chain</span><b id="chainVerify">NOT RUN</b></div><div><span>Merkle eventos</span><b id="merkleVerify">NOT RUN</b></div><div><span>Manifest</span><b id="manifestVerify">NOT RUN</b></div><div><span>Package root</span><b id="packageVerify">NOT RUN</b></div><div><span>Timestamp externo</span><b class="warn">NOT CONFIGURED</b></div><div><span>Assinatura institucional</span><b class="warn">NOT CONFIGURED</b></div></div>
-      <div class="evidence-actions"><button id="exportBtn" class="btn success">Gerar Evidence Bundle</button><button id="downloadBtn" class="btn">Baixar JSON</button></div><div id="exportResult" class="mini-result">Bundle ainda não exportado.</div>
-    </section>
-
-
-    <section class="panel span-4">
-      <div class="panel-head"><div><span class="section-kicker">TELEMETRIA</span><h3>Saúde das fontes</h3></div><span class="badge" id="sourceCountBadge">0 ativas</span></div>
-      <div id="sourceHealth" class="source-health"></div>
-    </section>
-
-    <section class="panel span-4">
-      <div class="panel-head"><div><span class="section-kicker">EXPLAINABILITY</span><h3>Por que este incidente?</h3></div><span class="badge" id="whyBadge">AGUARDANDO</span></div>
-      <div id="whySummary" class="why-summary">O Sentinel ainda não acumulou sinais suficientes.</div>
-      <div id="whyList" class="why-list"></div>
-    </section>
-
-    <section class="panel span-4">
-      <div class="panel-head"><div><span class="section-kicker">TIME TRAVEL</span><h3>Reconstrução AS-OF</h3></div><span class="mono" id="asofLabel">LSN 0</span></div>
-      <div class="time-machine">
-        <input id="asofSlider" type="range" min="0" max="17" value="0" />
-        <div class="asof-kpis"><div><span>Risco</span><b id="asofRisk">0</b></div><div><span>Incidente</span><b id="asofIncident">NÃO</b></div><div><span>Upstream</span><b id="asofUpstream">0</b></div><div><span>Approval</span><b id="asofApproval">NONE</b></div></div>
-        <div id="asofNarrative" class="mini-result">Arraste o LSN para reconstruir o estado passado.</div>
+      <p class="panel-subtitle">Dispare qualquer ataque contra a infraestrutura simulada do STF:</p>
+      
+      <div class="attack-list" id="attackList">
+        <!-- Renderizado dinamicamente pelo JavaScript com botões individuais -->
       </div>
     </section>
 
-    <section class="panel span-6">
-      <div class="panel-head"><div><span class="section-kicker">FORENSICS</span><h3>Inspector de evidência</h3></div><div class="evidence-picker"><label>LSN</label><input id="evidenceLsn" type="number" min="1" value="1"/><button id="loadEvidenceBtn" class="btn">Inspecionar</button></div></div>
-      <div class="evidence-inspector">
-        <div id="evidenceMeta" class="evidence-meta">Selecione um LSN para ver evento, hash e ligação causal.</div>
-        <pre id="evidenceJson" class="evidence-json">{}</pre>
+    <!-- PAINEL DIREITO: GRAFO TEMPORAL COM INFRAESTRUTURA E ATAQUE EM TEMPO REAL -->
+    <section class="panel panel-right graph-panel">
+      <div class="panel-head">
+        <div>
+          <span class="section-kicker">PAINEL DIREITO</span>
+          <h2>CORRELAÇÃO — Grafo temporal</h2>
+        </div>
+        <span id="graphStats" class="mono">0 nós / 0 arestas</span>
+      </div>
+
+      <!-- BANNER DO ATAQUE QUE ESTÁ ACONTECENDO NA INFRAESTRUTURA -->
+      <div class="live-attack-banner" id="liveAttackBanner">
+        <div class="banner-top-line">
+          <span class="pulse-indicator"></span>
+          <span class="banner-label">INFRAESTRUTURA DO STF SOB ATAQUE:</span>
+          <span class="infra-highlight" id="bannerInfraTarget">Aguardando Disparo de Ataque</span>
+        </div>
+        <div class="banner-attack-detail">
+          <span class="attack-label-prefix">ATAQUE EM CURSO:</span>
+          <strong id="bannerAttackName">Nenhum ataque executado ainda</strong>
+        </div>
+      </div>
+
+      <!-- O Grafo SVG com a topologia do STF e nós de ataque -->
+      <div id="graph" class="graph-canvas">
+        <div class="empty graph-empty">O grafo temporal surgirá conforme os ataques forem executados.</div>
+      </div>
+
+      <!-- Card do Local Atacado / Detalhes do Foco -->
+      <div class="target-focus-card">
+        <div class="target-focus-header">
+          <span class="focus-kicker">DIAGNÓSTICO DO HERACLITUSDB</span>
+          <span id="lastActionBadge" class="status-pill ready">PRONTO</span>
+        </div>
+        <div class="target-focus-body">
+          <div class="focus-col">
+            <span class="focus-label">Local Atacado / Ativo:</span>
+            <strong id="focusAsset">—</strong>
+          </div>
+          <div class="focus-col">
+            <span class="focus-label">Ator / Identidade:</span>
+            <strong id="focusActor">—</strong>
+          </div>
+          <div class="focus-col">
+            <span class="focus-label">Decisão do Gateway:</span>
+            <strong id="focusDecision">—</strong>
+          </div>
+          <div class="focus-col">
+            <span class="focus-label">Efeito Real (Upstream):</span>
+            <strong id="focusUpstream">0</strong>
+          </div>
+        </div>
+        <div class="focus-narrative" id="focusNarrative">
+          Aguardando o início da simulação. Selecione um ataque à esquerda para disparar.
+        </div>
       </div>
     </section>
 
-    <section class="panel span-6">
-      <div class="panel-head"><div><span class="section-kicker">ANALYST</span><h3>Relatório do incidente</h3></div><div class="panel-actions"><button id="reportBtn" class="btn">Atualizar</button><button id="downloadReportBtn" class="btn">Baixar JSON</button></div></div>
-      <div id="reportSummary" class="report-summary">Aguardando execução da campanha.</div>
-      <div id="reportControls" class="report-controls"></div>
-      <div class="report-limitations"><b>Limites da POC</b><ul id="reportLimitations"></ul></div>
-    </section>
-
-
-    <section class="panel span-6">
-      <div class="panel-head"><div><span class="section-kicker">DIFF FORENSE</span><h3>Antes × Depois</h3></div><div class="compare-controls"><label>de LSN</label><input id="compareFrom" type="number" min="0" value="3"/><label>até</label><input id="compareTo" type="number" min="0" value="15"/><button id="compareBtn" class="btn">Comparar</button></div></div>
-      <div id="compareSummary" class="compare-summary">Compare dois pontos do histórico para ver exatamente o que mudou.</div>
-      <div id="compareGrid" class="compare-grid"></div>
-    </section>
-
-    <section class="panel span-6">
-      <div class="panel-head"><div><span class="section-kicker">BRIDGE</span><h3>HeraclitusDB real / loopback</h3></div><button id="integrationBtn" class="btn">Verificar integração</button></div>
-      <div class="integration-hero"><span id="integrationStatus" class="badge">NOT CONFIGURED</span><p id="integrationNote">A POC funciona standalone. Defina HERACLITUS_URL para consultar um HeraclitusDB local.</p></div>
-      <div id="integrationSurfaces" class="integration-surfaces"></div>
-    </section>
-
-    <section class="panel span-6">
-      <div class="panel-head"><div><span class="section-kicker">RESILIENCE</span><h3>Fault Injection</h3></div><div class="fault-controls"><select id="faultKind"><option value="policy_store_down">Policy store indisponível</option><option value="timeout_before_effect">Timeout antes do efeito</option><option value="timeout_after_effect">Timeout depois do efeito</option><option value="exporter_interrupted">Exporter interrompido</option><option value="clock_jump">Salto de relógio</option></select><button id="faultBtn" class="btn danger">Injetar falha</button></div></div>
-      <div id="faultResult" class="fault-result"><span>Escolha uma falha controlada.</span></div>
-    </section>
-
-    <section class="panel span-6">
-      <div class="panel-head"><div><span class="section-kicker">TRUTH MODEL</span><h3>O que este painel prova</h3></div><span class="badge">POC STANDALONE</span></div>
-      <div class="truth-grid">
-        <div><b>CALCULADO</b><span>normalização, regras, correlação, policy, hashes, Merkle, verifier</span></div>
-        <div><b>SINTÉTICO</b><span>ataque, identidades, hosts, banco, aplicação e telemetria de origem</span></div>
-        <div><b>BRIDGE</b><span>read-only para Sentinel/Agent APIs quando HeraclitusDB roda em localhost</span></div>
-        <div><b>NÃO CONFIGURADO</b><span>IAM/HSM/trust institucional, logs reais e infraestrutura do STF</span></div>
-      </div>
-    </section>
-
-    <section class="panel span-12 api-lab-panel">
-      <div class="panel-head"><div><span class="section-kicker">API LAB</span><h3>Pipeline externo: Telemetria → Incidente → Policy → HITL</h3></div><span class="badge">LOOPBACK</span></div>
-      <div class="api-lab-flow">
-        <button id="apiPhase1Btn" class="api-step"><span>01</span><b>Ingerir Fase 1</b><small>6 logs brutos</small></button>
-        <div class="api-arrow">→</div>
-        <button id="apiWriteBtn" class="api-step"><span>02</span><b>Tentar WRITE</b><small>esperado DENY</small></button>
-        <div class="api-arrow">→</div>
-        <button id="apiExportBtn" class="api-step"><span>03</span><b>Pedir EXPORT</b><small>esperado HITL</small></button>
-        <div class="api-arrow">→</div>
-        <button id="apiApproveBtn" class="api-step"><span>04</span><b>Aprovar HITL</b><small>single-use</small></button>
-        <div class="api-arrow">→</div>
-        <button id="apiExecuteBtn" class="api-step"><span>05</span><b>Executar EXPORT</b><small>1 efeito</small></button>
-        <div class="api-arrow">→</div>
-        <button id="apiReplayBtn" class="api-step"><span>06</span><b>Replay</b><small>esperado DENY</small></button>
-        <div class="api-arrow">→</div>
-        <button id="apiIdentityBtn" class="api-step"><span>07</span><b>Identity swap</b><small>esperado DENY</small></button>
-        <div class="api-arrow">→</div>
-        <button id="apiParamBtn" class="api-step"><span>08</span><b>Parameter swap</b><small>esperado DENY</small></button>
-      </div>
-      <div id="apiLabLog" class="api-lab-log">Use após <b>Reiniciar</b> para demonstrar o caminho externo sem o roteiro embutido.</div>
-    </section>
-
-    <section class="panel span-12 qualification-panel">
-      <div class="panel-head"><div><span class="section-kicker">QUALIFICATION</span><h3>Scorecard da POC</h3></div><span class="badge" id="qualificationBadge">EM EXECUÇÃO</span></div>
-      <div id="qualification" class="qualification-grid"></div>
-    </section>
   </main>
-  <footer><b>STF POC / HeraclitusDB</b><span>Dados sintéticos • sem infraestrutura real • sem credenciais reais • loopback-only</span></footer>
+
+  <!-- PAINEL INFERIOR: TRILHA (Eventos e Rastros) E HERACLITUSDB -->
+  <section class="panel bottom-trail-panel">
+    <div class="panel-head trail-header">
+      <div>
+        <span class="section-kicker">EMBAIXO</span>
+        <h2>TRILHA — Eventos e rastros</h2>
+      </div>
+
+      <!-- Seletor de Abas -->
+      <div class="trail-tabs">
+        <button class="tab-btn active" id="tabTrailBtn">Trilha da POC (Eventos e Rastros)</button>
+        <button class="tab-btn" id="tabHeraclitusBtn">HeraclitusDB (WSL Linux — 127.0.0.1:8080)</button>
+      </div>
+
+      <!-- Ações de Evidência -->
+      <div class="trail-actions">
+        <button class="btn small success" id="exportBtn">Gerar Evidence Bundle</button>
+        <button class="btn small" id="downloadBtn">Baixar JSON</button>
+      </div>
+    </div>
+
+    <!-- CONTEÚDO TAB 1: TRILHA DA POC -->
+    <div id="trailTabContent" class="tab-content active">
+      <div class="table-wrap">
+        <table class="simple-table">
+          <thead>
+            <tr>
+              <th style="width: 55px;">LSN</th>
+              <th style="width: 145px;">Data / Hora</th>
+              <th style="width: 135px;">Fonte</th>
+              <th>Evento / Ação</th>
+              <th>Ator → Local Atacado</th>
+              <th style="width: 130px;">Decisão</th>
+              <th style="width: 75px;">Upstream</th>
+              <th style="width: 105px;">Hash Resumo</th>
+            </tr>
+          </thead>
+          <tbody id="eventRows">
+            <tr><td colspan="8" class="empty">Nenhum evento registrado. Dispare um ataque acima.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- CONTEÚDO TAB 2: HERACLITUSDB WSL LINUX -->
+    <div id="heraclitusTabContent" class="tab-content">
+      <div class="heraclitus-meta-bar">
+        <span>Conexão ativa com o HeraclitusDB em: <code>http://127.0.0.1:8080</code> (WSL Ubuntu)</span>
+        <span id="heraclitusSummaryBadge" class="badge">Carregando telemetria ao vivo...</span>
+      </div>
+      <div class="table-wrap">
+        <table class="simple-table">
+          <thead>
+            <tr>
+              <th style="width: 75px;">LSN WSL</th>
+              <th style="width: 145px;">Data / Hora</th>
+              <th style="width: 180px;">Attack ID</th>
+              <th>Vetor de Ataque</th>
+              <th style="width: 160px;">Target / Alvo</th>
+              <th style="width: 105px;">Resultado</th>
+              <th style="width: 160px;">Hash do Registro</th>
+            </tr>
+          </thead>
+          <tbody id="heraclitusEventRows">
+            <tr><td colspan="7" class="empty">Carregando eventos do HeraclitusDB no WSL...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
 </div>
+
+<!-- HINT / NOTIFICAÇÃO DE ATAQUE NO CANTO INFERIOR DIREITO -->
+<div id="attackHint" class="attack-hint" role="alert" aria-live="assertive">
+  <div class="hint-header">
+    <div class="hint-header-left">
+      <div class="hint-badge" id="hintBadge">🛡️ ALERTA DE SEGURANÇA</div>
+      <span class="hint-time" id="hintTime">23/09/2026 20:15:00</span>
+    </div>
+    <button class="hint-close-btn" onclick="closeAttackHint()" title="Fechar">×</button>
+  </div>
+  <div class="hint-body">
+    <div class="hint-attack-title" id="hintAttackName">Nome do Ataque</div>
+    <div class="hint-target-line">
+      <span class="hint-label">Infraestrutura:</span>
+      <strong id="hintInfraName">PJe / STF Digital</strong>
+    </div>
+    <div class="hint-outcome-line">
+      <span class="hint-label">Resultado:</span>
+      <span class="hint-outcome-badge" id="hintOutcome">BLOQUEADO (DENY)</span>
+      <span class="hint-upstream-badge" id="hintUpstream">upstream=0</span>
+    </div>
+    <p class="hint-desc" id="hintDesc">Ação interceptada e bloqueada pelo Agent Gateway com efeito zero.</p>
+  </div>
+</div>
+
 <div id="toast" class="toast"></div>
 <script src="app.js"></script>
 </body>

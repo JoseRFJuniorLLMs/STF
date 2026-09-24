@@ -1,244 +1,820 @@
-const $=s=>document.querySelector(s);let state=null,running=false,paused=false,presentationMode=false;
-async function api(path,opts={}){const headers={'Content-Type':'application/json','X-STF-POC':'1',...(opts.headers||{})};const r=await fetch(path,{...opts,headers});if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}
-function esc(s=''){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function short(s,n=14){if(!s)return'—';return s.length>n?s.slice(0,n)+'…':s}
-function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove('show'),2400)}
-const GUIDE_BEATS = {
-  'network.connection': {title:'Primeiro, o comportamento de referência',intent:'O roteiro gera tráfego benigno para mostrar que nem todo evento representa intrusão.'},
-  'edge.suspicious': {title:'O primeiro sinal na borda',intent:'Um atacante fictício produz um padrão anômalo no perímetro de laboratório.'},
-  'identity.login': {title:'A identidade aparece em novo contexto',intent:'A campanha simula o uso suspeito de uma conta de serviço fictícia.'},
-  'host.process': {title:'Atividade incomum no host',intent:'A campanha simula execução atípica em um host de laboratório.'},
-  'network.lateral': {title:'Movimento lateral simulado',intent:'A campanha simula uma conexão entre ativos sintéticos.'},
-  'db.query': {title:'Acesso anômalo ao banco fictício',intent:'A identidade fictícia consulta dados fora do perfil esperado no laboratório.'},
-  'app.resource_access': {title:'O acesso alcança a aplicação sintética',intent:'A campanha tenta ler um recurso restrito que existe apenas no cenário.'},
-  'app.case_update_requested': {title:'Tentativa de alterar processo fictício',intent:'A identidade ligada ao incidente solicita uma escrita no caso sintético.'},
-  'agent.tool_requested': {title:'Uma exportação exige decisão',intent:'Um agente sintético solicita exportar um documento fictício restrito.'},
-  'approval.granted': {title:'Aprovação humana simulada',intent:'O roteiro concede uma aprovação vinculada à identidade, ao alvo e aos parâmetros.'},
-  'tool.executed': {title:'Ação autorizada executada uma vez',intent:'O agente sintético repete a operação aprovada para exercitar o controle de efeito.'},
-  'approval.replay': {title:'Tentativa de reutilizar aprovação',intent:'O atacante sintético tenta repetir a operação após o consumo da aprovação.'},
-  'identity.swap': {title:'Troca de identidade após aprovação',intent:'Outra identidade fictícia tenta usar a autorização concedida à primeira.'},
-  'parameters.swap': {title:'Troca de parâmetros após aprovação',intent:'O alvo da exportação é alterado depois da aprovação sintética.'},
-  'tamper.attempt': {title:'Tentativa de apagar os rastros',intent:'O roteiro adultera uma cópia da história para testar a detecção de integridade.'},
-  'evidence.exported': {title:'A campanha vira pacote de evidência',intent:'O roteiro registra a exportação da história sintética para análise.'},
-  'evidence.verified': {title:'A integridade da evidência é conferida',intent:'O cenário encerra com a verificação local do pacote sintético.'}
-};
-const NEXT_BEATS = [
-  'tráfego benigno de referência','sinal no firewall/WAF','autenticação anômala',
-  'processo incomum no host','movimento lateral sintético','consulta ao banco fictício',
-  'acesso restrito à aplicação','tentativa de escrita no processo','pedido de exportação',
-  'aprovação humana simulada','execução autorizada','replay da aprovação',
-  'troca de identidade','troca de parâmetros','adulteração da história',
-  'pacote de evidência','verificação local'
+const $ = s => document.querySelector(s);
+let state = null;
+let running = false;
+let selectedNode = null;
+
+// Catálogo dos 17 ataques mapeados diretamente à Infraestrutura do STF
+const ATTACKS = [
+  { step: 1, title: '01. Calibração e Tráfego Benigno', infra: 'Firewall / WAF', target: 'public-edge', type: 'network.connection', phase: 'FASE 1', desc: 'Tráfego legítimo de calibração para estabelecer a linha de base no perímetro do STF.' },
+  { step: 2, title: '02. Sondagem no Perímetro (WAF)', infra: 'Firewall / WAF', target: 'public-edge', type: 'edge.suspicious', phase: 'FASE 1', desc: 'Padrão incomum de requisições no perímetro de borda do Portal do STF.' },
+  { step: 3, title: '03. Invasão de Sessão (IAM)', infra: 'Máquinas Ministros (VDI)', target: 'identity-provider', type: 'identity.login', phase: 'FASE 1', desc: 'Novo contexto de autenticação suspeito em estação de trabalho de gabinete (service-account-17).' },
+  { step: 4, title: '04. Execução de Processo Atípico', infra: 'Servidores Linux', target: 'srv-app-07', type: 'host.process', phase: 'FASE 1', desc: 'Processo incomum executado no servidor Linux do backend da aplicação judicial.' },
+  { step: 5, title: '05. Movimento Lateral Interno', infra: 'Servidores Linux', target: 'srv-db-02', type: 'network.lateral', phase: 'FASE 1', desc: 'Conexão lateral correlacionada entre o servidor de aplicação e o banco srv-db-02.' },
+  { step: 6, title: '06. Consulta Anômala a Metadados', infra: 'Banco Judicial', target: 'db-judicial-lab', type: 'db.query', phase: 'FASE 1', desc: 'Query fora do padrão da identidade em metadados processuais restritos no banco de dados.' },
+  { step: 7, title: '07. Acesso a Autos no PJe', infra: 'PJe / STF Digital', target: 'case://SYNTHETIC/RE-000001', type: 'app.resource_access', phase: 'FASE 1', desc: 'Acesso a processo restrito no PJe. O Sentinel correlaciona os sinais e ABRE O INCIDENTE!' },
+  { step: 8, title: '08. Tentativa de Alterar Processo', infra: 'PJe / STF Digital', target: 'case://SYNTHETIC/RE-000001', type: 'app.case_update_requested', phase: 'FASE 2', desc: 'Tentativa de alteração no processo RE-000001. Bloqueio automático pelo Gateway: DENY.' },
+  { step: 9, title: '09. Tentativa de Exportar Acórdão Sigiloso', infra: 'Agentes IA (VitórIA/Rafa)', target: 'document://SYNTHETIC/DOC-001', type: 'agent.tool_requested', phase: 'FASE 2', desc: 'Agente solicita exportação de documento restrito. O Gateway exige aprovação humana: REQUIRE_HITL.' },
+  { step: 10, title: '10. Aprovação Humana de Operador', infra: 'Gabinete / Operador', target: 'document://SYNTHETIC/DOC-001', type: 'approval.granted', phase: 'FASE 2', desc: 'Operador humano concede autorização vinculada estritamente à identidade, ação e parâmetros.' },
+  { step: 11, title: '11. Execução Única da Exportação', infra: 'PJe / Gateway', target: 'document://SYNTHETIC/DOC-001', type: 'tool.executed', phase: 'FASE 2', desc: 'Ação autorizada executa exatamente uma vez. Oráculo upstream emite recibo e soma 1.' },
+  { step: 12, title: '12. Tentativa de Replay de Autorização', infra: 'Agentes IA (VitórIA/Rafa)', target: 'document://SYNTHETIC/DOC-001', type: 'approval.replay', phase: 'FASE 2', desc: 'Invasor tenta reaproveitar a autorização consumida: Bloqueio estrito (REPLAY_DETECTED).' },
+  { step: 13, title: '13. Tentativa de Troca de Identidade', infra: 'Máquinas Ministros (VDI)', target: 'document://SYNTHETIC/DOC-001', type: 'identity.swap', phase: 'FASE 2', desc: 'Outro agente tenta usar a autorização concedida: Bloqueio (IDENTITY_BINDING_MISMATCH).' },
+  { step: 14, title: '14. Tentativa de Troca de Parâmetros', infra: 'PJe / STF Digital', target: 'document://SYNTHETIC/DOC-999', type: 'parameters.swap', phase: 'FASE 2', desc: 'Documento-alvo alterado após aprovação: Bloqueio (PARAMETERS_DIGEST_MISMATCH).' },
+  { step: 15, title: '15. Tentativa de Apagar Rastros (Tamper)', infra: 'Trilha HRKL', target: 'evidence-log', type: 'tamper.attempt', phase: 'FASE 2', desc: 'Invasor tenta sabotar histórico. Árvore Merkle e Hash-chain acusam quebra: DETECTED.' },
+  { step: 16, title: '16. Geração do Evidence Bundle', infra: 'HeraclitusDB', target: 'evidence://STF-POC-001', type: 'evidence.exported', phase: 'FASE 2', desc: 'Pacote criptográfico de provas digitais gerado com manifesto e prova Merkle completa.' },
+  { step: 17, title: '17. Verificação Offline da Integridade', infra: 'Auditoria Externa', target: 'evidence://STF-POC-001', type: 'evidence.verified', phase: 'FASE 2', desc: 'Perícia independente valida as provas matemáticas localmente e sem conexão à rede.' }
 ];
 
-function guideResponse(s, event, signal) {
-  const decision = event.details?.policy_decision;
-  if (decision) {
-    if (event.outcome === 'DENY') {
-      return `BLOQUEADO pelo harness: ${decision.reason_code}. upstream_delta=${event.upstream_delta ?? 0}; nenhum efeito chegou ao alvo sintético.`;
-    }
-    if (event.outcome === 'REQUIRE_HITL') {
-      return `HITL solicitado: ${decision.reason_code}. A operação aguarda aprovação; upstream_delta=${event.upstream_delta ?? 0}.`;
-    }
-    if (event.upstream_delta === 1) {
-      return `Execução autorizada pelo harness: ${decision.reason_code}. O contador do alvo sintético aumentou uma vez.`;
-    }
-    return `Decisão ${event.outcome}: ${decision.reason_code}. Nenhum efeito foi registrado neste passo.`;
-  }
-  if (event.event_type === 'approval.granted') {
-    return 'A aprovação sintética foi vinculada à solicitação. O efeito continua em zero até uma execução autorizada.';
-  }
-  if (event.event_type === 'tamper.attempt') {
-    return `Integridade da cópia adulterada: ${s.tamper_status}. A história original continua preservada no harness.`;
-  }
-  if (event.event_type === 'evidence.exported') {
-    return 'O evento de exportação entrou na trilha. Use “Gerar Evidence Bundle” para salvar o JSON desta execução.';
-  }
-  if (event.event_type === 'evidence.verified') {
-    return `Integridade local: ${s.verification.overall}. Trust, assinatura e timestamp institucionais não estão configurados.`;
-  }
-  if (signal) {
-    const linked = s.incident?.correlation?.signal_ids?.includes(signal.signal_id);
-    return linked
-      ? `Regra ${signal.rule_id} disparou e o sinal integra o incidente ${s.incident.incident_id}.`
-      : `Regra ${signal.rule_id} disparou. O harness segue correlacionando sinais antes de abrir um incidente.`;
-  }
-  return 'Evento normalizado sem sinal de segurança. O harness não o trata como invasão confirmada.';
+async function api(path, opts = {}) {
+  const headers = { 'Content-Type': 'application/json', 'X-STF-POC': '1', ...(opts.headers || {}) };
+  const r = await fetch(path, { ...opts, headers });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
 }
 
-function guideStatus(s, event, signal) {
-  if (event.event_type === 'evidence.verified' && s.verification.overall === 'PASS') return ['VERIFICADO','verified'];
-  if (event.event_type === 'tamper.attempt' && s.tamper_status === 'DETECTED') return ['DETECTADO','detected'];
-  if (event.outcome === 'DENY') return ['BLOQUEADO','blocked'];
-  if (event.outcome === 'REQUIRE_HITL') return ['AGUARDA HITL','awaiting'];
-  if (event.event_type === 'approval.granted') return ['APROVADO','simulated'];
-  if (event.upstream_delta === 1) return ['EFEITO SINTÉTICO','simulated'];
-  if (signal) return ['DETECTADO','detected'];
-  return ['SIMULADO','simulated'];
+function esc(s = '') {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-function renderJourney(s, currentEvent) {
-  const phase1 = s.events.filter(event => event.phase === 'FASE 1');
-  const sourceCount = new Set(phase1.map(event => event.source)).size;
-  const policyEvents = s.events.filter(event => event.details?.policy_decision);
-  const deniedCount = policyEvents.filter(event => event.outcome === 'DENY').length;
-  const latestPolicy = policyEvents.at(-1);
-  const hasExport = s.events.some(event => event.event_type === 'evidence.exported');
-  const active = !currentEvent ? 'attacker'
-    : currentEvent.event_type === 'tamper.attempt' ? 'tamper'
-    : currentEvent.event_type.startsWith('evidence.') ? 'evidence'
-    : currentEvent.event_type === 'tool.executed' ? 'effect'
-    : currentEvent.phase === 'FASE 2' ? 'policy'
-    : s.incident?.evidence_lsns?.includes(currentEvent.lsn) ? 'incident'
-    : s.signals.some(signal => signal.lsn === currentEvent.lsn) ? 'correlation'
-    : 'sources';
-  const stages = [
-    {key:'attacker',phase:'ORIGEM',title:'Atacante sintético',detail:'Atividade gerada por roteiro local',state:s.signals.length?'SIMULADO':'AGUARDANDO',tone:s.signals.length?'simulated':'awaiting'},
-    {key:'sources',phase:'FASE 1',title:'Fontes de telemetria',detail:sourceCount ? `${sourceCount} fontes fictícias observadas`:'Logs ainda não ingeridos',state:sourceCount?'SIMULADO':'AGUARDANDO',tone:sourceCount?'simulated':'awaiting'},
-    {key:'correlation',phase:'FASE 1',title:'Detecção e correlação',detail:s.signals.length ? `${s.signals.length} sinais de segurança`:'Nenhuma regra disparou',state:s.signals.length?'DETECTADO':'AGUARDANDO',tone:s.signals.length?'detected':'awaiting'},
-    {key:'incident',phase:'PONTE',title:'Incidente',detail:s.incident ? `${s.incident.state} · ${s.incident.severity}`:'Ainda sem incidente aberto',state:s.incident?'DETECTADO':'AGUARDANDO',tone:s.incident?'detected':'awaiting'},
-    {key:'policy',phase:'FASE 2',title:'Policy e HITL',detail:latestPolicy ? `${policyEvents.length} decisões · approval ${s.pending_approval?.state || 'nenhuma'}`:'Nenhuma ação crítica solicitada',state:latestPolicy?.outcome === 'DENY'?'BLOQUEADO':latestPolicy?'AVALIADO':'AGUARDANDO',tone:latestPolicy?.outcome === 'DENY'?'blocked':latestPolicy?'detected':'awaiting'},
-    {key:'effect',phase:'FASE 2',title:'Efeito no alvo sintético',detail:policyEvents.length ? `${s.upstream_hits} autorizado(s) · ${deniedCount} negado(s)`:'Contador de efeitos em zero',state:s.upstream_hits?'EFEITO SINTÉTICO':deniedCount?'BLOQUEADO':'AGUARDANDO',tone:s.upstream_hits?'simulated':deniedCount?'blocked':'awaiting'},
-    {key:'tamper',phase:'FORENSE',title:'Adulteração',detail:s.tamper_status === 'DETECTED'?'Cópia alterada identificada':'Nenhuma sabotagem testada',state:s.tamper_status === 'DETECTED'?'DETECTADO':'AGUARDANDO',tone:s.tamper_status === 'DETECTED'?'detected':'awaiting'},
-    {key:'evidence',phase:'FORENSE',title:'Evidência',detail:s.offline_verify === 'PASS'?'Integridade local conferida':hasExport?'Pacote registrado na trilha':'Aguardando pacote',state:s.offline_verify === 'PASS'?'VERIFICADO':hasExport?'EXPORTADO':'AGUARDANDO',tone:s.offline_verify === 'PASS'?'verified':hasExport?'simulated':'awaiting'}
-  ];
-  $('#journeyMap').innerHTML = stages.map((stage, index) => `
-    <li class="journey-node ${stage.key === active ? 'current' : stage.tone === 'awaiting' ? 'waiting' : 'complete'}" ${stage.key === active ? 'aria-current="step"' : ''}>
-      <span class="journey-index">${String(index + 1).padStart(2,'0')}</span>
-      <span class="journey-phase">${esc(stage.phase)}</span>
-      <strong>${esc(stage.title)}</strong>
-      <p>${esc(stage.detail)}</p>
-      <span class="journey-state ${esc(stage.tone)}">${esc(stage.state)}</span>
-    </li>`).join('');
+function short(s, n = 18) {
+  if (!s) return '—';
+  return s.length > n ? s.slice(0, n) + '…' : s;
 }
 
-function renderGuide(s) {
-  const externalMode = s.execution_mode === 'API_LAB';
-  const event = s.events.at(-1);
-  const signal = event && s.signals.find(item => item.lsn === event.lsn);
-  const beat = event && GUIDE_BEATS[event.event_type];
-  const status = event ? guideStatus(s,event,signal) : ['PRONTO','awaiting'];
-  const label = $('#guideStatus');
-  label.textContent = status[0];
-  label.className = 'story-status ' + status[1];
-  $('#guideMode').textContent = externalMode ? 'API LAB · LOOPBACK' : 'ROTEIRO DEMONSTRATIVO';
-  $('#guideStep').textContent = event
-    ? externalMode ? `LSN ${event.lsn}` : `PASSO ${s.step} DE ${s.total_steps}`
-    : 'AGUARDANDO INÍCIO';
-  $('#guideHeadline').textContent = event
-    ? beat?.title || (event.phase === 'FASE 1' ? 'Telemetria sintética recebida' : 'Decisão sobre ação sintética')
-    : 'Pronto para acompanhar a campanha';
-  $('#guideSubtitle').textContent = event
-    ? `${event.phase} · ${event.source} · LSN ${event.lsn}: ${event.summary}`
-    : 'Avance um evento por vez ou execute a sequência completa. Cada resultado abaixo vem do estado atual da POC.';
-  $('#storyIntent').textContent = event
-    ? beat?.intent || (event.phase === 'FASE 1'
-      ? 'Uma fonte fictícia envia um log bruto pela API local para exercitar detecção e correlação.'
-      : 'Uma operação local testa os controles da aplicação e do gateway sintéticos.')
-    : 'O roteiro ainda não gerou atividade.';
-  $('#storyObserved').textContent = event
-    ? `LSN ${event.lsn} · ${event.source}. ${event.details?.raw_telemetry ? 'Log bruto preservado e normalizado. ' : ''}${signal ? `Sinal ${signal.rule_id} produzido.` : 'Nenhum SecuritySignal neste passo.'}`
-    : 'Aguardando a primeira telemetria sintética.';
-  $('#storyResponse').textContent = event ? guideResponse(s,event,signal) : 'Nenhuma decisão foi calculada.';
-  $('#guideNextHint').textContent = externalMode
-    ? 'API Lab ativo: use os oito comandos locais abaixo. Reinicie para voltar ao roteiro.'
-    : s.completed ? 'Roteiro concluído. Reinicie para outra execução.'
-    : `Próximo: ${NEXT_BEATS[s.step] || 'evento seguinte'}`;
-  $('#guideNextBtn').innerHTML = s.step === 0 ? 'Iniciar pelo primeiro evento <span aria-hidden="true">→</span>' : 'Próximo evento <span aria-hidden="true">→</span>';
-  $('#guideNextBtn').disabled = externalMode || s.completed || running;
-  $('#guideRunBtn').disabled = externalMode || s.completed || running;
-  $('#stepBtn').disabled = externalMode || s.completed || running;
-  $('#runBtn').disabled = externalMode || s.completed || running;
-  $('#pauseBtn').disabled = !running;
-  $('#pauseBtn').setAttribute('aria-pressed',String(paused));
-  $('#presentationBtn').setAttribute('aria-pressed',String(presentationMode));
-  renderJourney(s,event);
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toast.t);
+  toast.t = setTimeout(() => t.classList.remove('show'), 2600);
 }
 
-function render(s){
-  state=s;
-  $('#mode').textContent=s.mode;
-  $('#campaignId').textContent=s.campaign_id;
-  $('#lastAction').textContent=s.last_action;
-  const externalMode=s.execution_mode==='API_LAB';
-  const p=externalMode?Math.min(100,Math.round((s.events.length/12)*100)):Math.round(s.step/s.total_steps*100);
-  $('#stepText').textContent=externalMode?`API LAB · LSN ${s.events.length}`:`${s.step} / ${s.total_steps} eventos`;
-  $('#progressPct').textContent=externalMode?'API':p+'%';
-  $('#progressBar').style.width=p+'%';
-  $('#campaignProgress').setAttribute('aria-valuenow',String(externalMode ? s.events.length : s.step));
-  $('#campaignProgress').setAttribute('aria-valuemax',String(externalMode ? Math.max(12,s.events.length) : s.total_steps));
-  $('#campaignProgress').setAttribute('aria-label',externalMode?'Eventos ingeridos no API Lab':'Progresso do roteiro sintético');
-  $('#riskValue').textContent=s.risk;
-  const rl=s.risk>=80?'CRÍTICO':s.risk>=60?'ALTO':s.risk>=30?'ELEVADO':'NORMAL';
-  $('#riskLabel').textContent=rl;
-  $('#riskLabel').style.color=s.risk>=60?'var(--red)':s.risk>=30?'var(--amber)':'var(--green)';
-  $('#signalCount').textContent=s.signals.length;
-  $('#incidentState').textContent=s.incident?s.incident.state:'NÃO ABERTO';
-  $('#incidentId').textContent=s.incident?s.incident.incident_id:'aguardando correlação';
-  $('#upstreamHits').textContent=s.upstream_hits;
-  $('#integrityState').textContent=s.verification.overall;
-  $('#tamperState').textContent=s.tamper_status;
-  $('#offlineState').textContent=s.offline_verify;
-  renderGuide(s);
-  renderIncident(s);
-  renderPath(s);
-  renderEvents(s);
+// RENDERIZAÇÃO GERAL DO ESTADO
+function render(s) {
+  state = s;
+
+  // Header badges institucionais
+  $('#riskValue').textContent = s.risk;
+  const rl = $('#riskLabel');
+  if (s.risk >= 80) {
+    rl.textContent = 'CRÍTICO';
+    rl.className = 'tag-status critical';
+  } else if (s.risk >= 50) {
+    rl.textContent = 'ALTO';
+    rl.className = 'tag-status critical';
+  } else if (s.risk >= 20) {
+    rl.textContent = 'ELEVADO';
+    rl.className = 'tag-status';
+  } else {
+    rl.textContent = 'NORMAL';
+    rl.className = 'tag-status normal';
+  }
+
+  const incState = $('#incidentState');
+  if (s.incident) {
+    incState.textContent = `${s.incident.incident_id} (${s.incident.severity})`;
+    incState.style.color = 'var(--gov-gold-light)';
+  } else {
+    incState.textContent = 'NÃO ABERTO';
+    incState.style.color = 'var(--gov-muted)';
+  }
+
+  $('#upstreamHits').textContent = s.upstream_hits;
+  $('#attackProgress').textContent = `${s.step} / ${s.total_steps} executados`;
+
+  // Atualizar Barra de Infraestrutura do STF
+  updateInfraStatusBar(s);
+
+  // Renderizar os 3 componentes da tela
+  renderAttackList(s);
   renderGraph(s);
-  renderPolicy(s);
-  renderIntegrity(s);
-  renderSourceHealth(s);
-  renderWhy(s);
-  renderDecisionPipeline(s);
-  renderQualification(s);
-  syncTimeMachine(s);
+  renderTrail(s);
+  updateFocusCard(s);
 }
-function renderIncident(s){const i=s.incident,b=$('#incidentBadge');b.className='badge '+(i?'open':'neutral');b.textContent=i?`OPEN / ${i.severity}`:'CANDIDATE';$('#incidentSeverity').textContent=i?'Incidente correlacionado':'Sem incidente';$('#incidentSummary').textContent=i?i.summary:'Aguardando sinais suficientes.';$('#principal').textContent=i?i.principal:'—';$('#incidentStatus').textContent=i?i.state:'—';$('#incidentRisk').textContent=i?i.risk_score:s.risk;$('#policyTags').textContent=i?i.policy_tags.join(' · '):'—'}
-function renderPath(s){const e=$('#attackPath');if(!s.events.length){e.innerHTML='<div class="empty" style="grid-column:1/-1">A campanha ainda não começou.</div>';return}e.innerHTML=s.events.slice(-12).map(x=>`<div class="attack-node ${x.severity.toLowerCase()} ${x.phase==='FASE 2'?'phase2node':''}"><div class="n-source">${esc(x.source)} · LSN ${x.lsn}</div><div class="n-title">${esc(x.summary)}</div><div class="n-meta">${esc(x.actor)} → ${esc(short(x.asset,24))}</div></div>`).join('')}
-function renderEvents(s){const b=$('#eventRows');if(!s.events.length){b.innerHTML='<tr><td colspan="5" class="empty">Nenhum evento processado.</td></tr>';return}b.innerHTML=[...s.events].reverse().map(e=>`<tr><td>${e.lsn}</td><td><span class="evt-title">${esc(e.source)}</span><span class="evt-sub">${esc(e.phase)}</span></td><td><span class="evt-title">${esc(e.event_type)}</span><span class="evt-sub">${esc(e.summary)}</span></td><td><span class="evt-title">${esc(e.actor)}</span><span class="evt-sub">${esc(e.asset)}</span></td><td><span class="outcome ${esc(e.outcome)}">${esc(e.outcome)}</span><span class="evt-sub">${esc(e.reason_code||'')}</span></td></tr>`).join('')}
-function renderGraph(s){const e=$('#graph'),nodes=s.graph.nodes||[],edges=s.graph.edges||[];$('#graphStats').textContent=`${nodes.length} nós / ${edges.length} arestas`;if(!nodes.length){e.innerHTML='<div class="empty graph-empty">O grafo surgirá conforme os sinais forem correlacionados.</div>';return}const W=620,H=355,v=nodes.slice(-24),ids=new Set(v.map(n=>n.id)),pos=new Map();v.forEach(n=>{const ring=n.kind==='incident'?0:n.kind==='event'?1:2,a=v.filter(x=>(x.kind==='incident'?0:x.kind==='event'?1:2)===ring),k=a.indexOf(n),r=ring===0?0:ring===1?95:145,ang=Math.PI*2*(k/Math.max(a.length,1))-Math.PI/2;pos.set(n.id,{x:W/2+Math.cos(ang)*r,y:H/2+Math.sin(ang)*r})});const lines=edges.filter(x=>ids.has(x.from)&&ids.has(x.to)).map(x=>{const a=pos.get(x.from),b=pos.get(x.to);return`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" class="graph-line"/>`}).join(''),colors={incident:'#ff5b66',event:'#43a5ff',actor:'#45d9d0',asset:'#a78bfa'},circles=v.map(n=>{const p=pos.get(n.id),r=n.kind==='incident'?20:n.kind==='event'?8:10;return`<g class="graph-node"><circle cx="${p.x}" cy="${p.y}" r="${r}" fill="${colors[n.kind]||'#6d87a1'}" stroke="#d7e9f9"/><text x="${p.x}" y="${p.y+r+13}" text-anchor="middle">${esc(short(n.label,18))}</text></g>`}).join('');e.innerHTML=`<svg viewBox="0 0 ${W} ${H}">${lines}${circles}</svg>`}
-function renderPolicy(s){$('#compromisedCheck').textContent=s.incident?'SIM':'NÃO';$('#compromisedCheck').style.color=s.incident?'var(--red)':'var(--green)';const a=s.pending_approval,b=$('#approvalBox');b.innerHTML=a?`<span>HITL / ${esc(a.state)}</span><b>${esc(a.approval_id)} — ${esc(a.tool)}</b><small>${esc(a.principal)} → ${esc(a.target)} · single-use=${a.single_use}</small>`:'<span>HITL</span><b>Nenhuma aprovação pendente</b><small>Ações críticas podem exigir decisão humana.</small>'}
-function renderIntegrity(s){$('#lastLsn').textContent=s.events.length?s.events.at(-1).lsn:0;$('#eventCount').textContent=s.events.length;$('#merkleRoot').textContent=s.merkle_root;$('#packageRoot').textContent=s.package_root||'—';$('#merkleShort').textContent='Merkle: '+short(s.merkle_root,18);$('#merkleState').textContent=s.verification.merkle;$('#chainVerify').textContent=s.verification.chain;$('#merkleVerify').textContent=s.verification.merkle;$('#manifestVerify').textContent=s.verification.manifest||'NOT RUN';$('#packageVerify').textContent=s.verification.package_root||'NOT RUN'}
-function renderQualification(s){$('#qualification').innerHTML=s.qualification.map(x=>`<div class="qitem"><span>${esc(x.id)}</span><b><em>esperado ${esc(x.expected)}</em><strong class="${x.ok?'ok':'pending'}">${x.ok?esc(x.observed):'PENDING'}</strong></b></div>`).join('');const all=s.qualification.every(x=>x.ok),b=$('#qualificationBadge');b.textContent=all?'POC QUALIFIED':'EM EXECUÇÃO';b.style.color=all?'var(--green)':''}
 
+// ATUALIZAÇÃO DA BARRA DE INFRAESTRUTURA DO STF NO TOPO
+function updateInfraStatusBar(s) {
+  const step = s.step || 0;
 
-function renderDecisionPipeline(s){const sig=s.signals||[],corr=s.incident?.correlation||null,pol=(s.events||[]).filter(e=>e.details?.policy_decision);const badge=$('#pipelineBadge');badge.textContent=pol.length?'END-TO-END':corr?'CORRELATED':sig.length?'DETECTING':'AGUARDANDO';badge.style.color=pol.length?'var(--green)':corr?'var(--cyan)':'';$('#detectionRules').innerHTML=sig.length?[...sig].reverse().map(x=>`<div class="decision-row"><div class="top"><b>${esc(x.rule_id||x.reason_code)}</b><strong class="${esc(x.severity)}">${esc(x.severity)} · +${esc(x.score??'')}</strong></div><small>LSN ${x.lsn} · ${esc(x.source_class||x.source)} · ${esc(x.rule_explanation||x.reason_code)}</small></div>`).join(''):'<div class="empty">Nenhuma regra disparada.</div>';if(corr){$('#correlationDecision').innerHTML=`<div class="correlation-card"><div class="score"><div><span>correlation score</span><b>${esc(corr.score)}</b></div><strong class="${corr.qualifies?'ok':'pending'}">${corr.qualifies?'QUALIFIED':'CANDIDATE'}</strong></div><div class="correlation-tags">${(corr.sources||[]).map(x=>`<span>${esc(x)}</span>`).join('')}</div><p>${(corr.signal_ids||[]).length} sinais · ${(corr.entities||[]).length} entidades · confidence=${esc(corr.confidence)} · data-plane=${corr.has_data_plane_evidence?'sim':'ainda não'}</p></div>`}else{$('#correlationDecision').innerHTML='<div class="empty">Sem componente qualificado.</div>'}$('#policyDecisions').innerHTML=pol.length?[...pol].reverse().map(e=>{const d=e.details.policy_decision;return`<div class="decision-row"><div class="top"><b>${esc(d.reason_code)}</b><strong class="${esc(e.outcome)}">${esc(e.outcome)}</strong></div><small>LSN ${e.lsn} · ${esc(e.event_type)} · effect_allowed=${d.effect_allowed} · ${esc(d.explanation)}</small></div>`}).join(''):'<div class="empty">Nenhuma decisão de policy.</div>'}
-function renderSourceHealth(s){const rows=s.source_health||[],active=rows.filter(x=>x.status==='ACTIVE').length;$('#sourceCountBadge').textContent=active+' ativas';$('#sourceHealth').innerHTML=rows.map(x=>`<div class="source-item"><b><span>${esc(x.source)}</span><strong class="${x.status}">${x.status}</strong></b><span>${x.events} eventos · ${esc((x.matched||[]).join(', ')||'aguardando')}</span></div>`).join('')}
-function renderWhy(s){const w=s.why_incident||{status:'NOT_OPEN',reasons:[]};$('#whyBadge').textContent=w.status==='OPEN'?'EXPLICADO':'AGUARDANDO';$('#whyBadge').style.color=w.status==='OPEN'?'var(--green)':'';$('#whySummary').textContent=w.summary||'Aguardando sinais.';$('#whyList').innerHTML=(w.reasons||[]).slice().reverse().map(x=>`<div class="why-item"><span class="why-lsn">LSN ${x.lsn}</span><div><b>${esc(x.reason_code)} · ${esc(x.source)}</b><small>${esc(x.summary)} · ${esc(x.actor)} → ${esc(short(x.asset,26))}</small></div></div>`).join('')||'<div class="empty">Sem cadeia causal disponível.</div>'}
-function syncTimeMachine(s){const slider=$('#asofSlider');slider.max=Math.max(s.total_steps,s.events.length);if(!slider.dataset.touched){slider.value=s.events.length;renderAsofLocal(s)}}
-function renderAsofLocal(s){const lsn=s.events.length;$('#asofLabel').textContent='LSN '+lsn;$('#asofRisk').textContent=s.risk;$('#asofIncident').textContent=s.incident?'OPEN':'NÃO';$('#asofUpstream').textContent=s.upstream_hits;$('#asofApproval').textContent=s.pending_approval?.state||'NONE';$('#asofNarrative').textContent=lsn?'Estado atual da campanha. Arraste para voltar no histórico.':'Antes do primeiro evento.'}
-async function renderAsof(lsn){try{const a=await api('/api/asof?lsn='+encodeURIComponent(lsn));$('#asofLabel').textContent='LSN '+a.as_of_lsn;$('#asofRisk').textContent=a.risk;$('#asofIncident').textContent=a.incident?'OPEN':'NÃO';$('#asofUpstream').textContent=a.upstream_hits;$('#asofApproval').textContent=a.approval_state;const last=a.events?.at(-1);$('#asofNarrative').textContent=last?`${last.phase} · ${last.source}: ${last.summary}`:'Antes do primeiro evento.'}catch(e){toast('AS-OF falhou: '+e.message)}}
-async function inspectEvidence(lsn){try{const r=await api('/api/evidence/object?lsn='+encodeURIComponent(lsn));const raw=r.event?.details?.raw_telemetry,norm=r.event?.details?.normalized_telemetry;$('#evidenceMeta').innerHTML=`<div>LSN <b>${r.event.lsn}</b> · ${esc(r.event.source)} · chain_link_valid=<b style="color:${r.provenance.chain_link_valid?'var(--green)':'var(--red)'}">${r.provenance.chain_link_valid}</b></div>${raw||norm?`<div class="raw-canonical"><div><b>RAW TELEMETRY</b><pre>${esc(JSON.stringify(raw||{},null,2))}</pre></div><div><b>CANONICAL EVENT</b><pre>${esc(JSON.stringify(norm||{},null,2))}</pre></div></div>`:''}`;$('#evidenceJson').textContent=JSON.stringify(r,null,2)}catch(e){$('#evidenceMeta').textContent='Evidência não encontrada';$('#evidenceJson').textContent='{}'}}
-async function loadReport(){try{const r=await api('/api/report');$('#reportSummary').textContent=r.executive_summary;$('#reportControls').innerHTML=Object.entries(r.controls||{}).map(([k,v])=>`<div class="report-control"><span>${esc(k.replaceAll('_',' '))}</span><b>${esc(v)}</b></div>`).join('');$('#reportLimitations').innerHTML=(r.limitations||[]).map(x=>`<li>${esc(x)}</li>`).join('')}catch(e){toast('Relatório falhou: '+e.message)}}
+  // 1. Firewall / WAF
+  const nodeFw = $('#node-fw');
+  const statusFw = $('#status-fw');
+  if (step >= 2) {
+    nodeFw.className = 'infra-node-item targeted';
+    statusFw.textContent = 'SONDAGEM OBSERVADA';
+    statusFw.style.color = 'var(--gov-gold-light)';
+  } else {
+    nodeFw.className = 'infra-node-item';
+    statusFw.textContent = 'PERÍMETRO NORMAL';
+    statusFw.style.color = 'var(--gov-green-light)';
+  }
 
-async function loadCompare(){try{const from=Number($('#compareFrom').value||0),to=Number($('#compareTo').value||0),r=await api('/api/compare?from='+encodeURIComponent(from)+'&to='+encodeURIComponent(to));$('#compareSummary').textContent=`LSN ${r.from.as_of_lsn} → ${r.to.as_of_lsn}: risco ${r.from.risk} → ${r.to.risk}, incidente ${r.delta.incident}.`;const labels={events:'Eventos',risk:'Risco',upstream_hits:'Upstream hits',incident:'Incidente',approval:'Approval',tamper:'Tamper',case_effect:'Efeito no caso'};$('#compareGrid').innerHTML=Object.entries(r.delta).map(([k,v])=>`<div class="compare-item"><span>${esc(labels[k]||k)}</span><b class="${typeof v==='number'&&v>0?'delta-positive':''}">${esc(v)}</b></div>`).join('')}catch(e){toast('Comparação falhou: '+e.message)}}
-async function loadIntegration(){try{const r=await api('/api/heraclitus-adapter');$('#integrationStatus').textContent=r.status;$('#integrationStatus').style.color=r.status==='CONNECTED'?'var(--green)':'var(--amber)';if(r.status!=='CONNECTED'){ $('#integrationNote').textContent=r.note||r.error||'HeraclitusDB local não configurado.';$('#integrationSurfaces').innerHTML='';return }$('#integrationNote').textContent='Adapter read-only conectado a um HeraclitusDB em loopback. O dashboard continua sem privilégios de escrita.';const surfaces=r.snapshot?.surfaces||{};$('#integrationSurfaces').innerHTML=Object.entries(surfaces).map(([k,v])=>`<div class="integration-surface"><span>${esc(k)}</span><b class="${esc(v.status)}">${esc(v.status)}</b></div>`).join('')}catch(e){$('#integrationStatus').textContent='UNAVAILABLE';$('#integrationNote').textContent=e.message}}
+  // 2. Máquinas de Ministros (VDI)
+  const nodeMin = $('#node-ministro');
+  const statusMin = $('#status-ministro');
+  if (step >= 13) {
+    nodeMin.className = 'infra-node-item compromised';
+    statusMin.textContent = 'TROCA IDENTIDADE (DENY)';
+    statusMin.style.color = '#ff9ca6';
+  } else if (step >= 3) {
+    nodeMin.className = 'infra-node-item compromised';
+    statusMin.textContent = 'SESSÃO ANÔMALA (IAM)';
+    statusMin.style.color = '#ff9ca6';
+  } else {
+    nodeMin.className = 'infra-node-item';
+    statusMin.textContent = 'AUTENTICAÇÃO SEGURA';
+    statusMin.style.color = 'var(--gov-green-light)';
+  }
 
-function labLog(label,r){const d=r?.decision,e=r?.event;$('#apiLabLog').innerHTML=`<b>${esc(label)}</b> · ${esc(d?.outcome||r?.status||e?.outcome||'PASS')} · ${esc(d?.reason_code||e?.reason_code||'')} · upstream=${esc(e?.upstream_delta??r?.upstream_hits??'n/a')}`}
-async function apiLabPhase1(){if((state?.events?.length||0)>0){toast('Reinicie o ambiente antes de iniciar o API Lab');return}const samples=[
- ['firewall',{event_id:'RAW-FW-001',src_ip:'203.0.113.42',dst_service:'portal-synthetic',action:'OBSERVED',severity:'MEDIUM',waf_score:71}],
- ['identity',{event_id:'RAW-IAM-002',principal:'service-account-17',source_ip:'203.0.113.42',context:'new-device',result:'OBSERVED',severity:'HIGH',mfa:'not-applicable',device_trust:'unknown'}],
- ['host',{event_id:'RAW-HOST-003',principal:'service-account-17',host:'srv-app-07',process:'synthetic-worker',os:'Linux',severity:'HIGH',parent:'app-service'}],
- ['network',{event_id:'RAW-NET-004',principal:'service-account-17',src_host:'srv-app-07',dst_host:'srv-db-02',dst_port:5432,severity:'HIGH'}],
- ['db',{event_id:'RAW-DB-005',principal:'service-account-17',database:'db-judicial-lab',operation:'query',object:'synthetic_case_metadata',rows:47,severity:'HIGH'}],
- ['app',{event_id:'RAW-APP-006',principal:'service-account-17',resource:'case://SYNTHETIC/RE-000001',action:'resource_access',classification:'RESTRICTED',severity:'CRITICAL'}]
-];for(const [kind,raw] of samples){const r=await api('/api/telemetry?kind='+kind,{method:'POST',body:JSON.stringify(raw)});render(r.state);$('#apiLabLog').innerHTML=`<b>INGEST</b> · ${esc(kind)} · detection=${esc(r.detection?.rule_id||'NONE')} · LSN ${r.ingested.lsn}`;await new Promise(x=>setTimeout(x,180))}toast('Fase 1 ingerida via APIs locais')}
-const exportBody=()=>({action:'export_restricted',principal:'service-account-17',target:'document://SYNTHETIC/DOC-001',parameters:{document:'DOC-001',format:'pdf'}});
-async function apiLabWrite(){const r=await api('/api/action',{method:'POST',body:JSON.stringify({action:'case_write',principal:'service-account-17',target:'case://SYNTHETIC/RE-000001',parameters:{field:'metadata'}})});render(r.state);labLog('WRITE',r)}
-async function apiLabExport(label='EXPORT'){const r=await api('/api/action',{method:'POST',body:JSON.stringify(exportBody())});render(r.state);labLog(label,r);return r}
-async function apiLabApprove(){const id=state?.pending_approval?.approval_id;if(!id){toast('Nenhuma approval PENDING');return}const r=await api('/api/approval/grant',{method:'POST',body:JSON.stringify({approval_id:id,approver:'human:approver-dashboard'})});render(r.state);labLog('HITL',r)}
-async function apiLabIdentitySwap(){const id=state?.pending_approval?.approval_id;if(!id){toast('Nenhuma approval para abusar');return}const body={...exportBody(),principal:'agent:other-identity',approval_id:id};const r=await api('/api/action',{method:'POST',body:JSON.stringify(body)});render(r.state);labLog('IDENTITY SWAP',r)}
-async function apiLabParamSwap(){const id=state?.pending_approval?.approval_id;if(!id){toast('Nenhuma approval para abusar');return}const body={action:'export_restricted',principal:'service-account-17',target:'document://SYNTHETIC/DOC-999',parameters:{document:'DOC-999',format:'pdf'},approval_id:id};const r=await api('/api/action',{method:'POST',body:JSON.stringify(body)});render(r.state);labLog('PARAMETER SWAP',r)}
-async function refresh(){try{render(await api('/api/state'))}catch(e){toast('Falha ao ler estado: '+e.message)}}
-$('#resetBtn').onclick=async()=>{running=false;paused=false;$('#pauseBtn').textContent='Pausar';render(await api('/api/reset',{method:'POST'}));toast('Ambiente reiniciado')};$('#stepBtn').onclick=async()=>render(await api('/api/step',{method:'POST'}));$('#pauseBtn').onclick=()=>{paused=!paused;$('#pauseBtn').textContent=paused?'Continuar':'Pausar';toast(paused?'Campanha pausada':'Campanha retomada')};$('#presentationBtn').onclick=()=>{presentationMode=!presentationMode;$('#presentationBtn').textContent='Modo apresentação: '+(presentationMode?'ON':'OFF');if(presentationMode)$('#runSpeed').value='900';toast(presentationMode?'Checkpoints narrativos ativados':'Modo apresentação desativado')};$('#runBtn').onclick=async()=>{if(running)return;running=true;paused=false;$('#pauseBtn').textContent='Pausar';$('#runBtn').textContent='Executando…';const checkpoints={5:'Incidente aberto: explique a correlação multi-fonte.',7:'Fim da Fase 1: mostre o principal comprometido e a ponte para policy.',11:'HITL: uma ação autorizada chegou exatamente uma vez ao upstream.',15:'Tamper detectado: mostre HRKL, hash-chain e Merkle.'};try{while(running&&state&&!state.completed){if(paused){await new Promise(r=>setTimeout(r,120));continue}render(await api('/api/step',{method:'POST'}));if(presentationMode&&checkpoints[state.step]){paused=true;$('#pauseBtn').textContent='Continuar';toast(checkpoints[state.step])}await new Promise(r=>setTimeout(r,Number($('#runSpeed').value||500)))}if(state?.completed)toast('Campanha completa executada')}finally{running=false;$('#runBtn').textContent='Executar campanha'}};
-$('#tamperBtn').onclick=async()=>{const kind=$('#tamperKind').value;const r=await api('/api/tamper-demo?kind='+encodeURIComponent(kind),{method:'POST'});$('#tamperResult').innerHTML=`${esc(kind)}: <b style="color:${r.status==='DETECTED'?'var(--red)':'var(--green)'}">${esc(r.status)}</b> · chain=${esc(r.verification?.chain||'—')} · merkle=${esc(r.verification?.merkle||'—')}`;toast('Sabotagem '+kind+' executada')};$('#exportBtn').onclick=async()=>{const r=await api('/api/export',{method:'POST'});$('#exportResult').innerHTML=`<b style="color:var(--green)">${r.status}</b> · ${esc(r.path)} · sha256 ${esc(short(r.sha256,20))}`;toast('Evidence Bundle gerado')};$('#downloadBtn').onclick=()=>{location.href='/api/evidence/download'};$('#loadEvidenceBtn').onclick=()=>inspectEvidence(Number($('#evidenceLsn').value||1));$('#reportBtn').onclick=loadReport;$('#asofSlider').oninput=e=>{e.currentTarget.dataset.touched='1';renderAsof(Number(e.currentTarget.value))};$('#compareBtn').onclick=loadCompare;$('#integrationBtn').onclick=loadIntegration;$('#downloadReportBtn').onclick=()=>{location.href='/api/report/download'};$('#apiPhase1Btn').onclick=apiLabPhase1;$('#apiWriteBtn').onclick=apiLabWrite;$('#apiExportBtn').onclick=()=>apiLabExport('REQUEST EXPORT');$('#apiApproveBtn').onclick=apiLabApprove;$('#apiExecuteBtn').onclick=()=>apiLabExport('EXECUTE EXPORT');$('#apiReplayBtn').onclick=()=>apiLabExport('REPLAY');$('#apiIdentityBtn').onclick=apiLabIdentitySwap;$('#apiParamBtn').onclick=apiLabParamSwap;$('#faultBtn').onclick=async()=>{const kind=$('#faultKind').value;try{const r=await api('/api/fault-demo?kind='+encodeURIComponent(kind),{method:'POST'});$('#faultResult').innerHTML=`<div class="fault-flow"><div class="fault-state"><span>estado inicial</span><b>${esc(r.initial_state||r.decision||'—')}</b></div><div class="fault-arrow">→</div><div class="fault-state"><span>estado final</span><b style="color:${r.status==='PASS'?'var(--green)':'var(--red)'}">${esc(r.final_state||r.status)}</b></div></div><div class="fault-explain"><b>${esc(r.decision||'')}</b> · upstream_delta=${esc(r.upstream_delta??'n/a')} · ${esc(r.reconciliation||'')}<br>${esc(r.explanation||r.error||'')}</div>`;toast('Fault '+kind+': '+r.status)}catch(e){toast('Fault injection falhou: '+e.message)}};refresh();loadIntegration();
+  // 3. Servidores Linux
+  const nodeLinux = $('#node-linux');
+  const statusLinux = $('#status-linux');
+  if (step >= 4) {
+    nodeLinux.className = 'infra-node-item compromised';
+    statusLinux.textContent = 'PROCESSO ATÍPICO';
+    statusLinux.style.color = '#ff9ca6';
+  } else {
+    nodeLinux.className = 'infra-node-item';
+    statusLinux.textContent = 'BACKEND REGULAR';
+    statusLinux.style.color = 'var(--gov-green-light)';
+  }
 
-// The guided controls use the same handlers as the existing demo toolbar.
-$('#guideNextBtn').onclick = () => $('#stepBtn').click();
-$('#guideRunBtn').onclick = () => $('#runBtn').click();
-$('#pauseBtn').addEventListener('click', () => { if (state) renderGuide(state); });
-$('#presentationBtn').addEventListener('click', () => { if (state) renderGuide(state); });
-const runScriptedCampaign = $('#runBtn').onclick;
-$('#runBtn').onclick = async () => {
-  try { await runScriptedCampaign(); }
-  finally { if (state) renderGuide(state); }
+  // 4. PJe / STF Digital
+  const nodePje = $('#node-pje');
+  const statusPje = $('#status-pje');
+  if (step >= 8) {
+    nodePje.className = 'infra-node-item compromised';
+    statusPje.textContent = 'ESCRITA BARRADA (DENY)';
+    statusPje.style.color = 'var(--gov-gold-light)';
+  } else if (step >= 7) {
+    nodePje.className = 'infra-node-item targeted';
+    statusPje.textContent = 'AUTOS SOB INCIDENTE';
+    statusPje.style.color = '#ff9ca6';
+  } else {
+    nodePje.className = 'infra-node-item';
+    statusPje.textContent = 'AUTOS ÍNTEGROS';
+    statusPje.style.color = 'var(--gov-green-light)';
+  }
+
+  // 5. Banco Judicial
+  const nodeDb = $('#node-db');
+  const statusDb = $('#status-db');
+  if (step >= 6) {
+    nodeDb.className = 'infra-node-item targeted';
+    statusDb.textContent = 'QUERY ANÔMALA';
+    statusDb.style.color = 'var(--gov-gold-light)';
+  } else {
+    nodeDb.className = 'infra-node-item';
+    statusDb.textContent = 'TRANSACIONAL ÍNTEGRO';
+    statusDb.style.color = 'var(--gov-green-light)';
+  }
+
+  // 6. Agentes IA (VitórIA/Rafa)
+  const nodeIa = $('#node-ia');
+  const statusIa = $('#status-ia');
+  if (step >= 12) {
+    nodeIa.className = 'infra-node-item compromised';
+    statusIa.textContent = 'REPLAY BARRADO (DENY)';
+    statusIa.style.color = '#ff9ca6';
+  } else if (step >= 11) {
+    nodeIa.className = 'infra-node-item';
+    statusIa.textContent = 'EXPORTAÇÃO 1X (OK)';
+    statusIa.style.color = 'var(--gov-green-light)';
+  } else if (step >= 9) {
+    nodeIa.className = 'infra-node-item targeted';
+    statusIa.textContent = 'HITL EXIGIDO';
+    statusIa.style.color = 'var(--gov-gold-light)';
+  } else {
+    nodeIa.className = 'infra-node-item';
+    statusIa.textContent = 'GOVERNANÇA HITL';
+    statusIa.style.color = 'var(--gov-green-light)';
+  }
+}
+
+// PAINEL ESQUERDO: LISTA DE ATAQUES
+function renderAttackList(s) {
+  const container = $('#attackList');
+  const currentStep = s.step || 0;
+
+  container.innerHTML = ATTACKS.map(att => {
+    const isExecuted = currentStep >= att.step;
+    const isCurrent = currentStep === att.step - 1;
+    const ev = isExecuted && s.events ? s.events[att.step - 1] : null;
+
+    let statusText = 'PENDENTE';
+    let cardClass = 'attack-card';
+    let btnText = 'Disparar Ataque';
+
+    if (isExecuted && ev) {
+      statusText = ev.outcome || 'EXECUTADO';
+      if (ev.outcome === 'DENY') {
+        cardClass += ' executed-deny';
+        btnText = '✓ Bloqueado (DENY)';
+      } else if (ev.outcome === 'REQUIRE_HITL') {
+        cardClass += ' active-step';
+        btnText = '✓ Aguardando HITL';
+      } else if (ev.outcome === 'DETECTED') {
+        cardClass += ' executed-deny';
+        btnText = '✓ Detectado (Tamper)';
+      } else {
+        cardClass += ' executed';
+        btnText = '✓ Concluído';
+      }
+    } else if (isCurrent) {
+      cardClass += ' active-step';
+      btnText = 'Disparar Agora ▶';
+    }
+
+    return `
+      <div class="${cardClass}" id="attack-step-${att.step}">
+        <div class="attack-card-main">
+          <div class="attack-meta">
+            <span class="attack-phase-tag">${esc(att.phase)}</span>
+            <span class="attack-source-tag">${esc(att.infra)}</span>
+            <span class="tag-status ${isExecuted ? (ev && ev.outcome === 'DENY' ? 'critical' : 'normal') : ''}">${esc(statusText)}</span>
+          </div>
+          <div class="attack-title">${esc(att.title)}</div>
+          <div class="attack-target">Infra: <code>${esc(att.infra)}</code> → Alvo: <code>${esc(att.target)}</code></div>
+        </div>
+        <button class="attack-btn" onclick="executeAttackTo(${att.step})">${esc(btnText)}</button>
+      </div>
+    `;
+  }).join('');
+}
+
+// FORMATADOR DE DATA E HORA INSTITUCIONAL
+function formatDateTime(ev) {
+  if (!ev) return '—';
+  if (ev.timestamp) return ev.timestamp;
+  if (ev.created_at) return ev.created_at;
+
+  const lsn = ev.lsn || 1;
+  const baseMs = new Date('2026-09-23T20:15:00-03:00').getTime();
+  const d = new Date(baseMs + (lsn - 1) * 12000);
+  
+  const pad = n => String(n).padStart(2, '0');
+  const day = pad(d.getDate());
+  const mon = pad(d.getMonth() + 1);
+  const yr = d.getFullYear();
+  const hr = pad(d.getHours());
+  const min = pad(d.getMinutes());
+  const sec = pad(d.getSeconds());
+  return `${day}/${mon}/${yr} ${hr}:${min}:${sec}`;
+}
+
+// HINT / NOTIFICAÇÃO DE ATAQUE NO CANTO INFERIOR DIREITO
+let hintTimeout = null;
+
+window.closeAttackHint = function() {
+  const h = $('#attackHint');
+  if (h) h.classList.remove('show');
+  if (hintTimeout) clearTimeout(hintTimeout);
 };
+
+function showAttackHint(attack, ev) {
+  const h = $('#attackHint');
+  if (!h || !attack) return;
+
+  const outcome = ev?.outcome || 'EXECUTADO';
+  const upstreamDelta = ev?.upstream_delta ?? 0;
+  const reasonCode = ev?.reason_code || ev?.details?.policy_decision?.reason_code || '';
+  const dt = formatDateTime(ev || { lsn: attack.step });
+
+  const hintTime = $('#hintTime');
+  if (hintTime) hintTime.textContent = dt;
+
+  $('#hintAttackName').textContent = attack.title;
+  $('#hintInfraName').textContent = `${attack.infra} (${attack.target})`;
+
+  const outcomeBadge = $('#hintOutcome');
+  outcomeBadge.textContent = outcome + (reasonCode ? ` [${reasonCode}]` : '');
+  outcomeBadge.className = 'hint-outcome-badge ' + (outcome === 'DENY' ? 'DENY' : outcome === 'REQUIRE_HITL' ? 'REQUIRE_HITL' : outcome === 'DETECTED' ? 'DENY' : 'PASS');
+
+  const upstreamBadge = $('#hintUpstream');
+  upstreamBadge.textContent = `upstream=${upstreamDelta}`;
+  upstreamBadge.style.color = upstreamDelta > 0 ? 'var(--gov-green)' : 'var(--gov-muted)';
+
+  const badge = $('#hintBadge');
+  if (outcome === 'DENY') {
+    h.className = 'attack-hint show deny';
+    badge.textContent = '🛑 ATAQUE BLOQUEADO';
+    badge.style.color = 'var(--gov-red)';
+    $('#hintDesc').textContent = `Ação contra ${attack.infra} interceptada e BARRADA pelo Gateway com efeito zero (upstream=0) em ${dt}.`;
+  } else if (outcome === 'REQUIRE_HITL') {
+    h.className = 'attack-hint show hitl';
+    badge.textContent = '⚠️ AUTORIZAÇÃO HUMANA EXIGIDA';
+    badge.style.color = 'var(--gov-gold)';
+    $('#hintDesc').textContent = `Ação de alto risco exige chancela humana de operador de gabinete (HITL) para prosseguir. Registrado em ${dt}.`;
+  } else if (outcome === 'DETECTED') {
+    h.className = 'attack-hint show deny';
+    badge.textContent = '🚨 FRAUDE / SABOTAGEM DETECTADA';
+    badge.style.color = 'var(--gov-red)';
+    $('#hintDesc').textContent = `Tentativa de adulteração detectada pelo elo criptográfico Merkle da trilha HRKL em ${dt}.`;
+  } else {
+    h.className = 'attack-hint show pass';
+    badge.textContent = 'ℹ️ EVENTO PROCESSADO';
+    badge.style.color = 'var(--gov-blue-primary)';
+    $('#hintDesc').textContent = (attack.desc || `Ação executada com sucesso contra ${attack.target}.`) + ` Registrado em ${dt}.`;
+  }
+
+  if (hintTimeout) clearTimeout(hintTimeout);
+  hintTimeout = setTimeout(() => {
+    h.classList.remove('show');
+  }, 5500);
+}
+
+// DETERMINAR METADADOS E ÍCONE DA ARESTA
+function getEdgeInfo(edge, s, currentStep) {
+  let lsn = null;
+  if (edge.to && edge.to.startsWith('event:')) {
+    lsn = parseInt(edge.to.replace('event:', ''), 10);
+  } else if (edge.from && edge.from.startsWith('event:')) {
+    lsn = parseInt(edge.from.replace('event:', ''), 10);
+  }
+
+  const ev = (s.events && lsn) ? s.events.find(e => e.lsn === lsn) : null;
+  const att = lsn ? ATTACKS[lsn - 1] : null;
+  const isCurrentAttack = Boolean(currentStep && lsn === currentStep);
+
+  let icon = '⚡';
+  let badgeColor = '#0c326f';
+  let badgeBg = '#f0f5fc';
+
+  if (edge.type === 'PART_OF_INCIDENT') {
+    icon = '🚨';
+    badgeColor = '#c9182b';
+    badgeBg = '#fdebee';
+  } else if (ev) {
+    if (ev.outcome === 'DENY') {
+      icon = '🛑';
+      badgeColor = '#c9182b';
+      badgeBg = '#fdebee';
+    } else if (ev.outcome === 'REQUIRE_HITL') {
+      icon = '⚠️';
+      badgeColor = '#b87704';
+      badgeBg = '#fff8e8';
+    } else if (ev.outcome === 'DETECTED') {
+      icon = '🚨';
+      badgeColor = '#c9182b';
+      badgeBg = '#fdebee';
+    } else if (ev.actor && ev.actor.includes('human')) {
+      icon = '✍️';
+      badgeColor = '#147a24';
+      badgeBg = '#eaf8ed';
+    } else if (ev.event_type && ev.event_type.includes('lateral')) {
+      icon = '🔀';
+      badgeColor = '#b87704';
+      badgeBg = '#fff8e8';
+    } else if (ev.event_type && (ev.event_type.includes('login') || ev.event_type.includes('process') || ev.event_type.includes('query'))) {
+      icon = '⚔️';
+      badgeColor = '#df9b15';
+      badgeBg = '#fff8e8';
+    } else if (ev.asset && (ev.asset.includes('public-edge') || ev.asset.includes('edge'))) {
+      icon = '🛡️';
+      badgeColor = '#0c326f';
+      badgeBg = '#f0f5fc';
+    } else if (ev.asset && ev.asset.includes('case')) {
+      icon = '🏛️';
+      badgeColor = '#0c326f';
+      badgeBg = '#f0f5fc';
+    } else {
+      icon = '⚡';
+    }
+  }
+
+  const attackTitle = att ? att.title : (ev ? `${ev.event_type}` : 'Conexão Monitorada');
+  const outcomeText = ev ? ` [${ev.outcome}]` : '';
+
+  return {
+    lsn,
+    ev,
+    att,
+    isCurrentAttack,
+    icon,
+    badgeColor,
+    badgeBg,
+    attackTitle,
+    outcomeText
+  };
+}
+
+// PAINEL DIREITO: GRAFO TEMPORAL COM INFRAESTRUTURA E ATAQUE EM TEMPO REAL
+function renderGraph(s) {
+  const e = $('#graph');
+  const nodes = s.graph.nodes || [];
+  const edges = s.graph.edges || [];
+  $('#graphStats').textContent = `${nodes.length} nós / ${edges.length} arestas`;
+
+  // Atualizar Banner de Ataque em Tempo Real
+  const currentStep = s.step || 0;
+  const currentAttack = currentStep > 0 ? ATTACKS[currentStep - 1] : null;
+  const nextAttack = currentStep < ATTACKS.length ? ATTACKS[currentStep] : null;
+
+  if (currentAttack) {
+    $('#bannerInfraTarget').textContent = `${currentAttack.infra} (${currentAttack.target})`;
+    $('#bannerAttackName').textContent = currentAttack.title;
+  } else {
+    $('#bannerInfraTarget').textContent = 'Infraestrutura Pronta • Perímetro Monitorado';
+    $('#bannerAttackName').textContent = `Próximo: ${nextAttack ? nextAttack.title : 'Nenhum'}`;
+  }
+
+  if (!nodes.length) {
+    e.innerHTML = '<div class="empty graph-empty">O grafo temporal surgirá conforme os ataques forem executados contra a infraestrutura do STF.</div>';
+    return;
+  }
+
+  const W = 760;
+  const H = 460;
+  const v = nodes.slice(-28);
+  const ids = new Set(v.map(n => n.id));
+  const pos = new Map();
+
+  // Mapeamento institucional de nomes no Grafo
+  const labelMap = {
+    'public-edge': 'Firewall/WAF Borda',
+    'edge': 'Rede Perímetro',
+    'identity-provider': 'VDI Ministro (IAM)',
+    'srv-app-07': 'Servidor Linux STF',
+    'srv-db-02': 'Rede Banco Judicial',
+    'db-judicial-lab': 'Banco Judicial Autos',
+    'case://SYNTHETIC/RE-000001': 'PJe Autos RE-000001',
+    'document://SYNTHETIC/DOC-001': 'Acórdão DOC-001 (Sigiloso)',
+    'document://SYNTHETIC/DOC-999': 'Documento Alvo DOC-999',
+    'evidence-log': 'Preservação HRKL',
+    'evidence://STF-POC-001': 'Evidence Bundle',
+    'ai-attacker-synthetic': 'Agente Atacante',
+    'service-account-17': 'Identidade Invasora (Conta 17)',
+    'human:approver-01': 'Aprovador de Gabinete'
+  };
+
+  const nodeIconMap = {
+    'public-edge': '🛡️',
+    'edge': '🛡️',
+    'identity-provider': '⚖️',
+    'srv-app-07': '🐧',
+    'srv-db-02': '🗄️',
+    'db-judicial-lab': '🗄️',
+    'case://SYNTHETIC/RE-000001': '🏛️',
+    'document://SYNTHETIC/DOC-001': '📄',
+    'document://SYNTHETIC/DOC-999': '📄',
+    'evidence-log': '⛓️',
+    'evidence://STF-POC-001': '📦',
+    'ai-attacker-synthetic': '🤖',
+    'service-account-17': '👤',
+    'human:approver-01': '👨‍⚖️'
+  };
+
+  // Posicionamento concêntrico dos nós
+  v.forEach(n => {
+    const ring = n.kind === 'incident' ? 0 : n.kind === 'event' ? 1 : 2;
+    const a = v.filter(x => (x.kind === 'incident' ? 0 : x.kind === 'event' ? 1 : 2) === ring);
+    const k = a.indexOf(n);
+    const r = ring === 0 ? 0 : ring === 1 ? 110 : 175;
+    const ang = Math.PI * 2 * (k / Math.max(a.length, 1)) - Math.PI / 2;
+    pos.set(n.id, { x: W / 2 + Math.cos(ang) * r, y: H / 2 + Math.sin(ang) * r });
+  });
+
+  const activeHints = [];
+
+  // Renderização das Arestas com Ícones nas arestas e Hints no local do ataque
+  const linesAndBadges = edges.filter(x => ids.has(x.from) && ids.has(x.to)).map(x => {
+    const a = pos.get(x.from);
+    const b = pos.get(x.to);
+    const mx = (a.x + b.x) / 2;
+    const my = (a.y + b.y) / 2;
+
+    const edgeInfo = getEdgeInfo(x, s, currentStep);
+    const isAttack = edgeInfo.isCurrentAttack;
+
+    // Calculo do Hint na Aresta com o nome do ataque
+    const hintText = `${edgeInfo.icon} ${edgeInfo.attackTitle}${edgeInfo.outcomeText}`;
+    const hintWidth = Math.min(Math.max(hintText.length * 6.5 + 24, 120), 280);
+    let hintX = Math.max(hintWidth / 2 + 10, Math.min(W - hintWidth / 2 - 10, mx));
+    let hintY = my - 24;
+    let arrowPoints = `${mx - 5},${my - 12} ${mx + 5},${my - 12} ${mx},${my - 7}`;
+
+    if (my < 50) {
+      hintY = my + 24;
+      arrowPoints = `${mx - 5},${my + 12} ${mx + 5},${my + 12} ${mx},${my + 7}`;
+    }
+
+    if (isAttack) {
+      activeHints.push(`
+        <g class="edge-attack-hint-callout">
+          <polygon points="${arrowPoints}" fill="#c9182b" />
+          <rect x="${hintX - hintWidth / 2}" y="${hintY - 11}" width="${hintWidth}" height="22" rx="4" class="edge-hint-rect" />
+          <text x="${hintX}" y="${hintY}" text-anchor="middle" dominant-baseline="central" class="edge-hint-label">
+            ${esc(hintText)}
+          </text>
+        </g>
+      `);
+    }
+
+    return `
+      <g class="graph-edge-group ${isAttack ? 'active-attack-edge' : ''}">
+        <!-- Linha da aresta -->
+        <line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" 
+              class="graph-line ${isAttack ? 'attack-pulse-line' : ''}" 
+              stroke="${isAttack ? '#c9182b' : edgeInfo.badgeColor}" 
+              stroke-width="${isAttack ? 3 : 1.5}" />
+
+        <!-- ÍCONE NO LUGAR / CENTRO DA ARESTA -->
+        <g class="edge-icon-badge" transform="translate(${mx}, ${my})">
+          <circle cx="0" cy="0" r="${isAttack ? 13 : 10}" 
+                  fill="${edgeInfo.badgeBg}" 
+                  stroke="${isAttack ? '#c9182b' : edgeInfo.badgeColor}" 
+                  stroke-width="${isAttack ? 2.5 : 1.5}" />
+          <text x="0" y="0" text-anchor="middle" dominant-baseline="central" 
+                font-size="${isAttack ? 12 : 9.5}" class="edge-glyph">${edgeInfo.icon}</text>
+        </g>
+
+        <!-- Tooltip no hover da aresta -->
+        ${!isAttack ? `
+          <g class="edge-hover-hint">
+            <polygon points="${arrowPoints}" fill="#0c326f" />
+            <rect x="${hintX - hintWidth / 2}" y="${hintY - 10}" width="${hintWidth}" height="20" rx="4" class="edge-hover-rect" />
+            <text x="${hintX}" y="${hintY}" text-anchor="middle" dominant-baseline="central" class="edge-hover-label">
+              ${esc(hintText)}
+            </text>
+          </g>
+        ` : ''}
+      </g>
+    `;
+  }).join('');
+
+  // Estilização institucional dos nós
+  const nodeStyles = {
+    incident: { r: 24, fill: '#fff0f2', stroke: '#c9182b', defaultIcon: '🚨', iconSize: 16 },
+    actor:    { r: 18, fill: '#fff8e8', stroke: '#b87704', defaultIcon: '👤', iconSize: 13 },
+    asset:    { r: 18, fill: '#f0f5fc', stroke: '#0c326f', defaultIcon: '🏛️', iconSize: 13 },
+    event:    { r: 13, fill: '#ffffff', stroke: '#1351b4', defaultIcon: '⚡', iconSize: 10 }
+  };
+
+  const circles = v.map(n => {
+    const p = pos.get(n.id);
+    const style = nodeStyles[n.kind] || nodeStyles.asset;
+    const isIncident = n.kind === 'incident';
+    const isSelected = selectedNode && selectedNode.id === n.id;
+    const friendlyName = labelMap[n.label] || n.label;
+    const icon = nodeIconMap[n.label] || (n.kind === 'actor' && n.label.includes('ai') ? '🤖' : style.defaultIcon);
+
+    return `
+      <g class="graph-node" onclick="selectGraphNode('${esc(n.id)}', '${esc(n.kind)}', '${esc(friendlyName)}')">
+        ${isIncident ? `<circle cx="${p.x}" cy="${p.y}" r="${style.r + 7}" fill="none" stroke="#c9182b" stroke-width="2" stroke-dasharray="4 3" class="pulse-ring"/>` : ''}
+        ${isSelected ? `<circle cx="${p.x}" cy="${p.y}" r="${style.r + 5}" fill="none" stroke="#df9b15" stroke-width="3" />` : ''}
+        <circle cx="${p.x}" cy="${p.y}" r="${style.r}" fill="${style.fill}" stroke="${isSelected ? '#df9b15' : style.stroke}" stroke-width="${isSelected ? 3 : 2}" />
+        <text x="${p.x}" y="${p.y}" text-anchor="middle" dominant-baseline="central" font-size="${style.iconSize}" class="node-icon">${icon}</text>
+        <text x="${p.x}" y="${p.y + style.r + 13}" text-anchor="middle" class="node-label">${esc(short(friendlyName, 20))}</text>
+      </g>
+    `;
+  }).join('');
+
+  e.innerHTML = `
+    <svg viewBox="0 0 ${W} ${H}">
+      <g class="graph-edges-layer">${linesAndBadges}</g>
+      <g class="graph-nodes-layer">${circles}</g>
+      <g class="graph-hints-layer">${activeHints.join('')}</g>
+    </svg>
+  `;
+}
+
+// SELEÇÃO DE NÓ NO GRAFO
+window.selectGraphNode = function(id, kind, label) {
+  selectedNode = { id, kind, label };
+  $('#focusAsset').textContent = label;
+  $('#focusNarrative').textContent = `Nó selecionado na infraestrutura: [${kind.toUpperCase()}] ${label}.`;
+  if (state) renderGraph(state);
+};
+
+// ATUALIZAÇÃO DO CARD DE FOCO DO DIAGNÓSTICO
+function updateFocusCard(s) {
+  const ev = s.events && s.events.length ? s.events[s.events.length - 1] : null;
+  const badge = $('#lastActionBadge');
+
+  if (!ev) {
+    $('#focusAsset').textContent = '—';
+    $('#focusActor').textContent = '—';
+    $('#focusDecision').textContent = '—';
+    $('#focusUpstream').textContent = '0';
+    $('#focusNarrative').textContent = 'Aguardando o início da simulação. Dispare um ataque à esquerda para visualizar o impacto no grafo.';
+    badge.textContent = 'PRONTO';
+    badge.className = 'status-pill ready';
+    return;
+  }
+
+  $('#focusAsset').textContent = ev.asset || '—';
+  $('#focusActor').textContent = ev.actor || '—';
+
+  const dec = ev.details?.policy_decision;
+  if (dec) {
+    $('#focusDecision').textContent = `${ev.outcome} (${dec.reason_code || 'POLÍTICA'})`;
+    badge.textContent = ev.outcome;
+    badge.className = ev.outcome === 'DENY' ? 'status-pill deny' : 'status-pill ready';
+  } else {
+    $('#focusDecision').textContent = ev.outcome || 'OBSERVADO';
+    badge.textContent = ev.outcome;
+    badge.className = 'status-pill ready';
+  }
+
+  $('#focusUpstream').textContent = ev.upstream_delta ?? 0;
+  $('#focusNarrative').textContent = `[${formatDateTime(ev)}] LSN ${ev.lsn} (${ev.source}): ${ev.summary}`;
+}
+
+// PAINEL INFERIOR: TRILHA (Eventos e Rastros)
+function renderTrail(s) {
+  const b = $('#eventRows');
+  if (!s.events || !s.events.length) {
+    b.innerHTML = '<tr><td colspan="8" class="empty">Nenhum evento registrado ainda. Dispare um ataque acima.</td></tr>';
+    return;
+  }
+
+  b.innerHTML = [...s.events].reverse().map(e => `
+    <tr>
+      <td><strong>${e.lsn}</strong></td>
+      <td><span class="trail-timestamp">${formatDateTime(e)}</span></td>
+      <td><span style="color:var(--gov-blue-light); font-weight:700;">${esc(e.source)}</span></td>
+      <td><strong>${esc(e.event_type)}</strong><br><small style="color:var(--gov-muted);">${esc(e.summary)}</small></td>
+      <td><code>${esc(e.actor)}</code> → <code style="color:var(--gov-gold); font-weight:700;">${esc(short(e.asset, 26))}</code></td>
+      <td><span class="outcome-tag ${esc(e.outcome)}">${esc(e.outcome)}</span><br><small style="color:var(--gov-muted);">${esc(e.reason_code || '')}</small></td>
+      <td style="font-weight:900; color:${e.upstream_delta ? 'var(--gov-green)' : 'var(--gov-muted)'};">${e.upstream_delta ?? 0}</td>
+      <td><code>${esc(short(e.event_hash, 10))}</code></td>
+    </tr>
+  `).join('');
+}
+
+// EXECUÇÃO DE ATAQUE ATÉ UM PASSO ESPECÍFICO
+window.executeAttackTo = async function(targetStep) {
+  if (running) return;
+  if (!state) state = await api('/api/state');
+
+  if (state.step >= targetStep) {
+    toast(`O ataque #${targetStep} já foi executado. Clique em "Reiniciar" para recomeçar.`);
+    return;
+  }
+
+  running = true;
+  $('#runBtn').disabled = true;
+  $('#stepBtn').disabled = true;
+
+  try {
+    while (state.step < targetStep && !state.completed) {
+      const nextStep = state.step + 1;
+      const r = await api('/api/step', { method: 'POST' });
+      render(r);
+      const currentAtt = ATTACKS[r.step - 1];
+      const lastEv = r.events && r.events.length ? r.events[r.events.length - 1] : null;
+      showAttackHint(currentAtt, lastEv);
+      if (state.step < targetStep) {
+        await new Promise(res => setTimeout(res, 350));
+      }
+    }
+  } catch (err) {
+    toast('Falha ao disparar ataque: ' + err.message);
+  } finally {
+    running = false;
+    $('#runBtn').disabled = false;
+    $('#stepBtn').disabled = false;
+  }
+};
+
+// CONSULTA E RENDERIZAÇÃO DO HERACLITUSDB (WSL LINUX)
+async function loadHeraclitusWslData() {
+  const badge = $('#integrationBadge');
+  const summaryBadge = $('#heraclitusSummaryBadge');
+  const rows = $('#heraclitusEventRows');
+
+  try {
+    const res = await api('/api/heraclitus-adapter');
+    const snap = res.snapshot || {};
+
+    if (snap.connected) {
+      badge.textContent = 'CONECTADO (WSL 8080)';
+      badge.className = 'tag-status normal';
+
+      const redTeam = snap.surfaces?.red_team?.data;
+      if (redTeam && Array.isArray(redTeam.events)) {
+        summaryBadge.textContent = `${redTeam.events.length} eventos lidos ao vivo do WSL Linux`;
+        summaryBadge.style.color = 'var(--gov-green-light)';
+
+        rows.innerHTML = redTeam.events.map(ev => `
+          <tr>
+            <td><strong>${ev.lsn}</strong></td>
+            <td><span class="trail-timestamp">${formatDateTime(ev)}</span></td>
+            <td><code>${esc(short(ev.attack_id, 22))}</code></td>
+            <td>${esc(ev.vector || '—')}</td>
+            <td><code style="color:var(--gov-gold); font-weight:700;">${esc(ev.target || '—')}</code></td>
+            <td><span class="outcome-tag ${ev.result === 'pass' ? 'PASS' : 'DENY'}">${esc(ev.result?.toUpperCase() || 'PASS')}</span></td>
+            <td><code>${esc(short(ev.record_hash, 16))}</code></td>
+          </tr>
+        `).join('');
+      } else {
+        summaryBadge.textContent = 'Adapter conectado (aguardando eventos)';
+        rows.innerHTML = '<tr><td colspan="7" class="empty">Heraclitus conectado, nenhum evento retornado.</td></tr>';
+      }
+    } else {
+      badge.textContent = 'NÃO CONECTADO';
+      badge.className = 'tag-status';
+      summaryBadge.textContent = 'HeraclitusDB local indisponível';
+      rows.innerHTML = '<tr><td colspan="7" class="empty">HeraclitusDB não respondeu na porta 8080 do WSL.</td></tr>';
+    }
+  } catch (e) {
+    badge.textContent = 'ERRO CONEXÃO';
+    summaryBadge.textContent = e.message;
+    rows.innerHTML = `<tr><td colspan="7" class="empty">Erro ao conectar: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+// NAVEGAÇÃO DE ABAS NA TRILHA INFERIOR
+$('#tabTrailBtn').onclick = () => {
+  $('#tabTrailBtn').classList.add('active');
+  $('#tabHeraclitusBtn').classList.remove('active');
+  $('#trailTabContent').classList.add('active');
+  $('#heraclitusTabContent').classList.remove('active');
+};
+
+$('#tabHeraclitusBtn').onclick = () => {
+  $('#tabHeraclitusBtn').classList.add('active');
+  $('#tabTrailBtn').classList.remove('active');
+  $('#heraclitusTabContent').classList.add('active');
+  $('#trailTabContent').classList.remove('active');
+  loadHeraclitusWslData();
+};
+
+// BOTÕES DE AÇÃO GLOBAIS
+$('#stepBtn').onclick = async () => {
+  if (state && state.completed) {
+    toast('Campanha já concluída. Reinicie para nova execução.');
+    return;
+  }
+  try {
+    const r = await api('/api/step', { method: 'POST' });
+    render(r);
+    const currentAtt = ATTACKS[r.step - 1];
+    const lastEv = r.events && r.events.length ? r.events[r.events.length - 1] : null;
+    showAttackHint(currentAtt, lastEv);
+    toast(`Passo ${r.step} executado com sucesso`);
+  } catch (e) {
+    toast('Erro no passo: ' + e.message);
+  }
+};
+
+$('#runBtn').onclick = async () => {
+  if (running) return;
+  running = true;
+  $('#runBtn').disabled = true;
+  $('#runBtn').textContent = 'Executando…';
+
+  try {
+    while (running && state && !state.completed) {
+      const r = await api('/api/step', { method: 'POST' });
+      render(r);
+      const currentAtt = ATTACKS[r.step - 1];
+      const lastEv = r.events && r.events.length ? r.events[r.events.length - 1] : null;
+      showAttackHint(currentAtt, lastEv);
+      await new Promise(res => setTimeout(res, 380));
+    }
+    if (state?.completed) toast('Campanha de ataques executada integralmente!');
+  } catch (e) {
+    toast('Erro durante a execução: ' + e.message);
+  } finally {
+    running = false;
+    $('#runBtn').disabled = false;
+    $('#runBtn').textContent = 'Executar Campanha Completa';
+  }
+};
+
+$('#resetBtn').onclick = async () => {
+  running = false;
+  try {
+    const r = await api('/api/reset', { method: 'POST' });
+    render(r);
+    toast('Ambiente reiniciado');
+  } catch (e) {
+    toast('Erro ao reiniciar: ' + e.message);
+  }
+};
+
+$('#exportBtn').onclick = async () => {
+  try {
+    const r = await api('/api/export', { method: 'POST' });
+    toast(`Evidence Bundle gerado: ${r.status}`);
+  } catch (e) {
+    toast('Falha ao exportar bundle: ' + e.message);
+  }
+};
+
+$('#downloadBtn').onclick = () => {
+  location.href = '/api/evidence/download';
+};
+
+// INICIALIZAÇÃO
+async function init() {
+  try {
+    const s = await api('/api/state');
+    render(s);
+  } catch (e) {
+    toast('Falha ao conectar à POC: ' + e.message);
+  }
+  loadHeraclitusWslData();
+}
+
+init();
