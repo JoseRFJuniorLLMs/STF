@@ -1241,8 +1241,9 @@ function renderGraph(s) {
       nodeStrokeWidth = 3;
     }
 
-    const countStr = String(attackCount);
-    const pillW = Math.max(22, countStr.length * 7 + 12);
+    // Vermelho leva caveira (tentativas), tal como o verde leva ✓ (bloqueados)
+    const countStr = `☠${attackCount}`;
+    const pillW = Math.max(30, countStr.length * 7 + 12);
 
     return `
       <g class="graph-node ${n.isFixed ? 'fixed-network-node' : 'dynamic-attack-node'} ${isUnderAttackNow ? 'targeted-node attack-active-now' : ''} ${hasBeenAttacked ? 'node-has-attacks' : ''}" 
@@ -1295,7 +1296,7 @@ function renderGraph(s) {
             <title>${attackCount} tentativas de ataque</title>
             <rect x="${-pillW / 2}" y="-10" width="${pillW}" height="20" rx="10" fill="${LEGEND.attack}" stroke="#ffffff" stroke-width="2" class="popup-rect-shadow" />
             <text x="0" y="0" text-anchor="middle" dominant-baseline="central" fill="#ffffff" font-size="11" font-weight="900" font-family="ui-monospace, Consolas, monospace">
-              ${attackCount}
+              ${countStr}
             </text>
           </g>
         ` : ''}
@@ -1337,7 +1338,7 @@ function renderGraph(s) {
       <g class="graph-nodes-layer">${circles}</g>
     </svg>
     <div class="graph-legend" aria-label="Legenda do grafo">
-      <span class="lg-item"><span class="lg-dot" style="background:${LEGEND.attack}">17</span>tentativas de ataque</span>
+      <span class="lg-item"><span class="lg-dot" style="background:${LEGEND.attack}">☠</span>tentativas de ataque</span>
       <span class="lg-item"><span class="lg-dot" style="background:${LEGEND.blocked}">✓</span>bloqueado — não invadiu</span>
       <span class="lg-item"><span class="lg-dot" style="background:${LEGEND.breached}">2</span>chegou ao alvo — invadiu</span>
     </div>
