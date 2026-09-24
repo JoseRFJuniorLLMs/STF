@@ -66,4 +66,28 @@ class IngestTests(unittest.TestCase):
         changed=e.submit_action("export_restricted","service-account-17","document://SYNTHETIC/DOC-999",{"document":"DOC-999","format":"pdf"})
         self.assertEqual(changed["decision"]["reason_code"],"PARAMETERS_DIGEST_MISMATCH")
 
+
+    def test_duplicate_raw_event_is_idempotent(self):
+        e=mod.PocEngine()
+        kind,raw=telemetry.sample_campaign()[0]
+        first=e.ingest_telemetry(kind,raw)
+        second=e.ingest_telemetry(kind,raw)
+        self.assertEqual(first["status"],"INGESTED")
+        self.assertEqual(second["status"],"IDEMPOTENT")
+        self.assertEqual(len(e.events),1)
+
+    def test_same_raw_id_with_different_payload_is_conflict(self):
+        e=mod.PocEngine()
+        kind,raw=telemetry.sample_campaign()[0]
+        e.ingest_telemetry(kind,raw)
+        changed=dict(raw); changed["waf_score"]=99
+        conflict=e.ingest_telemetry(kind,changed)
+        self.assertEqual(conflict["status"],"CONFLICT")
+        self.assertEqual(len(e.events),1)
+
+    def test_malformed_telemetry_types_are_rejected(self):
+        e=mod.PocEngine()
+        with self.assertRaises(ValueError):
+            e.ingest_telemetry("db",{"event_id":"x","principal":"p","database":"d","operation":123})
+
 if __name__=="__main__": unittest.main()
