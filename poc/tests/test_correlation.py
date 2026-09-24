@@ -47,7 +47,7 @@ class CorrelationTests(unittest.TestCase):
         signals=[
             {"signal_id":"A1","lsn":1,"hlc":1,"source_class":"IDENTITY","source":"IDENTITY","entities":["principal:a","service:shared"],"severity":"HIGH"},
             {"signal_id":"A2","lsn":2,"hlc":2,"source_class":"HOST","source":"HOST","entities":["principal:a","host:a1"],"severity":"HIGH"},
-            {"signal_id":"B1","lsn":3,"hlc":3,"source_class":"IDENTITY","source":"IDENTITY","entities":["principal:b","service:shared"],"severity":"HIGH"},
+            {"signal_id":"B1","lsn":3,"hlc":3,"source_class":"IDENTITY","source":"IDENTITY","entities":["principal:b","tenant:shared"],"severity":"HIGH"},
             {"signal_id":"B2","lsn":4,"hlc":4,"source_class":"HOST","source":"HOST","entities":["principal:b","host:b1"],"severity":"HIGH"},
         ]
         r=correlate(signals)
