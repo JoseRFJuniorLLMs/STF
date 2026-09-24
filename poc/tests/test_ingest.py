@@ -90,4 +90,19 @@ class IngestTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             e.ingest_telemetry("db",{"event_id":"x","principal":"p","database":"d","operation":123})
 
+
+    def test_existing_incident_is_not_replaced_by_unrelated_stronger_component(self):
+        e=mod.PocEngine()
+        for kind,raw in telemetry.sample_campaign(): e.ingest_telemetry(kind,raw)
+        original_principal=e.incident["principal"]
+        unrelated=[
+          ("identity",{"event_id":"B-IAM","principal":"other-principal","source_ip":"198.51.100.77","context":"new-device","result":"OBSERVED","severity":"HIGH","device_trust":"unknown"}),
+          ("host",{"event_id":"B-HOST","principal":"other-principal","host":"other-app","process":"synthetic-worker","os":"Linux","severity":"HIGH"}),
+          ("network",{"event_id":"B-NET","principal":"other-principal","src_host":"other-app","dst_host":"other-db","severity":"HIGH"}),
+          ("db",{"event_id":"B-DB","principal":"other-principal","database":"other-db","operation":"query","rows":99,"severity":"CRITICAL"}),
+        ]
+        for kind,raw in unrelated: e.ingest_telemetry(kind,raw)
+        self.assertEqual(e.incident["principal"],original_principal)
+        self.assertIn("principal:"+original_principal,e.incident["correlation"]["entities"])
+
 if __name__=="__main__": unittest.main()
