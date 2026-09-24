@@ -112,4 +112,23 @@ class PocEngineTests(unittest.TestCase):
         self.assertIn("OPEN",cmp["delta"]["incident"])
         self.assertIn("DETECTED",cmp["delta"]["tamper"])
 
+
+    def test_bundle_manifest_detects_non_event_tampering(self):
+        self.e.run_all()
+        bundle=self.e.evidence_bundle()
+        self.assertEqual(self.e.verify_bundle(bundle)["overall"],"PASS")
+        tampered=json.loads(json.dumps(bundle))
+        tampered["qualification"][0]["expected"]="HACKED"
+        result=self.e.verify_bundle(tampered)
+        self.assertEqual(result["manifest"],"FAIL")
+        self.assertEqual(result["overall"],"FAIL")
+
+    def test_bundle_manifest_detects_trust_tampering(self):
+        self.e.run_all()
+        tampered=json.loads(json.dumps(self.e.evidence_bundle()))
+        tampered["trust"]["institutional_signature"]="PASS"
+        result=self.e.verify_bundle(tampered)
+        self.assertEqual(result["manifest"],"FAIL")
+        self.assertEqual(result["overall"],"FAIL")
+
 if __name__=="__main__": unittest.main()
