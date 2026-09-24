@@ -1,5 +1,5 @@
 const $=s=>document.querySelector(s);let state=null,running=false,paused=false,presentationMode=false;
-async function api(path,opts={}){const r=await fetch(path,{headers:{'Content-Type':'application/json'},...opts});if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}
+async function api(path,opts={}){const headers={'Content-Type':'application/json','X-STF-POC':'1',...(opts.headers||{})};const r=await fetch(path,{...opts,headers});if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}
 function esc(s=''){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function short(s,n=14){if(!s)return'—';return s.length>n?s.slice(0,n)+'…':s}
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove('show'),2400)}
