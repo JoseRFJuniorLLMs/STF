@@ -2203,8 +2203,13 @@ i.heat-cell.heat-now { border: 2px solid var(--gov-gold-light); }
 }
 .proc-heatmap-svg {
   width: 100%;
-  max-height: 90px;
+  max-height: 140px;
   display: block;
+}
+.proc-heatmap-svg .axis-text {
+  font-size: 8px;
+  font-family: inherit;
+  fill: var(--gov-muted);
 }
 
 .proc-timeline {

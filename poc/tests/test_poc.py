@@ -211,6 +211,28 @@ class PocEngineTests(unittest.TestCase):
         self.assertEqual(len(e.events),before)
         self.assertEqual(state["execution_mode"],"API_LAB")
 
+    def test_certidoes_emitir_e_listar(self):
+        cert = self.e.emit_certidao("Teste de indisponibilidade programada", 184)
+        self.assertTrue(cert["id"].startswith("CERT-2026-"))
+        self.assertIn("hash", cert)
+        self.assertIn("lsn", cert)
+        self.assertEqual(cert["duracao"], "3m 04s")
+        certs = self.e.list_certidoes()
+        self.assertTrue(any(c["id"] == cert["id"] for c in certs))
+        # Verifica se o evento está gravado na cadeia de evidências
+        ev = self.e.events[-1]
+        self.assertEqual(ev.event_type, "stf.resilience.certidao_indisponibilidade")
+        self.assertEqual(ev.event_hash, cert["hash"])
+
+    def test_interop_reconciliar_e_duplicata(self):
+        mock_ledger = type("MockLedger", (), {"listar": lambda self: {"processos": []}})()
+        reconcil = self.e.interop_reconciliar(mock_ledger)
+        self.assertEqual(reconcil["status"], "RECONCILIADO")
+        self.assertGreaterEqual(reconcil["total_monitoradas"], 3)
+        dup = self.e.interop_testar_duplicata(mock_ledger)
+        self.assertTrue(dup["deduplicated"])
+        self.assertEqual(dup["status"], "DUPLICATA_DETECTADA")
+
 class DesfechoUnicoTests(unittest.TestCase):
     """A mesma regra no grafo (contadores) e nos gráficos (classifyDecision)."""
     def test_eventos_de_controlo_nao_contam_como_tentativa(self):

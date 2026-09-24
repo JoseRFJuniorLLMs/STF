@@ -232,19 +232,12 @@ async function carregarDetalhe() {
 function renderProcessHeatmap(eventos) {
   if (!eventos || !eventos.length) return '';
   const porDia = new Map();
-  const agora = new Date();
-  const inicio = new Date(agora.getTime() - 27 * 86400000);
-  for (let i = 0; i < 28; i++) {
-    const d = new Date(inicio.getTime() + i * 86400000);
-    const chave = d.toISOString().slice(0, 10);
-    porDia.set(chave, { data: d, chave, count: 0, andamentos: 0, outros: 0 });
-  }
   eventos.forEach(ev => {
     const dataIso = ev.conteudo?.dataHora || (ev.ts_ms ? new Date(ev.ts_ms).toISOString() : null);
     if (!dataIso) return;
     const chave = String(dataIso).slice(0, 10);
     if (!porDia.has(chave)) {
-      porDia.set(chave, { data: new Date(dataIso), chave, count: 0, andamentos: 0, outros: 0 });
+      porDia.set(chave, { chave, count: 0, andamentos: 0, outros: 0 });
     }
     const item = porDia.get(chave);
     item.count++;
@@ -252,25 +245,56 @@ function renderProcessHeatmap(eventos) {
     else item.outros++;
   });
 
-  const slots = Array.from(porDia.values()).sort((a, b) => a.data - b.data);
-  const maxCont = Math.max(1, ...slots.map(s => s.count));
-  const nivel = n => (n === 0 ? 0 : Math.min(4, Math.max(1, Math.ceil((n / maxCont) * 4))));
+  const semanas = 53;
+  const hoje = new Date();
+  const diaSemanaHoje = hoje.getDay();
+  const fimGrade = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + (6 - diaSemanaHoje));
+  const inicioGrade = new Date(fimGrade.getTime() - (semanas * 7 - 1) * 86400000);
 
-  const cell = 12, gap = 4, pitch = cell + gap;
-  const cols = Math.ceil(slots.length / 4);
-  const W = cols * pitch + 30;
-  const H = 4 * pitch + 18;
+  const mesesNomes = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  const mesesLabels = [];
+  let ultimoMes = -1;
 
-  const squares = slots.map((s, i) => {
-    const col = Math.floor(i / 4);
-    const row = i % 4;
-    const x = 20 + col * pitch;
-    const y = 4 + row * pitch;
-    const lvl = nivel(s.count);
-    const diaFmt = procData(s.data);
-    const tip = `<strong>${diaFmt}</strong><div class="tt-row">Total de atos<b>${s.count}</b></div>${s.andamentos ? `<div class="tt-row">Andamentos<b>${s.andamentos}</b></div>` : ''}${s.outros ? `<div class="tt-row">Petições/Deslocamentos<b>${s.outros}</b></div>` : ''}`;
-    return `<rect class="heat-cell heat-${lvl}" x="${x}" y="${y}" width="${cell}" height="${cell}" rx="2.5" data-tip="${esc(tip)}"/>`;
-  }).join('');
+  const cell = 11, gap = 3, pitch = cell + gap;
+  const offsetX = 30, offsetY = 18;
+  const squares = [];
+
+  for (let w = 0; w < semanas; w++) {
+    for (let d = 0; d < 7; d++) {
+      const diaIdx = w * 7 + d;
+      const dataAtual = new Date(inicioGrade.getTime() + diaIdx * 86400000);
+      const chave = dataAtual.toISOString().slice(0, 10);
+      const mesAtual = dataAtual.getMonth();
+
+      if (d === 0 && mesAtual !== ultimoMes && w < semanas - 1) {
+        mesesLabels.push(`<text class="axis-text" x="${offsetX + w * pitch}" y="12" fill="#64748b" font-size="9" font-family="sans-serif">${mesesNomes[mesAtual]}</text>`);
+        ultimoMes = mesAtual;
+      }
+
+      const dados = porDia.get(chave);
+      const count = dados ? dados.count : 0;
+      const andamentos = dados ? dados.andamentos : 0;
+      const outros = dados ? dados.outros : 0;
+
+      const lvl = count === 0 ? 0 : count === 1 ? 1 : count <= 3 ? 2 : count <= 6 ? 3 : 4;
+      const x = offsetX + w * pitch;
+      const y = offsetY + d * pitch;
+
+      const diaFmt = procData(dataAtual.toISOString());
+      const tip = `<strong>${diaFmt}</strong><div class="tt-row">Total de atos<b>${count}</b></div>${andamentos ? `<div class="tt-row">Andamentos<b>${andamentos}</b></div>` : ''}${outros ? `<div class="tt-row">Petições/Deslocamentos<b>${outros}</b></div>` : ''}`;
+
+      squares.push(`<rect class="heat-cell heat-${lvl}" x="${x}" y="${y}" width="${cell}" height="${cell}" rx="2" data-tip="${esc(tip)}"/>`);
+    }
+  }
+
+  const weekdayLabels = [
+    `<text class="axis-text" x="4" y="${offsetY + 1 * pitch + 9}" fill="#64748b" font-size="9" font-family="sans-serif">Seg</text>`,
+    `<text class="axis-text" x="4" y="${offsetY + 3 * pitch + 9}" fill="#64748b" font-size="9" font-family="sans-serif">Qua</text>`,
+    `<text class="axis-text" x="4" y="${offsetY + 5 * pitch + 9}" fill="#64748b" font-size="9" font-family="sans-serif">Sex</text>`
+  ];
+
+  const W = offsetX + semanas * pitch + 10;
+  const H = offsetY + 7 * pitch + 8;
 
   return `
     <div class="proc-heatmap-box">
@@ -278,9 +302,13 @@ function renderProcessHeatmap(eventos) {
         <span>📊 Atividade processual no tempo (estilo GitHub · azul STF)</span>
         <small>${eventos.length} evento(s) imutáveis gravados no HeraclitusDB</small>
       </div>
-      <svg class="proc-heatmap-svg" viewBox="0 0 ${W} ${H}">
-        ${squares}
-      </svg>
+      <div style="width: 100%; overflow-x: auto;">
+        <svg class="proc-heatmap-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
+          ${mesesLabels.join('')}
+          ${weekdayLabels.join('')}
+          ${squares.join('')}
+        </svg>
+      </div>
       <div class="heat-foot">
         <span>Cada quadrado = 1 dia de tramitação · Passe o mouse para ver os atos</span>
         <span class="heat-scale">Menos ${[0, 1, 2, 3, 4].map(l => `<i class="heat-cell heat-${l}"></i>`).join('')} Mais</span>
@@ -617,6 +645,24 @@ function setupProcessos() {
     procAsOf = i === lsns.length - 1 ? null : lsns[i];
     carregarDetalhe();
   });
+  const viewProc = $('#viewProcessos');
+  const tt = $('#chartTooltip');
+  if (viewProc && tt) {
+    viewProc.addEventListener('mousemove', evt => {
+      const g = evt.target.closest('[data-tip]');
+      if (!g) { tt.classList.remove('show'); return; }
+      tt.innerHTML = g.getAttribute('data-tip');
+      const pad = 14;
+      let x = evt.clientX + pad, yy = evt.clientY + pad;
+      const r = tt.getBoundingClientRect();
+      if (x + r.width > window.innerWidth - 8) x = evt.clientX - r.width - pad;
+      if (yy + r.height > window.innerHeight - 8) yy = evt.clientY - r.height - pad;
+      tt.style.left = `${x}px`;
+      tt.style.top = `${yy}px`;
+      tt.classList.add('show');
+    });
+    viewProc.addEventListener('mouseleave', () => tt.classList.remove('show'));
+  }
   carregarProcessos();
   agendarPoll();
 }

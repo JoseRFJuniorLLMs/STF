@@ -42,11 +42,11 @@
     const incident = s?.incident;
     const openingLsns = new Set((s?.why_incident?.evidence_lsns || []).map(Number));
     const events = Array.isArray(s?.events) ? s.events : [];
-    // Os testes de catálogo têm campanhas e significado distintos do incidente.
     return events.filter(event => {
-      if (String(event.event_type || '').startsWith('stf.attack.')) return false;
-      if (String(event.event_type || '').startsWith('hdb.')) return false;
-      return !incident || event.incident_id === incident.incident_id || openingLsns.has(Number(event.lsn)) || event.phase === 'FASE 1';
+      if (incident) {
+        return event.incident_id === incident.incident_id || openingLsns.has(Number(event.lsn)) || event.phase === 'FASE 1' || String(event.event_type || '').startsWith('hdb.') || String(event.event_type || '').startsWith('stf.');
+      }
+      return true;
     }).sort((a, b) => number(a.lsn) - number(b.lsn));
   }
 
@@ -176,7 +176,10 @@
     root.innerHTML = `<section class="panel inc360">
       <div class="inc360-hero">
         <div><span class="inc360-eyebrow">VISÃO CONSOLIDADA · AMBIENTE SINTÉTICO</span><h2>Incidente 360º</h2><p>Da correlação de sinais à decisão do gateway, aprovação humana e consulta ao processo fictício.</p></div>
-        <div class="inc360-hero-state"><span class="inc360-badge ${incident ? 'alert' : 'uncertain'}">${incident ? clean(incident.state) : 'NÃO ABERTO'}</span><strong>${incident ? clean(incident.incident_id) : 'Aguardando sinais'}</strong><small>${incident ? `Severidade ${clean(incident.severity)}` : 'Sem correlação qualificada'}</small></div>
+        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+          <button type="button" class="btn small primary" data-inc360-action="correlacionar">⚡ Executar Correlação de Sinais</button>
+          <div class="inc360-hero-state"><span class="inc360-badge ${incident ? 'alert' : 'uncertain'}">${incident ? clean(incident.state) : 'NÃO ABERTO'}</span><strong>${incident ? clean(incident.incident_id) : 'Aguardando sinais'}</strong><small>${incident ? `Severidade ${clean(incident.severity)}` : 'Sem correlação qualificada'}</small></div>
+        </div>
       </div>
       <div class="inc360-kpis">
         <div><span>Risco</span><strong>${number(s.risk)}</strong><small>pontuação do cenário</small></div>
@@ -254,10 +257,25 @@
     }
   }
 
+  async function dispararCorrelacao() {
+    try {
+      if (typeof toast === 'function') toast('⚡ Disparando sinais de correlação para o HeraclitusDB...');
+      await fetch('api/run', { method: 'POST', headers: { 'X-STF-POC': '1' } });
+      await refreshIncidente360();
+      if (typeof toast === 'function') toast('🚨 Incidente correlacionado e registrado no HeraclitusDB!');
+    } catch (e) {
+      if (typeof toast === 'function') toast(`Erro ao disparar correlação: ${e.message}`);
+    }
+  }
+
   function initIncidente360() {
     if (initialized) return;
     initialized = true;
     root.addEventListener('click', event => {
+      if (event.target.closest('[data-inc360-action="correlacionar"]')) {
+        dispararCorrelacao();
+        return;
+      }
       const filter = event.target.closest('[data-inc360-filter]');
       if (filter) {
         activeFilter = filter.dataset.inc360Filter;

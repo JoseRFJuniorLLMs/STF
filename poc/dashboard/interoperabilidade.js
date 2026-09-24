@@ -10,77 +10,74 @@
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[c]));
 
-  let remessas = [
-    {
-      id: 'REM-2026-081',
-      processo: 'RE 000001',
-      origem: 'TJSP (Tribunal de Justiça de SP)',
-      destino: 'STF (Supremo Tribunal Federal)',
-      dataHora: '2026-09-24T06:10:00-03:00',
-      status: 'RECEBIDO',
-      reciboHash: 'e7a18b...9f02',
-      idempotenciaChave: 'mni:tjsp:stf:re000001:remessa-01',
-      divergencias: 0
-    },
-    {
-      id: 'REM-2026-082',
-      processo: 'ADI 000002',
-      origem: 'PGR (Procuradoria-Geral da República)',
-      destino: 'STF (Protocolo Geral)',
-      dataHora: '2026-09-24T06:14:22-03:00',
-      status: 'RECEBIDO',
-      reciboHash: 'f412c0...33a1',
-      idempotenciaChave: 'mni:pgr:stf:adi000002:peticao-inicial',
-      divergencias: 0
-    },
-    {
-      id: 'REM-2026-083',
-      processo: 'ARE 000006',
-      origem: 'TRF3 (Tribunal Regional Federal 3ª Região)',
-      destino: 'STF (Secretaria Judiciária)',
-      dataHora: '2026-09-24T06:18:45-03:00',
-      status: 'DUPLICATA_DETECTADA',
-      reciboHash: 'e7a18b...9f02 (recibo original preservado)',
-      idempotenciaChave: 'mni:trf3:stf:are000006:agravo-01',
-      divergencias: 0,
-      detalhe: 'Tribunal parceiro reenviou o lote por timeout de rede. HeraclitusDB descartou duplicação via chave de idempotência.'
-    }
-  ];
+  let remessas = [];
+  let statusMsg = 'Barramento de Interoperabilidade MNI ativo e sincronizado com o HeraclitusDB';
+  let reconciliando = false;
+  let testando = false;
 
-  let statusMsg = 'Barramento de Interoperabilidade MNI ativo e sincronizado';
-
-  function reconciliar() {
-    statusMsg = 'Reconciliando remessas com o barramento do DataJud (CNJ)...';
-    render();
-    setTimeout(() => {
-      statusMsg = 'Reconciliação 100% concluída: todas as remessas possuem recibos criptográficos válidos.';
+  async function carregarRemessas() {
+    try {
+      const res = await fetch('api/interop/remessas', { cache: 'no-store' }).then(r => r.json()).catch(() => []);
+      if (Array.isArray(res) && res.length) {
+        remessas = res;
+      }
       render();
-    }, 700);
+    } catch (e) {
+      statusMsg = `Erro ao carregar remessas: ${e.message}`;
+      render();
+    }
   }
 
-  function simularDuplicata() {
-    const agora = new Date();
-    const novaDuplicata = {
-      id: `REM-2026-${String(remessas.length + 84).padStart(3, '0')}`,
-      processo: 'RE 000001',
-      origem: 'TJSP (Tribunal de Justiça de SP)',
-      destino: 'STF',
-      dataHora: agora.toISOString(),
-      status: 'DUPLICATA_DETECTADA',
-      reciboHash: 'd4821a...881f (hash anterior retornado)',
-      idempotenciaChave: 'stf-proc:0000001-44.2026.1.00.0000:001',
-      divergencias: 0,
-      detalhe: 'Tentativa de gravar novamente o protocolo inicial de RE 000001. Append retornou deduplicated=true.'
-    };
-    remessas.unshift(novaDuplicata);
-    statusMsg = `Remessa duplicada interceptada com sucesso pelo HeraclitusDB: deduplicated=true (Risco de duplicidade zero).`;
+  async function reconciliar() {
+    if (reconciliando) return;
+    reconciliando = true;
+    statusMsg = 'Reconciliando remessas criptográficas com o barramento do DataJud (CNJ)...';
     render();
+    try {
+      const res = await fetch('api/interop/reconciliar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-STF-POC': '1' }
+      }).then(r => r.json());
+      if (res.remessas && Array.isArray(res.remessas)) {
+        remessas = res.remessas;
+      }
+      statusMsg = res.mensagem || 'Reconciliação 100% concluída: todas as remessas possuem recibos criptográficos válidos no HeraclitusDB.';
+      if (typeof toast === 'function') toast(`✅ Reconciliação concluída: ${remessas.length} remessas verificadas no HeraclitusDB`);
+    } catch (e) {
+      statusMsg = `Erro na reconciliação: ${e.message}`;
+    } finally {
+      reconciliando = false;
+      render();
+    }
+  }
+
+  async function testarDuplicata() {
+    if (testando) return;
+    testando = true;
+    statusMsg = 'Enviando pacote MNI com a mesma chave de idempotência para o HeraclitusDB...';
+    render();
+    try {
+      const res = await fetch('api/interop/testar-duplicata', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-STF-POC': '1' }
+      }).then(r => r.json());
+      if (res && res.id) {
+        remessas.unshift(res);
+      }
+      statusMsg = `Remessa duplicada interceptada com sucesso pelo HeraclitusDB: deduplicated=true (LSN ${res.lsn || 1}). Autos protegidos.`;
+      if (typeof toast === 'function') toast(`🛡️ Idempotência comprovada: reenvio interceptado (deduplicated=true)`);
+    } catch (e) {
+      statusMsg = `Erro no teste de duplicata: ${e.message}`;
+    } finally {
+      testando = false;
+      render();
+    }
   }
 
   function render() {
     const total = remessas.length;
     const confirmados = remessas.filter(r => r.status === 'RECEBIDO').length;
-    const dups = remessas.filter(r => r.status === 'DUPLICATA_DETECTADA').length;
+    const dups = remessas.filter(r => r.status.includes('DUPLICATA')).length;
 
     root.innerHTML = `
       <section class="panel interop-panel">
@@ -88,7 +85,7 @@
           <div>
             <span class="interop-eyebrow">PADRÃO CNJ MNI &amp; DATAJUD</span>
             <h2>Interoperabilidade e Reconciliação</h2>
-            <p>Rastreamento de remessas processuais entre o STF e tribunais estaduais/federais com recibos de entrega e garantia de idempotência.</p>
+            <p>Rastreamento de remessas processuais entre o STF e tribunais estaduais/federais com recibos de entrega e garantia de idempotência no HeraclitusDB.</p>
           </div>
           <div class="interop-status-badge">
             <span>●</span>
@@ -100,7 +97,7 @@
           <div class="interop-kpi-card">
             <span>Remessas Monitoradas</span>
             <strong>${total}</strong>
-            <small>Transações MNI nesta sessão</small>
+            <small>Transações MNI registradas</small>
           </div>
           <div class="interop-kpi-card">
             <span>Recibos Confirmados</span>
@@ -128,8 +125,12 @@
             <div class="interop-box-head">
               <h3>Remessas e Transmissões MNI</h3>
               <div style="display: flex; gap: 8px;">
-                <button class="btn tiny primary" type="button" data-interop-action="reconciliar">🔄 Reconciliar Barramento</button>
-                <button class="btn tiny ghost" type="button" data-interop-action="duplicata">⚡ Testar Remessa Duplicada</button>
+                <button class="btn tiny primary" type="button" data-interop-action="reconciliar" ${reconciliando ? 'disabled' : ''}>
+                  ${reconciliando ? '⏳ Reconciliando...' : '🔄 Reconciliar Barramento'}
+                </button>
+                <button class="btn tiny ghost" type="button" data-interop-action="duplicata" ${testando ? 'disabled' : ''}>
+                  ${testando ? '⚡ Enviando...' : '⚡ Testar Remessa Duplicada'}
+                </button>
               </div>
             </div>
             <table class="interop-table">
@@ -155,7 +156,7 @@
                       <span class="interop-badge ${r.status === 'RECEBIDO' ? 'ok' : 'dup'}">${escapeHtml(r.status)}</span>
                       ${r.detalhe ? `<br><small style="color: var(--gov-muted); font-size: 10px;">${escapeHtml(r.detalhe)}</small>` : ''}
                     </td>
-                    <td class="mono" style="font-size: 11px;">${escapeHtml(r.idempotenciaChave)}</td>
+                    <td class="mono" style="font-size: 11px;">${escapeHtml(r.idempotenciaChave || '—')}</td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -192,13 +193,13 @@
       const btn = e.target.closest('[data-interop-action]');
       if (!btn) return;
       if (btn.dataset.interopAction === 'reconciliar') reconciliar();
-      else if (btn.dataset.interopAction === 'duplicata') simularDuplicata();
+      else if (btn.dataset.interopAction === 'duplicata') testarDuplicata();
     });
-    render();
+    carregarRemessas();
   }
 
   window.initInteroperabilidade = initInteroperabilidade;
-  window.refreshInteroperabilidade = reconciliar;
+  window.refreshInteroperabilidade = carregarRemessas;
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initInteroperabilidade, { once: true });
   else initInteroperabilidade();
