@@ -19,6 +19,7 @@ from typing import Any
 from urllib.parse import urlparse, parse_qs
 from telemetry import sample_campaign, normalize
 from correlation import correlate
+from detector import evaluate as detect_event
 
 ROOT = Path(__file__).resolve().parent
 DASHBOARD = ROOT / "dashboard"
@@ -158,18 +159,15 @@ class PocEngine:
                 self.attack_graph["nodes"].append({"id":iid,"kind":"incident","label":INCIDENT_ID,"severity":self.incident["severity"]})
             self.attack_graph["edges"].append({"from":eid,"to":iid,"type":"PART_OF_INCIDENT"})
 
-    def _signal(self, ev: EvidenceEvent, reason: str) -> None:
-        raw=ev.details.get("raw_telemetry",{}) if isinstance(ev.details,dict) else {}
+    def _signal(self, ev: EvidenceEvent, detection: Any) -> None:
         normalized=ev.details.get("normalized_telemetry",{}) if isinstance(ev.details,dict) else {}
-        entities={ev.actor,ev.asset}
-        for key in ("src_ip","source_ip","principal","host","src_host","dst_host","database","resource","dst_service"):
-            value=raw.get(key)
-            if value not in (None,"","unknown"): entities.add(str(value))
         self.signals.append({
             "signal_id":f"SIG-{len(self.signals)+1:03d}","lsn":ev.lsn,"source":ev.source,
             "source_class":normalized.get("source_class",ev.source),
-            "severity":ev.severity,"reason_code":reason,"actor":ev.actor,"asset":ev.asset,
-            "entities":sorted(entities),
+            "severity":detection.severity,"reason_code":detection.reason_code,
+            "rule_id":detection.rule_id,"rule_explanation":detection.explanation,
+            "score":detection.score,"actor":ev.actor,"asset":ev.asset,
+            "entities":list(detection.entities),
             "campaign_id":CAMPAIGN_ID,"evidence_hash":ev.event_hash,
         })
 
@@ -204,8 +202,13 @@ class PocEngine:
             spec=dict(self._scenario[self.step_index]); self.step_index += 1
             incident_id=INCIDENT_ID if self.incident else None
             ev=self._append(spec,incident_id)
-            self.risk += int(spec.get("risk",0))
-            if spec.get("signal"): self._signal(ev,spec.get("reason","SECURITY_SIGNAL"))
+            normalized=ev.details.get("normalized_telemetry") if isinstance(ev.details,dict) else None
+            detection=detect_event(normalized)
+            if detection is not None:
+                self.risk += int(detection.score)
+                self._signal(ev,detection)
+            elif normalized is None:
+                self.risk += int(spec.get("risk",0))
             self._maybe_open_incident()
             if self.incident and ev.incident_id is None:
                 ev.incident_id=INCIDENT_ID; ev.event_hash=sha256_hex(ev.material())
