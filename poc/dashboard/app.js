@@ -8,51 +8,102 @@ let isFullscreen = false;
 // CATÁLOGO DOS 17 ATAQUES MAPEADOS À INFRAESTRUTURA DO STF
 // ========================================================
 const ATTACKS = [
-  { step: 1, title: '01. Calibração e Tráfego Benigno', infra: 'Firewall / WAF', target: 'public-edge', type: 'network.connection', phase: 'FASE 1', desc: 'Tráfego legítimo de calibração para estabelecer a linha de base no perímetro do STF.' },
-  { step: 2, title: '02. Sondagem no Perímetro (WAF)', infra: 'Firewall / WAF', target: 'public-edge', type: 'edge.suspicious', phase: 'FASE 1', desc: 'Padrão incomum de requisições no perímetro de borda do Portal do STF.' },
-  { step: 3, title: '03. Invasão de Sessão (IAM)', infra: 'Máquinas Ministros (VDI)', target: 'identity-provider', type: 'identity.login', phase: 'FASE 1', desc: 'Novo contexto de autenticação suspeito em estação de trabalho de gabinete (service-account-17).' },
-  { step: 4, title: '04. Execução de Processo Atípico', infra: 'Servidores Linux', target: 'srv-app-07', type: 'host.process', phase: 'FASE 1', desc: 'Processo incomum executado no servidor Linux do backend da aplicação judicial.' },
-  { step: 5, title: '05. Movimento Lateral Interno', infra: 'Servidores Linux', target: 'srv-db-02', type: 'network.lateral', phase: 'FASE 1', desc: 'Conexão lateral correlacionada entre o servidor de aplicação e o banco srv-db-02.' },
-  { step: 6, title: '06. Consulta Anômala a Metadados', infra: 'Banco Judicial', target: 'db-judicial-lab', type: 'db.query', phase: 'FASE 1', desc: 'Query fora do padrão da identidade em metadados processuais restritos no banco de dados.' },
-  { step: 7, title: '07. Acesso a Autos no PJe', infra: 'PJe / STF Digital', target: 'case://SYNTHETIC/RE-000001', type: 'app.resource_access', phase: 'FASE 1', desc: 'Acesso a processo restrito no PJe. O Sentinel correlaciona os sinais e ABRE O INCIDENTE!' },
-  { step: 8, title: '08. Tentativa de Alterar Processo', infra: 'PJe / STF Digital', target: 'case://SYNTHETIC/RE-000001', type: 'app.case_update_requested', phase: 'FASE 2', desc: 'Tentativa de alteração no processo RE-000001. Bloqueio automático pelo Gateway: DENY.' },
-  { step: 9, title: '09. Tentativa de Exportar Acórdão Sigiloso', infra: 'Agentes IA (VitórIA/Rafa)', target: 'document://SYNTHETIC/DOC-001', type: 'agent.tool_requested', phase: 'FASE 2', desc: 'Agente solicita exportação de documento restrito. O Gateway exige aprovação humana: REQUIRE_HITL.' },
-  { step: 10, title: '10. Aprovação Humana de Operador', infra: 'Gabinete / Operador', target: 'document://SYNTHETIC/DOC-001', type: 'approval.granted', phase: 'FASE 2', desc: 'Operador humano concede autorização vinculada estritamente à identidade, ação e parâmetros.' },
-  { step: 11, title: '11. Execução Única da Exportação', infra: 'PJe / Gateway', target: 'document://SYNTHETIC/DOC-001', type: 'tool.executed', phase: 'FASE 2', desc: 'Ação autorizada executa exatamente uma vez. Oráculo upstream emite recibo e soma 1.' },
-  { step: 12, title: '12. Tentativa de Replay de Autorização', infra: 'Agentes IA (VitórIA/Rafa)', target: 'document://SYNTHETIC/DOC-001', type: 'approval.replay', phase: 'FASE 2', desc: 'Invasor tenta reaproveitar a autorização consumida: Bloqueio estrito (REPLAY_DETECTED).' },
-  { step: 13, title: '13. Tentativa de Troca de Identidade', infra: 'Máquinas Ministros (VDI)', target: 'document://SYNTHETIC/DOC-001', type: 'identity.swap', phase: 'FASE 2', desc: 'Outro agente tenta usar a autorização concedida: Bloqueio (IDENTITY_BINDING_MISMATCH).' },
-  { step: 14, title: '14. Tentativa de Troca de Parâmetros', infra: 'PJe / STF Digital', target: 'document://SYNTHETIC/DOC-999', type: 'parameters.swap', phase: 'FASE 2', desc: 'Documento-alvo alterado após aprovação: Bloqueio (PARAMETERS_DIGEST_MISMATCH).' },
-  { step: 15, title: '15. Tentativa de Apagar Rastros (Tamper)', infra: 'Trilha HRKL', target: 'evidence-log', type: 'tamper.attempt', phase: 'FASE 2', desc: 'Invasor tenta sabotar histórico. Árvore Merkle e Hash-chain acusam quebra: DETECTED.' },
-  { step: 16, title: '16. Geração do Evidence Bundle', infra: 'HeraclitusDB', target: 'evidence://STF-POC-001', type: 'evidence.exported', phase: 'FASE 2', desc: 'Pacote criptográfico de provas digitais gerado com manifesto e prova Merkle completa.' },
-  { step: 17, title: '17. Verificação Offline da Integridade', infra: 'Auditoria Externa', target: 'evidence://STF-POC-001', type: 'evidence.verified', phase: 'FASE 2', desc: 'Perícia independente valida as provas matemáticas localmente e sem conexão à rede.' }
+  { step: 1, title: '01. Calibração e Tráfego Benigno', infra: 'Firewall / WAF Borda', target: 'public-edge', type: 'network.connection', phase: 'FASE 1', desc: 'Tráfego legítimo de calibração para estabelecer a linha de base no perímetro do STF.' },
+  { step: 2, title: '02. Sondagem no Perímetro (WAF)', infra: 'Firewall / WAF Borda', target: 'public-edge', type: 'edge.suspicious', phase: 'FASE 1', desc: 'Padrão incomum de requisições no perímetro de borda do Portal do STF.' },
+  { step: 3, title: '03. Invasão de Sessão (IAM)', infra: 'Gabinete Ministros (Horizon VDI)', target: 'identity-provider', type: 'identity.login', phase: 'FASE 1', desc: 'Novo contexto de autenticação suspeito em estação de trabalho de gabinete (service-account-17).' },
+  { step: 4, title: '04. Execução de Processo Atípico', infra: 'SUSE Linux Enterprise', target: 'srv-app-07', type: 'host.process', phase: 'FASE 1', desc: 'Processo incomum executado no servidor Linux SUSE do backend da aplicação judicial.' },
+  { step: 5, title: '05. Movimento Lateral Interno', infra: 'SUSE Linux Enterprise', target: 'srv-db-02', type: 'network.lateral', phase: 'FASE 1', desc: 'Conexão lateral correlacionada entre o servidor de aplicação e o nó de dados srv-db-02.' },
+  { step: 6, title: '06. Consulta Anômala a Metadados', infra: 'Oracle Database RAC', target: 'db-judicial-lab', type: 'db.query', phase: 'FASE 1', desc: 'Query fora do padrão da identidade em metadados processuais no cluster Oracle Database RAC.' },
+  { step: 7, title: '07. Acesso a Autos no STF Digital', infra: 'STF Digital / e-STF', target: 'case://SYNTHETIC/RE-000001', type: 'app.resource_access', phase: 'FASE 1', desc: 'Acesso a processo restrito no STF Digital. O Sentinel correlaciona os sinais e ABRE O INCIDENTE!' },
+  { step: 8, title: '08. Tentativa de Alterar Processo', infra: 'STF Digital / e-STF', target: 'case://SYNTHETIC/RE-000001', type: 'app.case_update_requested', phase: 'FASE 2', desc: 'Tentativa de alteração no processo RE-000001. Bloqueio automático pelo Gateway: DENY.' },
+  { step: 9, title: '09. Tentativa de Exportar Acórdão Sigiloso', infra: 'IA & HPC (Victor / MARIA)', target: 'document://SYNTHETIC/DOC-001', type: 'agent.tool_requested', phase: 'FASE 2', desc: 'Agente solicita exportação de documento restrito. O Gateway exige aprovação humana: REQUIRE_HITL.' },
+  { step: 10, title: '10. Aprovação Humana de Operador', infra: 'Aprovador de Gabinete (HITL)', target: 'document://SYNTHETIC/DOC-001', type: 'approval.granted', phase: 'FASE 2', desc: 'Operador humano concede autorização vinculada estritamente à identidade, ação e parâmetros.' },
+  { step: 11, title: '11. Execução Única da Exportação', infra: 'STF Digital / Gateway', target: 'document://SYNTHETIC/DOC-001', type: 'tool.executed', phase: 'FASE 2', desc: 'Ação autorizada executa exatamente uma vez. Oráculo upstream emite recibo e soma 1.' },
+  { step: 12, title: '12. Tentativa de Replay de Autorização', infra: 'IA & HPC (Victor / MARIA)', target: 'document://SYNTHETIC/DOC-001', type: 'approval.replay', phase: 'FASE 2', desc: 'Invasor tenta reaproveitar a autorização consumida: Bloqueio estrito (REPLAY_DETECTED).' },
+  { step: 13, title: '13. Tentativa de Troca de Identidade', infra: 'Gabinete Ministros (Horizon VDI)', target: 'document://SYNTHETIC/DOC-001', type: 'identity.swap', phase: 'FASE 2', desc: 'Outro agente tenta usar a autorização concedida: Bloqueio (IDENTITY_BINDING_MISMATCH).' },
+  { step: 14, title: '14. Tentativa de Troca de Parâmetros', infra: 'STF Digital / e-STF', target: 'document://SYNTHETIC/DOC-999', type: 'parameters.swap', phase: 'FASE 2', desc: 'Documento-alvo alterado após aprovação: Bloqueio (PARAMETERS_DIGEST_MISMATCH).' },
+  { step: 15, title: '15. Tentativa de Sabotar Trilha Criptográfica', infra: 'HeraclitusDB (Ledger HRKL v6)', target: 'evidence-log', type: 'tamper.attempt', phase: 'FASE 2', desc: 'Invasor tenta sabotar histórico. Árvore Merkle e Hash-chain acusam quebra: DETECTED.' },
+  { step: 16, title: '16. Geração do Evidence Bundle', infra: 'HeraclitusDB (Ledger HRKL v6)', target: 'evidence://STF-POC-001', type: 'evidence.exported', phase: 'FASE 2', desc: 'Pacote criptográfico de provas digitais gerado com manifesto e prova Merkle completa.' },
+  { step: 17, title: '17. Verificação Offline da Integridade', infra: 'Perícia / Verificador Offline', target: 'evidence://STF-POC-001', type: 'evidence.verified', phase: 'FASE 2', desc: 'Perícia independente valida as provas matemáticas localmente e sem conexão à rede.' }
 ];
 
-// ========================================================
-// TOPOLOGIA FIXA DA INFRAESTRUTURA DO STF (SEMPRE VISÍVEL)
-// ========================================================
-// Posições normalizadas (nx, ny de 0 a 1) para espaçamento amplo
+// =========================================================================
+// TOPOLOGIA OFICIAL DA INFRAESTRUTURA DO STF (18 ELEMENTOS EM CAMADAS)
+// Conforme diagrama oficial: Borda, Gabinete, Linux, LAN, STF Digital, SEI,
+// MNI 2.2.2, Oracle RAC, DW, BI, Data Lake, IA/HPC, Backup e HeraclitusDB
+// =========================================================================
 const FIXED_INFRA_NODES = [
-  { id: 'asset:public-edge', label: 'public-edge', kind: 'asset', friendlyName: 'Firewall / WAF Borda', icon: '🛡️', nx: 0.12, ny: 0.50, r: 20 },
-  { id: 'asset:identity-provider', label: 'identity-provider', kind: 'asset', friendlyName: 'VDI Ministros (IAM)', icon: '⚖️', nx: 0.30, ny: 0.22, r: 20 },
-  { id: 'asset:srv-app-07', label: 'srv-app-07', kind: 'asset', friendlyName: 'Servidor Linux STF', icon: '🐧', nx: 0.32, ny: 0.72, r: 20 },
-  { id: 'actor:human:approver-01', label: 'human:approver-01', kind: 'actor', friendlyName: 'Aprovador de Gabinete', icon: '👨‍⚖️', nx: 0.52, ny: 0.16, r: 20 },
-  { id: 'asset:case://SYNTHETIC/RE-000001', label: 'case://SYNTHETIC/RE-000001', kind: 'asset', friendlyName: 'PJe Autos RE-000001', icon: '🏛️', nx: 0.55, ny: 0.50, r: 22 },
-  { id: 'asset:document://SYNTHETIC/DOC-001', label: 'document://SYNTHETIC/DOC-001', kind: 'asset', friendlyName: 'Acórdão DOC-001 (Sigiloso)', icon: '📄', nx: 0.76, ny: 0.24, r: 20 },
-  { id: 'asset:srv-db-02', label: 'srv-db-02', kind: 'asset', friendlyName: 'Rede Banco Judicial', icon: '🗄️', nx: 0.50, ny: 0.82, r: 18 },
-  { id: 'asset:db-judicial-lab', label: 'db-judicial-lab', kind: 'asset', friendlyName: 'Banco Judicial Autos', icon: '🗄️', nx: 0.72, ny: 0.82, r: 20 },
-  { id: 'asset:evidence-log', label: 'evidence-log', kind: 'asset', friendlyName: 'Trilha HRKL Preservação', icon: '⛓️', nx: 0.88, ny: 0.52, r: 20 }
+  // Camada 1: Borda e Autenticação
+  { id: 'asset:internet', label: 'internet', kind: 'asset', friendlyName: 'Internet / Tráfego Externo', icon: '🌐', nx: 0.10, ny: 0.12, r: 20 },
+  { id: 'asset:public-edge', label: 'public-edge', kind: 'asset', friendlyName: 'Firewall / WAF Borda', icon: '🛡️', nx: 0.28, ny: 0.12, r: 22 },
+  { id: 'asset:identity-provider', label: 'identity-provider', kind: 'asset', friendlyName: 'Identity (ICP-Brasil / OIDC)', icon: '🪪', nx: 0.48, ny: 0.12, r: 22 },
+
+  // Camada 2: Estações e Servidores de Aplicação
+  { id: 'asset:vdi-ministros', label: 'vdi-ministros', kind: 'asset', friendlyName: 'Gabinete Ministros (Horizon VDI)', icon: '⚖️', nx: 0.36, ny: 0.28, r: 22 },
+  { id: 'actor:human:approver-01', label: 'human:approver-01', kind: 'actor', friendlyName: 'Aprovador de Gabinete (HITL)', icon: '👨‍⚖️', nx: 0.18, ny: 0.28, r: 18 },
+  { id: 'asset:srv-app-07', label: 'srv-app-07', kind: 'asset', friendlyName: 'SUSE Linux Enterprise (srv-app-07)', icon: '🐧', nx: 0.62, ny: 0.28, r: 22 },
+
+  // Camada 3: Rede Corporativa (Backbone Seguro)
+  { id: 'asset:lan-wlan', label: 'lan-wlan', kind: 'asset', friendlyName: 'Rede LAN / WLAN STF', icon: '🖧', nx: 0.50, ny: 0.44, r: 22 },
+
+  // Camada 4: Sistemas Judiciais e Administrativos
+  { id: 'asset:case://SYNTHETIC/RE-000001', label: 'case://SYNTHETIC/RE-000001', kind: 'asset', friendlyName: 'STF Digital (Autos RE-000001)', icon: '🏛️', nx: 0.30, ny: 0.58, r: 24 },
+  { id: 'asset:document://SYNTHETIC/DOC-001', label: 'document://SYNTHETIC/DOC-001', kind: 'asset', friendlyName: 'Acórdão DOC-001 (Sigiloso)', icon: '📄', nx: 0.14, ny: 0.58, r: 18 },
+  { id: 'asset:sei-admin', label: 'sei-admin', kind: 'asset', friendlyName: 'SEI (Processos Administrativos)', icon: '📂', nx: 0.50, ny: 0.58, r: 22 },
+  { id: 'asset:mni-interop', label: 'mni-interop', kind: 'asset', friendlyName: 'MNI 2.2.2 / STF Tribunais', icon: '🔄', nx: 0.68, ny: 0.58, r: 22 },
+
+  // Camada 5: Dados e Auditoria Transacional
+  { id: 'asset:db-judicial-lab', label: 'db-judicial-lab', kind: 'asset', friendlyName: 'Oracle Database RAC / Audit', icon: '🗄️', nx: 0.50, ny: 0.72, r: 24 },
+  { id: 'asset:srv-db-02', label: 'srv-db-02', kind: 'asset', friendlyName: 'Conexão DB (srv-db-02)', icon: '🔌', nx: 0.68, ny: 0.72, r: 18 },
+
+  // Camada 6: Analytics, BI e Repositório Big Data
+  { id: 'asset:data-warehouse', label: 'data-warehouse', kind: 'asset', friendlyName: 'Data Warehouse (DW STF)', icon: '📊', nx: 0.32, ny: 0.88, r: 20 },
+  { id: 'asset:bi-corteaberta', label: 'bi-corteaberta', kind: 'asset', friendlyName: 'BI / Corte Aberta / Power BI', icon: '📈', nx: 0.16, ny: 0.88, r: 20 },
+  { id: 'asset:data-lake', label: 'data-lake', kind: 'asset', friendlyName: 'Data Lake (Elasticsearch)', icon: '🎲', nx: 0.50, ny: 0.88, r: 20 },
+
+  // Bloco Especializado: Inteligência Artificial, Backup e Ledger Imutável
+  { id: 'asset:ia-hpc', label: 'ia-hpc', kind: 'asset', friendlyName: 'IA & HPC (Victor / MARIA)', icon: '🤖', nx: 0.86, ny: 0.28, r: 22 },
+  { id: 'asset:backup-appliance', label: 'backup-appliance', kind: 'asset', friendlyName: 'Backup / Data Protection', icon: '💾', nx: 0.86, ny: 0.50, r: 20 },
+  { id: 'asset:heraclitusdb', label: 'heraclitusdb', kind: 'asset', friendlyName: 'HeraclitusDB (Ledger HRKL v6)', icon: '🛡️', nx: 0.86, ny: 0.74, r: 28 }
 ];
 
-// Conexões permanentes da infraestrutura do STF
+// Conexões e fluxos permanentes da infraestrutura do STF
 const FIXED_INFRA_EDGES = [
-  { from: 'asset:public-edge', to: 'asset:identity-provider', type: 'INFRA_LINK', icon: '🌐', title: 'Tráfego Perímetro STF' },
-  { from: 'asset:identity-provider', to: 'asset:srv-app-07', type: 'INFRA_LINK', icon: '🔑', title: 'Sessão Gabinete → Backend' },
-  { from: 'asset:srv-app-07', to: 'asset:case://SYNTHETIC/RE-000001', type: 'INFRA_LINK', icon: '🏛️', title: 'Acesso PJe STF Digital' },
-  { from: 'asset:case://SYNTHETIC/RE-000001', to: 'asset:document://SYNTHETIC/DOC-001', type: 'INFRA_LINK', icon: '📄', title: 'Autos do Processo' },
+  // Borda, Identidade e Acesso
+  { from: 'asset:internet', to: 'asset:public-edge', type: 'INFRA_LINK', icon: '🌐', title: 'Tráfego Público Externo' },
+  { from: 'asset:public-edge', to: 'asset:identity-provider', type: 'INFRA_LINK', icon: '🛡️', title: 'Inspeção WAF & Auth' },
+  { from: 'asset:identity-provider', to: 'asset:vdi-ministros', type: 'INFRA_LINK', icon: '🪪', title: 'Autenticação OIDC / ICP-Brasil' },
+  { from: 'asset:identity-provider', to: 'asset:srv-app-07', type: 'INFRA_LINK', icon: '🔑', title: 'Autenticação Kerberos / SSH' },
+  { from: 'actor:human:approver-01', to: 'asset:document://SYNTHETIC/DOC-001', type: 'INFRA_LINK', icon: '✍️', title: 'Canal de Aprovação HITL' },
+
+  // Backbone LAN / WLAN
+  { from: 'asset:vdi-ministros', to: 'asset:lan-wlan', type: 'INFRA_LINK', icon: '⚖️', title: 'Acesso Gabinete Ministros' },
+  { from: 'asset:srv-app-07', to: 'asset:lan-wlan', type: 'INFRA_LINK', icon: '🐧', title: 'Backend Linux Corporativo' },
+  { from: 'asset:lan-wlan', to: 'asset:case://SYNTHETIC/RE-000001', type: 'INFRA_LINK', icon: '🏛️', title: 'Acesso STF Digital' },
+  { from: 'asset:lan-wlan', to: 'asset:sei-admin', type: 'INFRA_LINK', icon: '📂', title: 'Acesso SEI Administrativo' },
+  { from: 'asset:lan-wlan', to: 'asset:mni-interop', type: 'INFRA_LINK', icon: '🔄', title: 'Barramento MNI 2.2.2' },
+
+  // Processamento e Banco de Dados
+  { from: 'asset:case://SYNTHETIC/RE-000001', to: 'asset:document://SYNTHETIC/DOC-001', type: 'INFRA_LINK', icon: '📄', title: 'Autos do Processo RE-000001' },
+  { from: 'asset:case://SYNTHETIC/RE-000001', to: 'asset:db-judicial-lab', type: 'INFRA_LINK', icon: '🗄️', title: 'Transações Processuais' },
+  { from: 'asset:sei-admin', to: 'asset:db-judicial-lab', type: 'INFRA_LINK', icon: '🗄️', title: 'Processos Administrativos SEI' },
+  { from: 'asset:mni-interop', to: 'asset:db-judicial-lab', type: 'INFRA_LINK', icon: '🗄️', title: 'Interoperabilidade de Dados' },
   { from: 'asset:srv-app-07', to: 'asset:srv-db-02', type: 'INFRA_LINK', icon: '🔀', title: 'Conexão Rede de Dados' },
-  { from: 'asset:srv-db-02', to: 'asset:db-judicial-lab', type: 'INFRA_LINK', icon: '🗄️', title: 'Cluster Banco de Dados' },
-  { from: 'asset:case://SYNTHETIC/RE-000001', to: 'asset:evidence-log', type: 'INFRA_LINK', icon: '⛓️', title: 'Elo de Auditoria Merkle' },
-  { from: 'actor:human:approver-01', to: 'asset:document://SYNTHETIC/DOC-001', type: 'INFRA_LINK', icon: '✍️', title: 'Canal de Aprovação HITL' }
+  { from: 'asset:srv-db-02', to: 'asset:db-judicial-lab', type: 'INFRA_LINK', icon: '🔌', title: 'Cluster Oracle RAC Ativo' },
+
+  // Analytics, DW & Data Lake
+  { from: 'asset:db-judicial-lab', to: 'asset:data-warehouse', type: 'INFRA_LINK', icon: '📊', title: 'Carga ETL / Replicação DW' },
+  { from: 'asset:data-warehouse', to: 'asset:bi-corteaberta', type: 'INFRA_LINK', icon: '📈', title: 'Painéis Corte Aberta / Power BI' },
+  { from: 'asset:db-judicial-lab', to: 'asset:data-lake', type: 'INFRA_LINK', icon: '🎲', title: 'Streaming Elasticsearch' },
+
+  // IA, Proteção de Dados e HeraclitusDB (Auditoria Imutável)
+  { from: 'asset:ia-hpc', to: 'asset:backup-appliance', type: 'INFRA_LINK', icon: '💾', title: 'Checkpoints de IA & Backup' },
+  { from: 'asset:ia-hpc', to: 'asset:case://SYNTHETIC/RE-000001', type: 'INFRA_LINK', icon: '🤖', title: 'Triagem Victor / MARIA' },
+  { from: 'asset:case://SYNTHETIC/RE-000001', to: 'asset:heraclitusdb', type: 'INFRA_LINK', icon: '🛡️', title: 'Auditoria Imutável HRKL' },
+  { from: 'asset:db-judicial-lab', to: 'asset:heraclitusdb', type: 'INFRA_LINK', icon: '🛡️', title: 'Preservação Criptográfica Oracle' },
+  { from: 'asset:srv-app-07', to: 'asset:heraclitusdb', type: 'INFRA_LINK', icon: '📡', title: 'Telemetria OTLP (Porta 4318)' },
+  { from: 'asset:ia-hpc', to: 'asset:heraclitusdb', type: 'INFRA_LINK', icon: '🛡️', title: 'Governança Agentes (Porta 8080)' },
+  { from: 'asset:backup-appliance', to: 'asset:heraclitusdb', type: 'INFRA_LINK', icon: '🛡️', title: 'Validação Merkle de Backup' }
 ];
 
 // ========================================================
@@ -113,56 +164,419 @@ window.closeAttackHint = function() {
   if (hintTimeout) clearTimeout(hintTimeout);
 };
 
-function showAttackHint(attack, ev) {
+function showAttackHint(attack, ev, equipCounter) {
   const h = $('#attackHint');
   if (!h || !attack) return;
 
-  const outcome = ev?.outcome || 'EXECUTADO';
+  const outcome = ev?.outcome || (ev?.oracle_verdict ? (ev.oracle_verdict === 'pass' ? 'DENY' : 'PASS') : 'EXECUTADO');
   const upstreamDelta = ev?.upstream_delta ?? 0;
   const reasonCode = ev?.reason_code || ev?.details?.policy_decision?.reason_code || '';
-  const dt = formatDateTime(ev || { lsn: attack.step });
+  const dt = formatDateTime(ev || { lsn: attack.step || 1 });
+
+  // Obter identificação do equipamento e total de tentativas
+  const eqName = attack.infra || attack.equipment || 'Equipamento STF';
+  const targetName = attack.target || attack.asset || '';
+  const attempts = equipCounter ? equipCounter.attempts : (state?.equipment_counters?.[attack.equipment_id]?.attempts ?? 1);
+  const blocked = equipCounter ? equipCounter.unauthorized_blocked : (state?.equipment_counters?.[attack.equipment_id]?.unauthorized_blocked ?? 0);
 
   const hintTime = $('#hintTime');
   if (hintTime) hintTime.textContent = dt;
 
   $('#hintAttackName').textContent = attack.title;
-  $('#hintInfraName').textContent = `${attack.infra} (${attack.target})`;
+  $('#hintInfraName').textContent = `${eqName} [Tentativas: ${attempts} | Bloqueios: ${blocked}]`;
 
   const outcomeBadge = $('#hintOutcome');
   outcomeBadge.textContent = outcome + (reasonCode ? ` [${reasonCode}]` : '');
-  outcomeBadge.className = 'hint-outcome-badge ' + (outcome === 'DENY' ? 'DENY' : outcome === 'REQUIRE_HITL' ? 'REQUIRE_HITL' : outcome === 'DETECTED' ? 'DENY' : 'PASS');
+  outcomeBadge.className = 'hint-outcome-badge ' + (outcome === 'DENY' || outcome === 'BLOCKED' ? 'DENY' : outcome === 'REQUIRE_HITL' ? 'REQUIRE_HITL' : outcome === 'DETECTED' ? 'DENY' : 'PASS');
 
   const upstreamBadge = $('#hintUpstream');
   upstreamBadge.textContent = `upstream=${upstreamDelta}`;
   upstreamBadge.style.color = upstreamDelta > 0 ? 'var(--gov-green)' : 'var(--gov-muted)';
 
   const badge = $('#hintBadge');
-  if (outcome === 'DENY') {
+  if (outcome === 'DENY' || outcome === 'BLOCKED') {
     h.className = 'attack-hint show deny';
-    badge.textContent = '🛑 ATAQUE BLOQUEADO';
+    badge.textContent = '🛑 ACESSO INDEVIDO BLOQUEADO';
     badge.style.color = 'var(--gov-red)';
-    $('#hintDesc').textContent = `Ação contra ${attack.infra} interceptada e BARRADA pelo Gateway com efeito zero (upstream=0) em ${dt}.`;
+    $('#hintDesc').textContent = `Invasão contra ${eqName} interceptada com sucesso! Tentativa #${attempts} neutralizada com efeito zero na rede judicial às ${dt}.`;
   } else if (outcome === 'REQUIRE_HITL') {
     h.className = 'attack-hint show hitl';
     badge.textContent = '⚠️ AUTORIZAÇÃO HUMANA EXIGIDA';
     badge.style.color = 'var(--gov-gold)';
-    $('#hintDesc').textContent = `Ação de alto risco exige chancela humana de operador de gabinete (HITL) para prosseguir. Registrado em ${dt}.`;
+    $('#hintDesc').textContent = `Operação de risco contra ${eqName} exige aprovação formal de gabinete (HITL) para prosseguir às ${dt}.`;
   } else if (outcome === 'DETECTED') {
     h.className = 'attack-hint show deny';
     badge.textContent = '🚨 FRAUDE / SABOTAGEM DETECTADA';
     badge.style.color = 'var(--gov-red)';
-    $('#hintDesc').textContent = `Tentativa de adulteração detectada pelo elo criptográfico Merkle da trilha HRKL em ${dt}.`;
+    $('#hintDesc').textContent = `Tentativa de adulteração detectada pelo elo criptográfico Merkle da trilha HRKL às ${dt}.`;
   } else {
     h.className = 'attack-hint show pass';
-    badge.textContent = 'ℹ️ EVENTO PROCESSADO';
+    badge.textContent = 'ℹ️ PROVA REGISTRADA NO LEDGER';
     badge.style.color = 'var(--gov-blue-primary)';
-    $('#hintDesc').textContent = (attack.desc || `Ação executada com sucesso contra ${attack.target}.`) + ` Registrado em ${dt}.`;
+    $('#hintDesc').textContent = (attack.desc || attack.hypothesis || `Ação executada contra ${targetName}.`) + ` Gravado com prova imutável às ${dt}.`;
   }
 
   if (hintTimeout) clearTimeout(hintTimeout);
   hintTimeout = setTimeout(() => {
     h.classList.remove('show');
-  }, 5500);
+  }, 5000);
+}
+
+// ========================================================
+// CATÁLOGO INSTITUCIONAL DE DESCRIÇÕES DOS NÓS DA INFRAESTRUTURA STF
+// Exibido no canto inferior direito ao passar o mouse em qualquer nó
+// ========================================================
+const NODE_DESCRIPTIONS = {
+  'asset:internet': {
+    title: 'Internet / Tráfego Externo',
+    icon: '🌐',
+    layerBadge: 'CAMADA 1 • BORDA PERIMETRAL',
+    role: 'Zona Externa Não Confiável (Público / OAB / Tribunais)',
+    ledgerSync: 'FILTRADO NA BORDA',
+    desc: 'Ponto de origem de acessos públicos, consultas processuais, envio de petições por advogados e requisições externas. Todo o tráfego que ingressa no Tribunal é inspecionado preventivamente pelo Firewall e WAF de borda antes de alcançar qualquer recurso interno.'
+  },
+  'asset:public-edge': {
+    title: 'Firewall / WAF Borda',
+    icon: '🛡️',
+    layerBadge: 'CAMADA 1 • SEGURANÇA PERIMETRAL',
+    role: 'Next-Generation Firewall & Web Application Firewall',
+    ledgerSync: 'EVENTOS AUDITADOS',
+    desc: 'Primeira linha de defesa cibernética do STF. Realiza filtragem profunda de pacotes L4-L7, mitigação anti-DDoS volumétrico, bloqueio de scanners e agentes maliciosos (OWASP Top 10) e encaminha tráfego legítimo com TLS 1.3 aos serviços autorizados.'
+  },
+  'asset:identity-provider': {
+    title: 'Identity Provider (ICP-Brasil / OIDC / MFA)',
+    icon: '🪪',
+    layerBadge: 'CAMADA 1 • GESTÃO DE IDENTIDADE (IAM)',
+    role: 'Autenticação Forte, Certificados Digitais e SSO',
+    ledgerSync: 'SESSÕES ASSINADAS',
+    desc: 'Núcleo central de identidade e acesso do STF. Emite tokens OIDC/SAML com verificação multifator (MFA), valida certificados digitais padrão ICP-Brasil (A3/nuvem) para Ministros e advogados e impede autenticações anômalas ou sequestro de credenciais.'
+  },
+  'asset:vdi-ministros': {
+    title: 'Gabinete dos Ministros (Omnissa Horizon VDI)',
+    icon: '⚖️',
+    layerBadge: 'CAMADA 2 • ESTAÇÕES VIRTUAIS DE TRABALHO',
+    role: 'Virtual Desktop Infrastructure (Windows 11 VDA)',
+    ledgerSync: 'ISOLAMENTO DE GABINETE',
+    desc: 'Estações de trabalho virtuais seguras utilizadas pelos Ministros, juízes instrutores e assessores para elaboração de votos, despachos e decisões colegiadas. O ambiente é virtualizado, blindado contra vazamento de dados (DLP) e protegido contra malware local.'
+  },
+  'actor:human:approver-01': {
+    title: 'Aprovador de Gabinete (HITL)',
+    icon: '👨‍⚖️',
+    layerBadge: 'CAMADA 2 • GOVERNANÇA HUMANA (HITL)',
+    role: 'Autoridade de Aprovação Formal e Assinatura Digital',
+    ledgerSync: 'CHANCELA CRIPTOGRÁFICA',
+    desc: 'Operador humano habilitado responsável pelo mecanismo Human-in-the-Loop (HITL). Nenhuma ação de alto risco executada por agentes de IA ou ferramentas autônomas — como exportação de acórdão sigiloso — pode prosseguir sem a concessão expressa deste aprovador.'
+  },
+  'asset:srv-app-07': {
+    title: 'SUSE Linux Enterprise Server (srv-app-07)',
+    icon: '🐧',
+    layerBadge: 'CAMADA 2 • SERVIDORES DE APLICAÇÃO',
+    role: 'SLES 15 Enterprise + SUSE Manager (Backend STF)',
+    ledgerSync: 'TELEMETRIA OTLP (4318)',
+    desc: 'Servidor corporativo Linux SUSE responsável pela execução dos backends e microsserviços do STF Digital. Conta com telemetria contínua via OpenTelemetry (OTLP), auditoria de processos via eBPF e integração com o HeraclitusDB para preservação de rastros.'
+  },
+  'asset:lan-wlan': {
+    title: 'Rede LAN / WLAN STF',
+    icon: '🖧',
+    layerBadge: 'CAMADA 3 • BACKBONE CORPORATIVO SEGURO',
+    role: 'Microsegmentação de Rede, VLANs e Controle 802.1X',
+    ledgerSync: 'CONTROLE DE FLUXO',
+    desc: 'Backbone de rede interna de alta performance e disponibilidade do Supremo Tribunal Federal. Implementa isolamento rigoroso entre as redes de gabinetes, servidores de dados, clusters de IA e zonas administrativas, mitigando riscos de movimentação lateral.'
+  },
+  'asset:case://SYNTHETIC/RE-000001': {
+    title: 'STF Digital (Autos RE-000001)',
+    icon: '🏛️',
+    layerBadge: 'CAMADA 4 • PROCESSO JUDICIAL ELETRÔNICO',
+    role: 'Plataforma Central Unificada de Tramitação Judicial',
+    ledgerSync: 'HASH ENCADEADO NO LEDGER',
+    desc: 'Plataforma oficial que substituiu sistemas legados e centralizou todo o processamento de feitos do STF. Gerencia a autuação, distribuição, tramitação e publicação de decisões. Toda mutação de autos gera assinatura criptográfica imutável vinculada ao processo.'
+  },
+  'asset:document://SYNTHETIC/DOC-001': {
+    title: 'Acórdão DOC-001 (Sigiloso)',
+    icon: '📄',
+    layerBadge: 'CAMADA 4 • DOCUMENTO PROCESSUAL RESTRITO',
+    role: 'Minuta de Julgamento com Grau de Sigilo Estrito',
+    ledgerSync: 'POLÍTICA DLP ATIVA',
+    desc: 'Documento judicial sensível contendo minuta de acórdão e fundamentos decisórios em segredo de justiça. Qualquer leitura, extração ou exportação requer validação de política no Agent Gateway e aprovação humana de gabinete (HITL), com zero tolerância a replay.'
+  },
+  'asset:sei-admin': {
+    title: 'SEI (Processos Administrativos)',
+    icon: '📂',
+    layerBadge: 'CAMADA 4 • GESTÃO ADMINISTRATIVA',
+    role: 'Sistema Eletrônico de Informações do STF',
+    ledgerSync: 'AUDITORIA DE EXPEDIENTES',
+    desc: 'Plataforma de tramitação eletrônica de processos administrativos, compras públicas, contratos e atos de gestão interna do STF. Opera em ambiente segregado e mantém trilha de integridade para atendimento às normas de transparência pública.'
+  },
+  'asset:mni-interop': {
+    title: 'MNI 2.2.2 / STF Tribunais',
+    icon: '🔄',
+    layerBadge: 'CAMADA 4 • INTEROPERABILIDADE JUDICIÁRIA',
+    role: 'Modelo Nacional de Interoperabilidade (SOAP/REST)',
+    ledgerSync: 'BARRAMENTO DE TRIBUNAIS',
+    desc: 'Barramento seguro de dados que conecta o STF aos demais tribunais brasileiros (CNJ, STJ, TST, TSE, TRFs e TJs). Permite o envio e recebimento eletrônico de recursos extraordinários, autos e certidões com validação estrita de esquemas XML e assinaturas.'
+  },
+  'asset:db-judicial-lab': {
+    title: 'Oracle Database RAC / Audit',
+    icon: '🗄️',
+    layerBadge: 'CAMADA 5 • BANCO DE DADOS TRANSACIONAL',
+    role: 'Oracle RAC Enterprise com Active Data Guard & TDE',
+    ledgerSync: 'UNIFIED AUDITING INTEGRADA',
+    desc: 'Repositório de dados relacional primário do STF em cluster de nós ativos (RAC) com criptografia transparente de dados (TDE). Armazena metadados, andamentos e peças judiciais. Cada transação é sincronizada com a trilha de auditoria e espelhada no HeraclitusDB.'
+  },
+  'asset:srv-db-02': {
+    title: 'Conexão DB (srv-db-02)',
+    icon: '🔌',
+    layerBadge: 'CAMADA 5 • ROTEAMENTO DE DADOS',
+    role: 'Nó Intermediário do Cluster de Banco de Dados',
+    ledgerSync: 'SEGMENTO PROTEGIDO',
+    desc: 'Nó de interconexão e balanceamento de conexões SQL entre os servidores de aplicação e a camada transacional Oracle. Monitorado para impedir injeção de túneis clandestinos, consultas diretas desautorizadas e exfiltração em massa de dados.'
+  },
+  'asset:data-warehouse': {
+    title: 'Data Warehouse (DW STF)',
+    icon: '📊',
+    layerBadge: 'CAMADA 6 • ANALYTICS E BUSINESS INTELLIGENCE',
+    role: 'Repositório Central Histórico e Modelagem OLAP',
+    ledgerSync: 'ETL AUDITADO PERIODICAMENTE',
+    desc: 'Base analítica consolidada contendo séries históricas de processos, estatísticas de julgamentos e tempos de tramitação. Alimenta relatórios estratégicos da Presidência, órgãos de controle e serve de alicerce analítico para a gestão do acervo processual.'
+  },
+  'asset:bi-corteaberta': {
+    title: 'BI / Corte Aberta / Power BI',
+    icon: '📈',
+    layerBadge: 'CAMADA 6 • TRANSPARÊNCIA ATIVA',
+    role: 'Painéis Analíticos Públicos e Corporativos',
+    ledgerSync: 'DADOS ABERTOS / AUDITÁVEIS',
+    desc: 'Solução de visualização executiva e transparência ativa do programa Corte Aberta. Apresenta indicadores de produtividade, taxas de congestionamento e acervo em tempo real, permitindo aos cidadãos e à comunidade jurídica auditar o desempenho da Corte.'
+  },
+  'asset:data-lake': {
+    title: 'Data Lake (Elasticsearch)',
+    icon: '🎲',
+    layerBadge: 'CAMADA 6 • REPOSITÓRIO BIG DATA',
+    role: 'Indexação Semântica e Busca em Texto Integral',
+    ledgerSync: 'CORPUS PROCESSUAL ÍNTEGRO',
+    desc: 'Repositório elástico de dados volumosos contendo o texto integral de petições, jurisprudência histórica e votos digitalizados. Oferece busca instantânea de alta relevância e fornece o corpus de dados para os sistemas de Inteligência Artificial do STF.'
+  },
+  'asset:ia-hpc': {
+    title: 'IA & HPC (Victor / MARIA / VitórIA / RAFA 2030)',
+    icon: '🤖',
+    layerBadge: 'BLOCO ESPECIALIZADO • INTELIGÊNCIA ARTIFICIAL',
+    role: 'Agentes Autônomos de Apoio à Jurisdição e Triagem',
+    ledgerSync: 'POLÍTICAS NO GATEWAY (8080)',
+    desc: 'Parque de modelos e agentes de IA do STF: Victor (triagem de Repercussão Geral), MARIA (análise de precedentes), VitórIA (pesquisa jurídica) e RAFA 2030 (Agenda 2030 ONU). Cada inferência e ferramenta chamada passa obrigatoriamente pelo Agent Gateway.'
+  },
+  'asset:backup-appliance': {
+    title: 'Backup / Data Protection',
+    icon: '💾',
+    layerBadge: 'BLOCO ESPECIALIZADO • CONTINUIDADE DE NEGÓCIOS',
+    role: 'Appliance de Proteção com Imutabilidade WORM',
+    ledgerSync: 'PROVAS CRIPTOGRÁFICAS DE RESTORE',
+    desc: 'Infraestrutura de salvaguarda de alta segurança contra desastres e ataques de ransomware. Armazena cópias com tecnologia WORM (Write Once, Read Many), impossibilitando deleção ou modificação indevida antes do decurso do tempo de retenção legal.'
+  },
+  'asset:heraclitusdb': {
+    title: 'HeraclitusDB (Escudo Verde-Amarelo • Ledger HRKL)',
+    icon: '🛡️',
+    layerBadge: 'AUDITORIA IMUTÁVEL • LIVRO-RAZÃO CRIPTOGRÁFICO',
+    role: 'Ledger com LSN Monotônico, Provas Merkle e OTLP (WSL 8080)',
+    ledgerSync: 'CONEXÃO ATIVA WSL UBUNTU',
+    desc: 'Motor central de governança cibernética e auditoria imutável do STF, sob o Escudo Verde e Amarelo de proteção criptográfica. Registra cada transação, decisão de segurança do Gateway e chamada de ferramentas em uma cadeia de blocos inviolável com provas Merkle independentes.'
+  }
+};
+
+function getNodeFallbackDescription(nodeId, friendlyName, kind) {
+  if (kind === 'incident' || (nodeId && nodeId.startsWith('incident:'))) {
+    return {
+      title: friendlyName || 'Incidente de Segurança Correlacionado',
+      icon: '🚨',
+      layerBadge: 'SIEM / SENTINEL • CORRELAÇÃO DE AMEAÇAS',
+      role: 'Incidente Cibernético Formal Aberto',
+      ledgerSync: 'REGISTRO DE INCIDENTE NO LEDGER',
+      desc: 'Incidente acionado após correlação de múltiplos sinais anômalos no grafo temporal (ex: login suspeito, processo não autorizado e tentativa de acesso restrito). Desencadeia isolamento automático de credenciais e preservação imediata de evidências.'
+    };
+  }
+  if (kind === 'actor' || (nodeId && (nodeId.startsWith('actor:') || nodeId.includes('service-account')))) {
+    return {
+      title: friendlyName || 'Identidade / Agente em Investigação',
+      icon: '👤',
+      layerBadge: 'CONTROLE DE IDENTIDADE • CONTEXTO DA SESSÃO',
+      role: 'Entidade Autenticada Sob Monitoramento do Gateway',
+      ledgerSync: 'RASTREABILIDADE COMPLETA',
+      desc: 'Ator ou conta de serviço vinculada aos eventos monitorados. O Agent Gateway verifica suas chaves, restringe o escopo de atuação e aplica validação criptográfica estrita em cada requisição de ferramentas upstream.'
+    };
+  }
+  return {
+    title: friendlyName || nodeId,
+    icon: '🏛️',
+    layerBadge: 'INFRAESTRUTURA SUPREMO TRIBUNAL FEDERAL',
+    role: 'Ativo de Rede e Processamento Corporativo',
+    ledgerSync: 'AUDITADO NO HERACLITUSDB',
+    desc: 'Componente da topologia computacional do Supremo Tribunal Federal, operando sob supervisão contínua de políticas de segurança de informação, telemetria OTLP e auditoria imutável.'
+  };
+}
+
+function mapNodeToEquipmentKey(nodeId) {
+  if (!nodeId) return null;
+  const nid = nodeId.toLowerCase();
+  if (nid.includes('public-edge') || nid.includes('internet')) return 'waf';
+  if (nid.includes('identity')) return 'identity';
+  if (nid.includes('vdi') || nid.includes('approver') || nid.includes('human')) return 'vdi';
+  if (nid.includes('srv-app-07') || nid.includes('linux')) return 'linux';
+  if (nid.includes('lan-wlan') || nid.includes('lan')) return 'lan';
+  if (nid.includes('case://') || nid.includes('re-000001') || nid.includes('doc-001') || nid.includes('stf-digital')) return 'stf_digital';
+  if (nid.includes('sei')) return 'sei';
+  if (nid.includes('mni')) return 'mni';
+  if (nid.includes('db-judicial') || nid.includes('srv-db-02') || nid.includes('oracle')) return 'db_oracle';
+  if (nid.includes('data-warehouse') || nid.includes('bi-corteaberta') || nid.includes('dw')) return 'dw';
+  if (nid.includes('data-lake')) return 'data_lake';
+  if (nid.includes('ia-hpc') || nid.includes('ia')) return 'ia_agents';
+  if (nid.includes('backup')) return 'backup';
+  if (nid.includes('heraclitus')) return 'hdb_api';
+  return null;
+}
+
+let nodeHintLeaveTimeout = null;
+
+window.showNodeHintBottomRight = function(nodeId, friendlyName, kind) {
+  if (nodeHintLeaveTimeout) {
+    clearTimeout(nodeHintLeaveTimeout);
+    nodeHintLeaveTimeout = null;
+  }
+  if (hintTimeout) {
+    clearTimeout(hintTimeout);
+    hintTimeout = null;
+  }
+  const h = $('#attackHint');
+  if (!h) return;
+
+  const descObj = NODE_DESCRIPTIONS[nodeId] || getNodeFallbackDescription(nodeId, friendlyName, kind);
+
+  // Buscar contadores de intrusão do equipamento se existir
+  const equipKey = mapNodeToEquipmentKey(nodeId);
+  const counter = equipKey && state?.equipment_counters ? state.equipment_counters[equipKey] : null;
+
+  h.className = 'attack-hint show info';
+
+  const badge = $('#hintBadge');
+  if (badge) {
+    badge.textContent = descObj.layerBadge || '🏛️ INFRAESTRUTURA DO STF';
+    badge.style.color = 'var(--gov-blue-primary)';
+  }
+
+  const hintTime = $('#hintTime');
+  if (hintTime) {
+    hintTime.textContent = counter ? `STATUS: ${counter.status}` : 'STATUS: OPERACIONAL';
+  }
+
+  const title = $('#hintAttackName');
+  if (title) {
+    title.textContent = `${descObj.icon || '🏛️'} ${descObj.title || friendlyName}`;
+  }
+
+  const infra = $('#hintInfraName');
+  if (infra) {
+    infra.textContent = descObj.role || friendlyName;
+  }
+
+  const outcomeBadge = $('#hintOutcome');
+  if (outcomeBadge) {
+    if (counter && (counter.attempts > 0 || counter.unauthorized_blocked > 0)) {
+      outcomeBadge.textContent = `${counter.attempts} Tentativas | ${counter.unauthorized_blocked} Bloqueios`;
+      outcomeBadge.className = 'hint-outcome-badge ' + (counter.unauthorized_blocked > 0 ? 'DENY' : 'PASS');
+    } else {
+      outcomeBadge.textContent = '100% ÍNTEGRO';
+      outcomeBadge.className = 'hint-outcome-badge PASS';
+    }
+  }
+
+  const upstreamBadge = $('#hintUpstream');
+  if (upstreamBadge) {
+    upstreamBadge.textContent = descObj.ledgerSync || 'LEDGER HRKL v6';
+    upstreamBadge.style.color = 'var(--gov-blue-primary)';
+  }
+
+  const desc = $('#hintDesc');
+  if (desc) {
+    desc.textContent = descObj.desc;
+  }
+};
+
+window.hideNodeHintBottomRight = function() {
+  if (nodeHintLeaveTimeout) clearTimeout(nodeHintLeaveTimeout);
+  nodeHintLeaveTimeout = setTimeout(() => {
+    const h = $('#attackHint');
+    if (h && h.classList.contains('info')) {
+      h.classList.remove('show');
+    }
+  }, 2200);
+};
+
+// ========================================================
+// POPUP DO NÚMERO DO ATAQUE NO NÓ DO GRAFO (APARECE E SOME)
+// ========================================================
+const activeNodeAttacks = new Map(); // nodeId -> { attackNum, text, title, expireTime }
+
+function findNodeIdForTarget(target) {
+  if (!target) return null;
+  const t = String(target).toLowerCase();
+
+  // 1. Procura direta em FIXED_INFRA_NODES
+  for (const fn of FIXED_INFRA_NODES) {
+    if (fn.id.toLowerCase() === t || fn.label.toLowerCase() === t) return fn.id;
+  }
+
+  // 2. Procura em simNodes (nós ativos na simulação)
+  for (const [id, node] of simNodes.entries()) {
+    const nid = id.toLowerCase();
+    const nlabel = (node.label || '').toLowerCase();
+    const nname = (node.friendlyName || '').toLowerCase();
+    if (nid === t || nlabel === t || nname === t) return id;
+  }
+
+  // 3. Heurísticas por componente
+  if (t.includes('ia-hpc') || t.includes('victor') || t.includes('maria') || t.includes('vitoria') || t.includes('rafa') || t.includes('ia_')) return 'asset:ia-hpc';
+  if (t.includes('data-warehouse') || t.includes('dw') || t.includes('olap')) return 'asset:data-warehouse';
+  if (t.includes('data-lake') || t.includes('lake') || t.includes('elastic')) return 'asset:data-lake';
+  if (t.includes('bi-corteaberta') || t.includes('corteaberta') || t.includes('power bi')) return 'asset:bi-corteaberta';
+  if (t.includes('vdi-ministros') || t.includes('vdi') || t.includes('horizon')) return 'asset:vdi-ministros';
+  if (t.includes('lan-wlan') || t.includes('lan') || t.includes('wlan')) return 'asset:lan-wlan';
+  if (t.includes('sei-admin') || t.includes('sei')) return 'asset:sei-admin';
+  if (t.includes('mni-interop') || t.includes('mni')) return 'asset:mni-interop';
+  if (t.includes('backup-appliance') || t.includes('backup') || t.includes('bkp')) return 'asset:backup-appliance';
+  if (t.includes('re-000001') || t.includes('stf-digital') || t.includes('estf')) return 'asset:case://SYNTHETIC/RE-000001';
+  if (t.includes('doc-001') || t.includes('doc-999') || t.includes('acordao')) return 'asset:document://SYNTHETIC/DOC-001';
+  if (t.includes('public-edge') || t.includes('edge') || t.includes('waf') || t.includes('firewall')) return 'asset:public-edge';
+  if (t.includes('identity') || t.includes('iam') || t.includes('oidc') || t.includes('icp')) return 'asset:identity-provider';
+  if (t.includes('srv-app-07') || t.includes('suse') || t.includes('linux')) return 'asset:srv-app-07';
+  if (t.includes('srv-db-02')) return 'asset:srv-db-02';
+  if (t.includes('db-judicial') || t.includes('oracle') || t.includes('rac') || t.includes('database')) return 'asset:db-judicial-lab';
+  if (t.includes('8080') || t.includes('7474') || t.includes('7475') || t.includes('4318') || t.includes('8787') || t.includes('heraclitus') || t.includes('evidence')) return 'asset:heraclitusdb';
+  if (t.includes('human') || t.includes('approver')) return 'actor:human:approver-01';
+
+  return null;
+}
+
+function triggerNodeAttackPopup(targetId, attackNum, title) {
+  if (!targetId) return;
+  const now = Date.now();
+  const text = typeof attackNum === 'number' ? `Ataque #${String(attackNum).padStart(2, '0')}` : `Ataque #${attackNum}`;
+  activeNodeAttacks.set(targetId, {
+    attackNum,
+    text,
+    title: title || '',
+    expireTime: now + 4000
+  });
+
+  // Re-renderiza e acorda simulação para animar o popup
+  simAlpha = Math.max(simAlpha, 0.4);
+  startPhysicsLoop();
+  if (state) renderGraph(state);
+
+  // Remove automaticamente após o tempo
+  setTimeout(() => {
+    const item = activeNodeAttacks.get(targetId);
+    if (item && item.expireTime <= Date.now() + 100) {
+      activeNodeAttacks.delete(targetId);
+      if (state) renderGraph(state);
+    }
+  }, 4100);
 }
 
 // ========================================================
@@ -343,30 +757,6 @@ function physicsTick() {
     const badgeEl = document.getElementById('ge-badge-' + i);
     if (badgeEl) {
       badgeEl.setAttribute('transform', `translate(${mx.toFixed(1)}, ${my.toFixed(1)})`);
-    }
-
-    const hintEl = document.getElementById('ge-hint-' + i);
-    if (hintEl) {
-      const hintW = parseFloat(hintEl.getAttribute('data-hint-w')) || 180;
-      const hintX = Math.max(hintW / 2 + 10, Math.min(W - hintWidthForEdge(edge, hintW) / 2 - 10, mx));
-      const hintY = my < 55 ? my + 24 : my - 24;
-      const arrowY = my < 55 ? my + 12 : my - 12;
-      const tipY = my < 55 ? my + 7 : my - 7;
-
-      const arrowEl = hintEl.querySelector('polygon');
-      if (arrowEl) {
-        arrowEl.setAttribute('points', `${mx - 5},${arrowY} ${mx + 5},${arrowY} ${mx},${tipY}`);
-      }
-      const rectEl = hintEl.querySelector('rect');
-      if (rectEl) {
-        rectEl.setAttribute('x', (hintX - hintW / 2).toFixed(1));
-        rectEl.setAttribute('y', (hintY - 11).toFixed(1));
-      }
-      const textEl = hintEl.querySelector('text');
-      if (textEl) {
-        textEl.setAttribute('x', hintX.toFixed(1));
-        textEl.setAttribute('y', hintY.toFixed(1));
-      }
     }
   }
 
@@ -604,8 +994,7 @@ function renderGraph(s) {
   simEdges = [...infraEdgesWithFlag, ...dynamicEdgesWithFlag];
   $('#graphStats').textContent = `${simNodes.size} nós / ${simEdges.length} arestas`;
 
-  // 4. RENDERIZAR ARESTAS COM ÍCONES E HINTS DINÂMICOS
-  const activeHints = [];
+  // 4. RENDERIZAR ARESTAS COM ÍCONES NO CENTRO (SEM POPUPS EM CIMA DO GRAFO)
   const linesAndBadges = simEdges.map((x, i) => {
     const n1 = simNodes.get(x.from);
     const n2 = simNodes.get(x.to);
@@ -614,28 +1003,9 @@ function renderGraph(s) {
     const mx = (n1.x + n2.x) / 2;
     const my = (n1.y + n2.y) / 2;
     const edgeInfo = getEdgeInfo(x, s, currentStep);
-    const isAttack = edgeInfo.isCurrentAttack;
-
-    const hintText = `${edgeInfo.icon} ${edgeInfo.attackTitle}${edgeInfo.outcomeText}`;
-    const hintWidth = Math.min(Math.max(hintText.length * 6.5 + 24, 120), 280);
-    const hintX = Math.max(hintWidth / 2 + 10, Math.min(W - hintWidth / 2 - 10, mx));
-    const hintY = my < 55 ? my + 24 : my - 24;
-    const arrowY = my < 55 ? my + 12 : my - 12;
-    const tipY = my < 55 ? my + 7 : my - 7;
-    const arrowPoints = `${mx - 5},${arrowY} ${mx + 5},${arrowY} ${mx},${tipY}`;
-
-    // Hint dinâmico destacado quando o local sofrer ataque
-    if (isAttack) {
-      activeHints.push(`
-        <g class="edge-attack-hint-callout" id="ge-hint-${i}" data-hint-w="${hintWidth}">
-          <polygon points="${arrowPoints}" fill="#c9182b" />
-          <rect x="${hintX - hintWidth / 2}" y="${hintY - 11}" width="${hintWidth}" height="22" rx="4" class="edge-hint-rect" />
-          <text x="${hintX}" y="${hintY}" text-anchor="middle" dominant-baseline="central" class="edge-hint-label">
-            ${esc(hintText)}
-          </text>
-        </g>
-      `);
-    }
+    const hasNodeAttack = (activeNodeAttacks.has(x.from) && activeNodeAttacks.get(x.from).expireTime > now) ||
+                          (activeNodeAttacks.has(x.to) && activeNodeAttacks.get(x.to).expireTime > now);
+    const isAttack = edgeInfo.isCurrentAttack || hasNodeAttack;
 
     return `
       <g class="graph-edge-group ${isAttack ? 'active-attack-edge' : ''} ${x.isInfra ? 'infra-edge' : 'attack-edge'}">
@@ -644,7 +1014,7 @@ function renderGraph(s) {
               stroke="${isAttack ? '#c9182b' : x.isInfra ? '#cbd7e4' : edgeInfo.badgeColor}" 
               stroke-width="${isAttack ? 3.2 : x.isInfra ? 1.5 : 2}" />
 
-        <!-- ÍCONE NO LUGAR DA ARESTA -->
+        <!-- ÍCONE NO CENTRO DA ARESTA -->
         <g id="ge-badge-${i}" class="edge-icon-badge" transform="translate(${mx}, ${my})">
           <circle cx="0" cy="0" r="${isAttack ? 13 : x.isInfra ? 9 : 10}" 
                   fill="${edgeInfo.badgeBg}" 
@@ -653,38 +1023,61 @@ function renderGraph(s) {
           <text x="0" y="0" text-anchor="middle" dominant-baseline="central" 
                 font-size="${isAttack ? 12 : x.isInfra ? 9 : 9.5}" class="edge-glyph">${edgeInfo.icon}</text>
         </g>
-
-        <!-- Hover Hint -->
-        ${!isAttack ? `
-          <g id="ge-hint-${i}" class="edge-hover-hint" data-hint-w="${hintWidth}">
-            <polygon points="${arrowPoints}" fill="#0c326f" />
-            <rect x="${hintX - hintWidth / 2}" y="${hintY - 10}" width="${hintWidth}" height="20" rx="4" class="edge-hover-rect" />
-            <text x="${hintX}" y="${hintY}" text-anchor="middle" dominant-baseline="central" class="edge-hover-label">
-              ${esc(hintText)}
-            </text>
-          </g>
-        ` : ''}
       </g>
     `;
   }).join('');
 
-  // 5. RENDERIZAR NÓS ARRASTÁVEIS
+  // 5. RENDERIZAR NÓS ARRASTÁVEIS COM POPUP DE NÚMERO DO ATAQUE E HOVER NO CANTO INFERIOR DIREITO
+  const now = Date.now();
   const circles = Array.from(simNodes.values()).map(n => {
     const isIncident = n.kind === 'incident';
     const isSelected = selectedNode && selectedNode.id === n.id;
     const isTargeted = currentAttack && (n.label === currentAttack.target || n.id.includes(currentAttack.target));
+    const attackPopup = activeNodeAttacks.get(n.id);
+    const hasActiveAttack = attackPopup && attackPopup.expireTime > now;
 
     return `
-      <g class="graph-node ${n.isFixed ? 'fixed-network-node' : 'dynamic-attack-node'} ${isTargeted ? 'targeted-node' : ''}" 
+      <g class="graph-node ${n.isFixed ? 'fixed-network-node' : 'dynamic-attack-node'} ${isTargeted || hasActiveAttack ? 'targeted-node' : ''}" 
          id="gn-${n.idx}" data-node-id="${esc(n.id)}" 
          transform="translate(${n.x}, ${n.y})" 
+         onmouseenter="showNodeHintBottomRight('${esc(n.id)}', '${esc(n.friendlyName)}', '${esc(n.kind)}')"
+         onmouseleave="hideNodeHintBottomRight()"
          onclick="selectGraphNode('${esc(n.id)}', '${esc(n.kind)}', '${esc(n.friendlyName)}')">
         ${isIncident ? `<circle cx="0" cy="0" r="${n.r + 7}" fill="none" stroke="#c9182b" stroke-width="2" stroke-dasharray="4 3" class="pulse-ring"/>` : ''}
-        ${isTargeted ? `<circle cx="0" cy="0" r="${n.r + 6}" fill="none" stroke="#c9182b" stroke-width="2.5" class="pulse-ring"/>` : ''}
+        ${isTargeted || hasActiveAttack ? `<circle cx="0" cy="0" r="${n.r + 6}" fill="none" stroke="#c9182b" stroke-width="2.5" class="pulse-ring attack-node-pulse-ring"/>` : ''}
         ${isSelected ? `<circle cx="0" cy="0" r="${n.r + 5}" fill="none" stroke="#df9b15" stroke-width="3" />` : ''}
-        <circle cx="0" cy="0" r="${n.r}" fill="${n.style.fill}" stroke="${isSelected ? '#df9b15' : isTargeted ? '#c9182b' : n.style.stroke}" stroke-width="${isSelected || isTargeted ? 3 : 2}" />
-        <text x="0" y="0" text-anchor="middle" dominant-baseline="central" font-size="${n.style.iconSize}" class="node-icon">${n.icon}</text>
+        <circle cx="0" cy="0" r="${n.r}" fill="${n.style.fill}" stroke="${isSelected ? '#df9b15' : (isTargeted || hasActiveAttack) ? '#c9182b' : n.style.stroke}" stroke-width="${isSelected || isTargeted || hasActiveAttack ? 3 : 2}" />
+        ${n.id === 'asset:heraclitusdb' ? `
+          <!-- ESCUDO VERDE E AMARELO (HERACLITUSDB) -->
+          <g class="escudo-verde-amarelo" transform="scale(1.15)">
+            <!-- Sombra do Escudo -->
+            <path d="M 0 -20 C 14 -20, 18 -12, 18 0 C 18 12, 8 20, 0 24 C -8 20, -18 12, -18 0 C -18 -12, -14 -20, 0 -20 Z" fill="#000000" opacity="0.35" transform="translate(0, 2)" />
+            <!-- Borda Externa Ouro/Amarela -->
+            <path d="M 0 -20 C 14 -20, 18 -12, 18 0 C 18 12, 8 20, 0 24 C -8 20, -18 12, -18 0 C -18 -12, -14 -20, 0 -20 Z" fill="#ffd000" />
+            <!-- Campo Principal Verde Bandeira -->
+            <path d="M 0 -18 C 12 -18, 15.5 -10.5, 15.5 0 C 15.5 10.5, 7 17.5, 0 21.5 C -7 17.5, -15.5 10.5, -15.5 0 C -15.5 -10.5, -12 -18, 0 -18 Z" fill="#009b3a" />
+            <!-- Losango Heráldico Amarelo Ouro -->
+            <polygon points="0,-13 12,0 0,13 -12,0" fill="#fedf00" stroke="#007a2a" stroke-width="0.8" />
+            <!-- Círculo Central Verde Escuro com Borda Branca -->
+            <circle cx="0" cy="0" r="5.8" fill="#006428" stroke="#ffffff" stroke-width="0.7" />
+            <!-- Estrela de 5 Pontas Branca -->
+            <polygon points="0,-4.5 1.3,-1.2 4.8,-1.2 2.0,0.9 3.0,4.2 0,2.2 -3.0,4.2 -2.0,0.9 -4.8,-1.2 -1.3,-1.2" fill="#ffffff" />
+          </g>
+        ` : `
+          <text x="0" y="0" text-anchor="middle" dominant-baseline="central" font-size="${n.style.iconSize}" class="node-icon">${n.icon}</text>
+        `}
         <text x="0" y="${n.r + 14}" text-anchor="middle" class="node-label">${esc(short(n.friendlyName, 22))}</text>
+
+        <!-- POPUP DO NÚMERO DO ATAQUE: APARECE NO NÓ E SOME -->
+        ${hasActiveAttack ? `
+          <g class="node-attack-badge-popup">
+            <polygon points="0,${-n.r - 4} -5,${-n.r - 10} 5,${-n.r - 10}" fill="#c9182b" />
+            <rect x="${-Math.max(96, (attackPopup.text.length + 3) * 7.5) / 2}" y="${-n.r - 34}" width="${Math.max(96, (attackPopup.text.length + 3) * 7.5)}" height="24" rx="12" fill="#c9182b" stroke="#ffffff" stroke-width="2" class="popup-rect-shadow" />
+            <text x="0" y="${-n.r - 21}" text-anchor="middle" dominant-baseline="central" fill="#ffffff" font-size="11.5" font-weight="900" font-family="system-ui, -apple-system, sans-serif">
+              ⚡ ${esc(attackPopup.text)}
+            </text>
+          </g>
+        ` : ''}
       </g>
     `;
   }).join('');
@@ -693,7 +1086,6 @@ function renderGraph(s) {
     <svg id="graphSvg" viewBox="0 0 ${W} ${H}" width="100%" height="100%">
       <g class="graph-edges-layer">${linesAndBadges}</g>
       <g class="graph-nodes-layer">${circles}</g>
-      <g class="graph-hints-layer">${activeHints.join('')}</g>
     </svg>
   `;
 
@@ -791,27 +1183,191 @@ function updateFocusCard(s) {
 }
 
 // ========================================================
-// PAINEL INFERIOR: TRILHA (Eventos e Rastros)
+// PAINEL INFERIOR: TRILHA (Eventos e Rastros) — DADOS REAIS HERACLITUSDB COM PAGINAÇÃO
 // ========================================================
-function renderTrail(s) {
-  const b = $('#eventRows');
-  if (!s?.events || !s.events.length) {
-    b.innerHTML = '<tr><td colspan="8" class="empty">Nenhum evento registrado ainda. Dispare um ataque acima.</td></tr>';
+let hdbCurrentPage = 1;
+let hdbPageSize = 15;
+let hdbAllEvents = [];
+
+async function loadRealHeraclitusTrail() {
+  const badge = $('#integrationBadge');
+  const summaryBadge = $('#heraclitusSummaryBadge');
+  const rows = $('#heraclitusEventRows');
+  if (!rows) return;
+
+  try {
+    const res = await api('/api/heraclitus-events');
+    const data = res.data || {};
+    const events = data.events || [];
+
+    if (res.status === 'PASS' && Array.isArray(events)) {
+      if (badge) {
+        badge.textContent = 'CONECTADO (WSL 8080)';
+        badge.className = 'tag-status normal';
+      }
+      if (summaryBadge) {
+        summaryBadge.textContent = `${events.length} eventos reais registrados no Ledger HRKL`;
+        summaryBadge.style.color = 'var(--gov-green-light)';
+      }
+
+      // Ordena por LSN decrescente para os mais recentes ficarem no topo
+      hdbAllEvents = [...events].sort((a, b) => (Number(b.lsn) || 0) - (Number(a.lsn) || 0));
+      renderHdbPage();
+    } else {
+      if (badge) {
+        badge.textContent = 'OFFLINE (WSL 8080)';
+        badge.className = 'tag-status';
+      }
+      if (summaryBadge) {
+        summaryBadge.textContent = 'HeraclitusDB local indisponível';
+      }
+      rows.innerHTML = `<tr><td colspan="9" class="empty">HeraclitusDB não respondeu na porta 8080 do WSL (${esc(res.error || 'Indisponível')}).</td></tr>`;
+      updateHdbPaginationControls(0, 0, 0);
+    }
+  } catch (err) {
+    if (badge) {
+      badge.textContent = 'ERRO CONEXÃO';
+      badge.className = 'tag-status';
+    }
+    if (summaryBadge) {
+      summaryBadge.textContent = 'Erro ao consultar HeraclitusDB';
+    }
+    rows.innerHTML = `<tr><td colspan="9" class="empty">Erro ao conectar ao HeraclitusDB: ${esc(err.message)}</td></tr>`;
+    updateHdbPaginationControls(0, 0, 0);
+  }
+}
+
+function renderHdbPage() {
+  const rows = $('#heraclitusEventRows');
+  if (!rows) return;
+
+  const total = hdbAllEvents.length;
+  if (!total) {
+    rows.innerHTML = '<tr><td colspan="9" class="empty">HeraclitusDB conectado. Nenhum evento registrado no ledger. Dispare um ataque acima.</td></tr>';
+    updateHdbPaginationControls(0, 0, 0);
     return;
   }
 
-  b.innerHTML = [...s.events].reverse().map(e => `
-    <tr>
-      <td><strong>${e.lsn}</strong></td>
-      <td><span class="trail-timestamp">${formatDateTime(e)}</span></td>
-      <td><span style="color:var(--gov-blue-light); font-weight:700;">${esc(e.source)}</span></td>
-      <td><strong>${esc(e.event_type)}</strong><br><small style="color:var(--gov-muted);">${esc(e.summary)}</small></td>
-      <td><code>${esc(e.actor)}</code> → <code style="color:var(--gov-gold); font-weight:700;">${esc(short(e.asset, 26))}</code></td>
-      <td><span class="outcome-tag ${esc(e.outcome)}">${esc(e.outcome)}</span><br><small style="color:var(--gov-muted);">${esc(e.reason_code || '')}</small></td>
-      <td style="font-weight:900; color:${e.upstream_delta ? 'var(--gov-green)' : 'var(--gov-muted)'};">${e.upstream_delta ?? 0}</td>
-      <td><code>${esc(short(e.event_hash, 10))}</code></td>
-    </tr>
-  `).join('');
+  const totalPages = Math.max(1, Math.ceil(total / hdbPageSize));
+  if (hdbCurrentPage > totalPages) hdbCurrentPage = totalPages;
+  if (hdbCurrentPage < 1) hdbCurrentPage = 1;
+
+  const startIndex = (hdbCurrentPage - 1) * hdbPageSize;
+  const endIndex = Math.min(startIndex + hdbPageSize, total);
+  const pageSlice = hdbAllEvents.slice(startIndex, endIndex);
+
+  rows.innerHTML = pageSlice.map(ev => {
+    let dtStr = '—';
+    if (ev.observed_at_unix_nanos) {
+      try {
+        const ms = Math.floor(Number(ev.observed_at_unix_nanos) / 1000000);
+        dtStr = new Date(ms).toLocaleString('pt-BR');
+      } catch (_) {
+        dtStr = String(ev.observed_at_unix_nanos);
+      }
+    }
+
+    const resUpper = (ev.result || 'UNKNOWN').toUpperCase();
+    let badgeClass = 'PASS';
+    let label = resUpper;
+    if (resUpper === 'DENY' || resUpper === 'BLOCKED' || ev.blocked) {
+      badgeClass = 'DENY';
+      label = 'BLOQUEADO';
+    } else if (resUpper === 'REQUIRE_HITL') {
+      badgeClass = 'REQUIRE_HITL';
+      label = 'RETIDO (HITL)';
+    } else if (resUpper === 'APPROVED') {
+      badgeClass = 'APPROVED';
+      label = 'APROVADO';
+    } else if (resUpper === 'OBSERVED') {
+      badgeClass = 'OBSERVED';
+      label = 'OBSERVADO';
+    } else if (resUpper === 'PASS' || resUpper === 'ALLOW') {
+      badgeClass = 'PASS';
+      label = 'LIBERADO';
+    } else if (resUpper === 'INCONCLUSIVE') {
+      badgeClass = 'INCONCLUSIVE';
+      label = 'INCONCLUSIVO';
+    }
+
+    const reasonHtml = ev.reason_code ? `<br><small style="color:var(--gov-muted); font-size:10px;">${esc(ev.reason_code)}</small>` : '';
+    const upstreamVal = ev.upstream_delta ?? 0;
+    const upstreamColor = upstreamVal > 0 ? 'var(--gov-green)' : 'var(--gov-muted)';
+
+    return `
+      <tr>
+        <td><strong style="color:var(--gov-blue-light); font-size:13px;">${ev.lsn ?? '—'}</strong></td>
+        <td><span class="trail-timestamp">${dtStr}</span></td>
+        <td><code style="color:var(--gov-text); font-size:11px;">${esc(short(ev.attack_id || '—', 22))}</code></td>
+        <td><strong style="color:var(--gov-text);">${esc(ev.vector || '—')}</strong></td>
+        <td><code style="color:var(--gov-gold); font-weight:700;">${esc(short(ev.target || '—', 26))}</code></td>
+        <td><span class="outcome-tag ${badgeClass}">${label}</span>${reasonHtml}</td>
+        <td style="font-weight:900; color:${upstreamColor}; text-align:center;">${upstreamVal}</td>
+        <td><code title="${esc(ev.record_hash || '')}">${esc(short(ev.record_hash || '—', 14))}</code></td>
+        <td><code style="font-size:10.5px; color:var(--gov-muted);">${esc(short(ev.evidence_id || '—', 18))}</code></td>
+      </tr>
+    `;
+  }).join('');
+
+  updateHdbPaginationControls(startIndex, endIndex, total);
+}
+
+function updateHdbPaginationControls(start, end, total) {
+  const pageInfo = $('#hdbPageInfo');
+  const pageBadge = $('#hdbCurrentPageBadge');
+  const totalPagesBadge = $('#hdbTotalPagesBadge');
+  const btnFirst = $('#hdbPageFirst');
+  const btnPrev = $('#hdbPagePrev');
+  const btnNext = $('#hdbPageNext');
+  const btnLast = $('#hdbPageLast');
+
+  const totalPages = Math.max(1, Math.ceil(total / hdbPageSize));
+
+  if (pageInfo) {
+    if (total === 0) {
+      pageInfo.textContent = 'Nenhum registro encontrado';
+    } else {
+      pageInfo.textContent = `Mostrando ${start + 1}–${end} de ${total} registros`;
+    }
+  }
+
+  if (pageBadge) pageBadge.textContent = total === 0 ? 0 : hdbCurrentPage;
+  if (totalPagesBadge) totalPagesBadge.textContent = totalPages;
+
+  if (btnFirst) btnFirst.disabled = (hdbCurrentPage <= 1 || total === 0);
+  if (btnPrev) btnPrev.disabled = (hdbCurrentPage <= 1 || total === 0);
+  if (btnNext) btnNext.disabled = (hdbCurrentPage >= totalPages || total === 0);
+  if (btnLast) btnLast.disabled = (hdbCurrentPage >= totalPages || total === 0);
+}
+
+window.changeHdbPageSize = function(val) {
+  hdbPageSize = parseInt(val, 10) || 15;
+  hdbCurrentPage = 1;
+  renderHdbPage();
+};
+
+window.gotoHdbPage = function(action) {
+  const total = hdbAllEvents.length;
+  const totalPages = Math.max(1, Math.ceil(total / hdbPageSize));
+
+  if (action === 'first') {
+    hdbCurrentPage = 1;
+  } else if (action === 'prev') {
+    hdbCurrentPage = Math.max(1, hdbCurrentPage - 1);
+  } else if (action === 'next') {
+    hdbCurrentPage = Math.min(totalPages, hdbCurrentPage + 1);
+  } else if (action === 'last') {
+    hdbCurrentPage = totalPages;
+  }
+  renderHdbPage();
+};
+
+// Aliases para compatibilidade total
+function renderTrail(s) {
+  loadRealHeraclitusTrail();
+}
+function loadHeraclitusWslData() {
+  loadRealHeraclitusTrail();
 }
 
 // ========================================================
@@ -837,7 +1393,10 @@ window.executeAttackTo = async function(targetStep) {
       render(r);
       const currentAtt = ATTACKS[r.step - 1];
       const lastEv = r.events && r.events.length ? r.events[r.events.length - 1] : null;
+      const targetNodeId = findNodeIdForTarget(currentAtt?.target);
+      if (targetNodeId && currentAtt) triggerNodeAttackPopup(targetNodeId, currentAtt.step, currentAtt.title);
       showAttackHint(currentAtt, lastEv);
+      loadRealHeraclitusTrail();
       if (state.step < targetStep) {
         await new Promise(res => setTimeout(res, 350));
       }
@@ -851,71 +1410,6 @@ window.executeAttackTo = async function(targetStep) {
   }
 };
 
-// ========================================================
-// CONSULTA E RENDERIZAÇÃO DO HERACLITUSDB (WSL LINUX)
-// ========================================================
-async function loadHeraclitusWslData() {
-  const badge = $('#integrationBadge');
-  const summaryBadge = $('#heraclitusSummaryBadge');
-  const rows = $('#heraclitusEventRows');
-
-  try {
-    const res = await api('/api/heraclitus-adapter');
-    const snap = res.snapshot || {};
-
-    if (snap.connected) {
-      badge.textContent = 'CONECTADO (WSL 8080)';
-      badge.className = 'tag-status normal';
-
-      const redTeam = snap.surfaces?.red_team?.data;
-      if (redTeam && Array.isArray(redTeam.events)) {
-        summaryBadge.textContent = `${redTeam.events.length} eventos lidos ao vivo do WSL Linux`;
-        summaryBadge.style.color = 'var(--gov-green-light)';
-
-        rows.innerHTML = redTeam.events.map(ev => `
-          <tr>
-            <td><strong>${ev.lsn}</strong></td>
-            <td><span class="trail-timestamp">${formatDateTime(ev)}</span></td>
-            <td><code>${esc(short(ev.attack_id, 22))}</code></td>
-            <td>${esc(ev.vector || '—')}</td>
-            <td><code style="color:var(--gov-gold); font-weight:700;">${esc(ev.target || '—')}</code></td>
-            <td><span class="outcome-tag ${ev.result === 'pass' ? 'PASS' : 'DENY'}">${esc(ev.result?.toUpperCase() || 'PASS')}</span></td>
-            <td><code>${esc(short(ev.record_hash, 16))}</code></td>
-          </tr>
-        `).join('');
-      } else {
-        summaryBadge.textContent = 'Adapter conectado (aguardando eventos)';
-        rows.innerHTML = '<tr><td colspan="7" class="empty">Heraclitus conectado, nenhum evento retornado.</td></tr>';
-      }
-    } else {
-      badge.textContent = 'NÃO CONECTADO';
-      badge.className = 'tag-status';
-      summaryBadge.textContent = 'HeraclitusDB local indisponível';
-      rows.innerHTML = '<tr><td colspan="7" class="empty">HeraclitusDB não respondeu na porta 8080 do WSL.</td></tr>';
-    }
-  } catch (e) {
-    badge.textContent = 'ERRO CONEXÃO';
-    summaryBadge.textContent = e.message;
-    rows.innerHTML = `<tr><td colspan="7" class="empty">Erro ao conectar: ${esc(e.message)}</td></tr>`;
-  }
-}
-
-// NAVEGAÇÃO DE ABAS NA TRILHA INFERIOR
-$('#tabTrailBtn').onclick = () => {
-  $('#tabTrailBtn').classList.add('active');
-  $('#tabHeraclitusBtn').classList.remove('active');
-  $('#trailTabContent').classList.add('active');
-  $('#heraclitusTabContent').classList.remove('active');
-};
-
-$('#tabHeraclitusBtn').onclick = () => {
-  $('#tabHeraclitusBtn').classList.add('active');
-  $('#tabTrailBtn').classList.remove('active');
-  $('#heraclitusTabContent').classList.add('active');
-  $('#trailTabContent').classList.remove('active');
-  loadHeraclitusWslData();
-};
-
 // BOTÕES DE AÇÃO GLOBAIS
 $('#stepBtn').onclick = async () => {
   if (state && state.completed) {
@@ -927,6 +1421,8 @@ $('#stepBtn').onclick = async () => {
     render(r);
     const currentAtt = ATTACKS[r.step - 1];
     const lastEv = r.events && r.events.length ? r.events[r.events.length - 1] : null;
+    const targetNodeId = findNodeIdForTarget(currentAtt?.target);
+    if (targetNodeId && currentAtt) triggerNodeAttackPopup(targetNodeId, currentAtt.step, currentAtt.title);
     showAttackHint(currentAtt, lastEv);
     toast(`Passo ${r.step} executado com sucesso`);
   } catch (e) {
@@ -946,6 +1442,8 @@ $('#runBtn').onclick = async () => {
       render(r);
       const currentAtt = ATTACKS[r.step - 1];
       const lastEv = r.events && r.events.length ? r.events[r.events.length - 1] : null;
+      const targetNodeId = findNodeIdForTarget(currentAtt?.target);
+      if (targetNodeId && currentAtt) triggerNodeAttackPopup(targetNodeId, currentAtt.step, currentAtt.title);
       showAttackHint(currentAtt, lastEv);
       await new Promise(res => setTimeout(res, 380));
     }
@@ -970,121 +1468,161 @@ $('#resetBtn').onclick = async () => {
   }
 };
 
-$('#exportBtn').onclick = async () => {
-  try {
-    const r = await api('/api/export', { method: 'POST' });
-    toast(`Evidence Bundle gerado: ${r.status}`);
-  } catch (e) {
-    toast('Falha ao exportar bundle: ' + e.message);
-  }
-};
+const expBtn = $('#exportBtn');
+if (expBtn) {
+  expBtn.onclick = async () => {
+    try {
+      const r = await api('/api/export', { method: 'POST' });
+      toast(`Evidence Bundle gerado: ${r.status}`);
+    } catch (e) {
+      toast('Falha ao exportar bundle: ' + e.message);
+    }
+  };
+}
 
-$('#downloadBtn').onclick = () => {
-  location.href = '/api/evidence/download';
-};
+const dlBtn = $('#downloadBtn');
+if (dlBtn) {
+  dlBtn.onclick = () => {
+    location.href = '/api/evidence/download';
+  };
+}
 
 // ATUALIZAÇÃO DA BARRA DE INFRAESTRUTURA DO STF NO TOPO
 function updateInfraStatusBar(s) {
   const step = s?.step || 0;
 
-  // 1. Firewall / WAF
+  // 1. Firewall / WAF Borda
   const nodeFw = $('#node-fw');
   const statusFw = $('#status-fw');
-  if (step >= 2) {
-    nodeFw.className = 'infra-node-item targeted';
-    statusFw.textContent = 'SONDAGEM OBSERVADA';
-    statusFw.style.color = 'var(--gov-gold)';
-  } else {
-    nodeFw.className = 'infra-node-item';
-    statusFw.textContent = 'PERÍMETRO NORMAL';
-    statusFw.style.color = 'var(--gov-green)';
+  if (nodeFw && statusFw) {
+    if (step >= 2) {
+      nodeFw.className = 'infra-node-item targeted';
+      statusFw.textContent = 'SONDAGEM OBSERVADA';
+      statusFw.style.color = 'var(--gov-gold)';
+    } else {
+      nodeFw.className = 'infra-node-item';
+      statusFw.textContent = 'PERÍMETRO NORMAL';
+      statusFw.style.color = 'var(--gov-green)';
+    }
   }
 
-  // 2. Máquinas de Ministros (VDI)
+  // 2. Gabinete dos Ministros (VDI)
   const nodeMin = $('#node-ministro');
   const statusMin = $('#status-ministro');
-  if (step >= 13) {
-    nodeMin.className = 'infra-node-item compromised';
-    statusMin.textContent = 'TROCA IDENTIDADE (DENY)';
-    statusMin.style.color = 'var(--gov-red)';
-  } else if (step >= 3) {
-    nodeMin.className = 'infra-node-item compromised';
-    statusMin.textContent = 'SESSÃO ANÔMALA (IAM)';
-    statusMin.style.color = 'var(--gov-red)';
-  } else {
-    nodeMin.className = 'infra-node-item';
-    statusMin.textContent = 'AUTENTICAÇÃO SEGURA';
-    statusMin.style.color = 'var(--gov-green)';
+  if (nodeMin && statusMin) {
+    if (step >= 13) {
+      nodeMin.className = 'infra-node-item compromised';
+      statusMin.textContent = 'TROCA IDENTIDADE (DENY)';
+      statusMin.style.color = 'var(--gov-red)';
+    } else if (step >= 3) {
+      nodeMin.className = 'infra-node-item compromised';
+      statusMin.textContent = 'SESSÃO ANÔMALA (IAM)';
+      statusMin.style.color = 'var(--gov-red)';
+    } else {
+      nodeMin.className = 'infra-node-item';
+      statusMin.textContent = 'AUTENTICAÇÃO SEGURA';
+      statusMin.style.color = 'var(--gov-green)';
+    }
   }
 
-  // 3. Servidores Linux
+  // 3. Servidores Linux (SUSE Enterprise)
   const nodeLinux = $('#node-linux');
   const statusLinux = $('#status-linux');
-  if (step >= 4) {
-    nodeLinux.className = 'infra-node-item compromised';
-    statusLinux.textContent = 'PROCESSO ATÍPICO';
-    statusLinux.style.color = 'var(--gov-red)';
-  } else {
-    nodeLinux.className = 'infra-node-item';
-    statusLinux.textContent = 'BACKEND REGULAR';
-    statusLinux.style.color = 'var(--gov-green)';
+  if (nodeLinux && statusLinux) {
+    if (step >= 4) {
+      nodeLinux.className = 'infra-node-item compromised';
+      statusLinux.textContent = 'PROCESSO ATÍPICO';
+      statusLinux.style.color = 'var(--gov-red)';
+    } else {
+      nodeLinux.className = 'infra-node-item';
+      statusLinux.textContent = 'BACKEND REGULAR';
+      statusLinux.style.color = 'var(--gov-green)';
+    }
   }
 
-  // 4. PJe / STF Digital
-  const nodePje = $('#node-pje');
-  const statusPje = $('#status-pje');
-  if (step >= 8) {
-    nodePje.className = 'infra-node-item compromised';
-    statusPje.textContent = 'ESCRITA BARRADA (DENY)';
-    statusPje.style.color = 'var(--gov-gold)';
-  } else if (step >= 7) {
-    nodePje.className = 'infra-node-item targeted';
-    statusPje.textContent = 'AUTOS SOB INCIDENTE';
-    statusPje.style.color = 'var(--gov-red)';
-  } else {
-    nodePje.className = 'infra-node-item';
-    statusPje.textContent = 'AUTOS ÍNTEGROS';
-    statusPje.style.color = 'var(--gov-green)';
+  // 4. STF Digital / e-STF
+  const nodeStf = $('#node-stfdigital');
+  const statusStf = $('#status-stfdigital');
+  if (nodeStf && statusStf) {
+    if (step >= 8) {
+      nodeStf.className = 'infra-node-item compromised';
+      statusStf.textContent = 'ESCRITA BARRADA (DENY)';
+      statusStf.style.color = 'var(--gov-gold)';
+    } else if (step >= 7) {
+      nodeStf.className = 'infra-node-item targeted';
+      statusStf.textContent = 'AUTOS SOB INCIDENTE';
+      statusStf.style.color = 'var(--gov-red)';
+    } else {
+      nodeStf.className = 'infra-node-item';
+      statusStf.textContent = 'AUTOS ÍNTEGROS';
+      statusStf.style.color = 'var(--gov-green)';
+    }
   }
 
-  // 5. Banco Judicial
+  // 5. Banco de Dados (Oracle Database RAC)
   const nodeDb = $('#node-db');
   const statusDb = $('#status-db');
-  if (step >= 6) {
-    nodeDb.className = 'infra-node-item targeted';
-    statusDb.textContent = 'QUERY ANÔMALA';
-    statusDb.style.color = 'var(--gov-gold)';
-  } else {
-    nodeDb.className = 'infra-node-item';
-    statusDb.textContent = 'TRANSACIONAL ÍNTEGRO';
-    statusDb.style.color = 'var(--gov-green)';
+  if (nodeDb && statusDb) {
+    if (step >= 6) {
+      nodeDb.className = 'infra-node-item targeted';
+      statusDb.textContent = 'QUERY ANÔMALA';
+      statusDb.style.color = 'var(--gov-gold)';
+    } else {
+      nodeDb.className = 'infra-node-item';
+      statusDb.textContent = 'TRANSACIONAL ÍNTEGRO';
+      statusDb.style.color = 'var(--gov-green)';
+    }
   }
 
-  // 6. Agentes IA (VitórIA/Rafa)
+  // 6. Agentes IA & HPC (Victor / MARIA)
   const nodeIa = $('#node-ia');
   const statusIa = $('#status-ia');
-  if (step >= 12) {
-    nodeIa.className = 'infra-node-item compromised';
-    statusIa.textContent = 'REPLAY BARRADO (DENY)';
-    statusIa.style.color = 'var(--gov-red)';
-  } else if (step >= 11) {
-    nodeIa.className = 'infra-node-item';
-    statusIa.textContent = 'EXPORTAÇÃO 1X (OK)';
-    statusIa.style.color = 'var(--gov-green)';
-  } else if (step >= 9) {
-    nodeIa.className = 'infra-node-item targeted';
-    statusIa.textContent = 'HITL EXIGIDO';
-    statusIa.style.color = 'var(--gov-gold)';
-  } else {
-    nodeIa.className = 'infra-node-item';
-    statusIa.textContent = 'GOVERNANÇA HITL';
-    statusIa.style.color = 'var(--gov-green)';
+  if (nodeIa && statusIa) {
+    if (step >= 12) {
+      nodeIa.className = 'infra-node-item compromised';
+      statusIa.textContent = 'REPLAY BARRADO (DENY)';
+      statusIa.style.color = 'var(--gov-red)';
+    } else if (step >= 11) {
+      nodeIa.className = 'infra-node-item';
+      statusIa.textContent = 'EXPORTAÇÃO 1X (OK)';
+      statusIa.style.color = 'var(--gov-green)';
+    } else if (step >= 9) {
+      nodeIa.className = 'infra-node-item targeted';
+      statusIa.textContent = 'HITL EXIGIDO';
+      statusIa.style.color = 'var(--gov-gold)';
+    } else {
+      nodeIa.className = 'infra-node-item';
+      statusIa.textContent = 'GOVERNANÇA HITL';
+      statusIa.style.color = 'var(--gov-green)';
+    }
+  }
+
+  // 7. HeraclitusDB (Ledger HRKL v6 no WSL)
+  const nodeHdb = $('#node-heraclitus');
+  const statusHdb = $('#status-heraclitus');
+  if (nodeHdb && statusHdb) {
+    const lastEv = s?.events && s.events.length ? s.events[s.events.length - 1] : null;
+    const realLsn = lastEv?.lsn;
+    if (step >= 16) {
+      nodeHdb.className = 'infra-node-item targeted';
+      statusHdb.textContent = `BUNDLE EXPORTADO (LSN ${realLsn || 3026})`;
+      statusHdb.style.color = 'var(--gov-green)';
+    } else if (step >= 1) {
+      nodeHdb.className = 'infra-node-item targeted';
+      statusHdb.textContent = `PERSISTÊNCIA REAL (LSN ${realLsn || 'OK'})`;
+      statusHdb.style.color = 'var(--gov-gold)';
+    } else {
+      nodeHdb.className = 'infra-node-item';
+      statusHdb.textContent = 'LEDGER HRKL (WSL 8080)';
+      statusHdb.style.color = 'var(--gov-green)';
+    }
   }
 }
 
-// PAINEL ESQUERDO: LISTA DE ATAQUES
+// PAINEL ESQUERDO: LISTA DE ATAQUES DA CAMPANHA STF (17 ATAQUES)
 function renderAttackList(s) {
   const container = $('#attackList');
+  if (!container) return;
   const currentStep = s?.step || 0;
 
   container.innerHTML = ATTACKS.map(att => {
@@ -1133,6 +1671,500 @@ function renderAttackList(s) {
   }).join('');
 }
 
+// PAINEL ESQUERDO: ATAQUES REAIS DO HERACLITUSDB (9 TESTES DE AGENT-ATACK-2.0)
+let cachedHdbAttacks = [];
+
+async function loadAndRenderHdbAttacks() {
+  const container = $('#hdbAttackList');
+  if (!container) return;
+
+  try {
+    if (!cachedHdbAttacks.length) {
+      const res = await api('/api/heraclitus-attacks');
+      cachedHdbAttacks = res.attacks || [];
+    }
+
+    container.innerHTML = cachedHdbAttacks.map(atk => {
+      const riskClass = atk.risk === 'ELEVATED' ? 'critical' : 'normal';
+      return `
+        <div class="attack-card hdb-attack-card" id="hdb-atk-${atk.id}">
+          <div class="attack-card-main">
+            <div class="attack-meta">
+              <span class="attack-phase-tag" style="background:#0c326f; color:#fff;">HERACLITUS 2.0</span>
+              <span class="attack-source-tag">${esc(atk.equipment)}</span>
+              <span class="tag-status ${riskClass}">${esc(atk.risk)}</span>
+            </div>
+            <div class="attack-title">${esc(atk.id)}: ${esc(atk.title)}</div>
+            <div class="attack-target">Alvo: <code>${esc(atk.target)}</code> [Porta: ${esc(atk.port)}]</div>
+            <small class="hdb-hypo-text">${esc(atk.hypothesis)}</small>
+          </div>
+          <button class="attack-btn hdb-btn" onclick="executeHdbAttack('${atk.id}')">⚡ Disparar</button>
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    container.innerHTML = `<div class="empty">Erro ao carregar catálogo do HeraclitusDB: ${esc(err.message)}</div>`;
+  }
+}
+
+// EXECUÇÃO DE ATAQUE HERACLITUSDB INDIVIDUAL
+window.executeHdbAttack = async function(attackId) {
+  if (running) return;
+  running = true;
+  try {
+    toast(`Executando teste real ${attackId} contra o HeraclitusDB...`);
+    const res = await api('/api/heraclitus-attacks/execute', {
+      method: 'POST',
+      body: JSON.stringify({ attack_id: attackId })
+    });
+    if (res.state) {
+      render(res.state);
+    } else {
+      const s = await api('/api/state');
+      render(s);
+    }
+    const atk = res.attack;
+    const ev = res.event;
+    const counters = res.counters || (state?.equipment_counters);
+    const eqCounter = counters && atk?.equipment_id ? counters[atk.equipment_id] : null;
+    const targetNodeId = findNodeIdForTarget(atk?.target) || 'asset:heraclitusdb';
+    if (targetNodeId && atk) triggerNodeAttackPopup(targetNodeId, atk.id, atk.title);
+    showAttackHint(atk, ev, eqCounter);
+    toast(`Teste ${attackId} executado no HeraclitusDB (LSN real ${res.lsn})`);
+    loadHeraclitusWslData();
+  } catch (err) {
+    toast('Falha no ataque HeraclitusDB: ' + err.message);
+  } finally {
+    running = false;
+  }
+};
+
+// EXECUÇÃO DA BATERIA COMPLETA DE 9 ATAQUES AO HERACLITUSDB
+window.executeAllHdbAttacks = async function() {
+  if (running) return;
+  running = true;
+  const btn = $('#runAllHdbBtn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Executando Bateria (9)...';
+  }
+  try {
+    toast('Disparando bateria completa de 9 testes no HeraclitusDB...');
+    const res = await api('/api/heraclitus-attacks/execute', {
+      method: 'POST',
+      body: JSON.stringify({ attack_id: 'all' })
+    });
+    if (res.state) render(res.state);
+    toast(`Bateria de ${res.count || 9} ataques executada com sucesso no HeraclitusDB!`);
+    loadHeraclitusWslData();
+  } catch (err) {
+    toast('Erro na bateria: ' + err.message);
+  } finally {
+    running = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '⚡ Executar Todos no HeraclitusDB';
+    }
+  }
+};
+
+// CONTADOR DE INTRUSÃO POR EQUIPAMENTO
+function renderEquipmentCounters(counters) {
+  const tbody = $('#equipmentCounterRows');
+  if (!tbody) return;
+
+  if (!counters || !Object.keys(counters).length) {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty">Nenhum equipamento registrado ainda.</td></tr>';
+    return;
+  }
+
+  const items = Object.values(counters);
+  let totalAtt = 0;
+  let totalBlk = 0;
+
+  tbody.innerHTML = items.map(eq => {
+    totalAtt += (eq.attempts || 0);
+    totalBlk += (eq.unauthorized_blocked || 0);
+    const isAttacked = (eq.attempts || 0) > 0;
+    const isBlocked = (eq.unauthorized_blocked || 0) > 0;
+    const statusClass = isBlocked ? 'critical' : isAttacked ? 'warning' : 'normal';
+    const statusText = isBlocked ? 'SOB ATAQUE (BLOQUEADO)' : isAttacked ? 'ATIVO' : 'PROTEGIDO';
+
+    return `
+      <tr class="${isAttacked ? 'row-attacked' : ''}">
+        <td>
+          <div class="equip-cell">
+            <span class="equip-icon">${eq.icon || '🖥️'}</span>
+            <div>
+              <strong>${esc(eq.name)}</strong>
+              <small class="equip-sub">${esc(eq.type)} • ${esc(eq.port)}</small>
+            </div>
+          </div>
+        </td>
+        <td style="text-align:center; font-weight:800; font-size:13px;">${eq.attempts || 0}</td>
+        <td style="text-align:center; font-weight:800; font-size:13px; color:var(--gov-red);">${eq.unauthorized_blocked || 0}</td>
+        <td style="text-align:center;">
+          <span class="tag-status ${statusClass}" style="font-size:9.5px; padding:2px 5px;">${statusText}</span>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  const totAttBadge = $('#totalAttemptsBadge');
+  const totBlkBadge = $('#totalBlockedBadge');
+  if (totAttBadge) totAttBadge.textContent = totalAtt;
+  if (totBlkBadge) totBlkBadge.textContent = totalBlk;
+}
+
+// ========================================================
+// PAINEL ESQUERDO: 20 ATAQUES NA INFRAESTRUTURA DO STF (CATEGORIZADOS)
+// ========================================================
+let cachedStfAttacks = [];
+
+async function loadAndRenderStfAttacks() {
+  const catContainers = {
+    IA: $('#catListIA'),
+    DB: $('#catListDB'),
+    LINUX: $('#catListLINUX'),
+    NETWORK: $('#catListNETWORK')
+  };
+
+  try {
+    if (!cachedStfAttacks.length) {
+      const res = await api('/api/stf-attacks');
+      cachedStfAttacks = res.attacks || [];
+    }
+
+    const grouped = { IA: [], DB: [], LINUX: [], NETWORK: [] };
+    for (const atk of cachedStfAttacks) {
+      if (grouped[atk.category]) grouped[atk.category].push(atk);
+    }
+
+    for (const [cat, container] of Object.entries(catContainers)) {
+      if (!container) continue;
+      const atks = grouped[cat] || [];
+      container.innerHTML = atks.map(atk => {
+        const riskClass = atk.risk === 'CRÍTICO' ? 'critical' : atk.risk === 'ELEVADO' ? 'warning' : 'normal';
+        return `
+          <div class="attack-card stf-infra-card" id="stf-atk-${atk.id}">
+            <div class="attack-card-main">
+              <div class="attack-meta">
+                <span class="attack-phase-tag">${esc(atk.phase)}</span>
+                <span class="attack-source-tag">${esc(atk.equipment)}</span>
+                <span class="tag-status ${riskClass}">${esc(atk.risk)}</span>
+              </div>
+              <div class="attack-title">${esc(atk.title)}</div>
+              <div class="attack-target">Alvo: <code>${esc(atk.target)}</code> • Vetor: <strong>${esc(atk.vector)}</strong></div>
+              <small class="hdb-hypo-text">${esc(atk.hypothesis)}</small>
+            </div>
+            <button class="attack-btn" onclick="executeStfAttack('${atk.id}')">⚡ Disparar</button>
+          </div>
+        `;
+      }).join('');
+    }
+  } catch (err) {
+    console.error('Erro ao carregar catálogo da infraestrutura STF:', err);
+  }
+}
+
+// EXECUÇÃO DE ATAQUE DA INFRAESTRUTURA INDIVIDUAL
+window.executeStfAttack = async function(attackId) {
+  if (running) return;
+  running = true;
+  try {
+    toast(`Disparando ataque ${attackId} contra o componente do STF...`);
+    const res = await api('/api/stf-attacks/execute', {
+      method: 'POST',
+      body: JSON.stringify({ attack_id: attackId })
+    });
+    if (res.state) {
+      render(res.state);
+    } else {
+      const s = await api('/api/state');
+      render(s);
+    }
+    const atk = res.attack;
+    const ev = res.event;
+    const counters = res.counters || (state?.equipment_counters);
+    const eqCounter = counters && atk?.equipment_id ? counters[atk.equipment_id] : null;
+    const targetNodeId = findNodeIdForTarget(atk?.target) || 'asset:heraclitusdb';
+    if (targetNodeId && atk) triggerNodeAttackPopup(targetNodeId, atk.id, atk.title);
+    showAttackHint(atk, ev, eqCounter);
+    toast(`Ataque ${attackId} auditado no HeraclitusDB (LSN real ${res.lsn})`);
+    loadRealHeraclitusTrail();
+  } catch (err) {
+    toast('Falha ao disparar ataque: ' + err.message);
+  } finally {
+    running = false;
+  }
+};
+
+// EXECUÇÃO DE TODOS OS ATAQUES DE UMA CATEGORIA (OU TODOS OS 20)
+window.executeStfCategoryAttacks = async function(category) {
+  if (running) return;
+  running = true;
+  const isAll = category === 'ALL';
+  toast(`Executando bateria de ataques ${isAll ? 'em toda a infraestrutura (20)' : 'na categoria ' + category}...`);
+
+  try {
+    const res = await api('/api/stf-attacks/execute', {
+      method: 'POST',
+      body: JSON.stringify({ category })
+    });
+    if (res.state) render(res.state);
+
+    if (res.results && res.results.length) {
+      for (const item of res.results) {
+        const atk = item.attack;
+        const targetNodeId = findNodeIdForTarget(atk?.target) || 'asset:heraclitusdb';
+        if (targetNodeId && atk) triggerNodeAttackPopup(targetNodeId, atk.id, atk.title);
+        await new Promise(r => setTimeout(r, 80));
+      }
+      const lastItem = res.results[res.results.length - 1];
+      showAttackHint(lastItem.attack, lastItem.event);
+    }
+
+    toast(`Bateria de ${res.count} testes concluída e auditada no HeraclitusDB!`);
+    loadRealHeraclitusTrail();
+  } catch (err) {
+    toast('Erro na bateria: ' + err.message);
+  } finally {
+    running = false;
+  }
+};
+
+// ========================================================
+// CONTROLE DE ATAQUES MASSIVOS CONTÍNUOS & RANDÔMICOS
+// ========================================================
+let massiveLoopTimer = null;
+let massiveLoopActive = false;
+let currentMassiveMode = null;
+let massiveAttackCount = 0;
+
+const MASSIVE_TARGETS = {
+  firewall: ['NET_WAF_01', 'NET_IAM_02', 'NET_LAN_04', 'NET_VDI_03'],
+  database: ['DB_ORA_01', 'DB_ORA_02', 'LNX_DB_02'],
+  heraclitus: ['H01', 'H02', 'H03', 'H04', 'H05', 'H06', 'H07', 'H08', 'H09'],
+  dw: ['DB_DW_03', 'DB_LAKE_04', 'DB_BI_05'],
+  random: [
+    'IA_VIC_01', 'IA_MAR_02', 'IA_VIT_03', 'IA_RAF_04',
+    'DB_ORA_01', 'DB_ORA_02', 'DB_DW_03', 'DB_LAKE_04', 'DB_BI_05',
+    'LNX_APP_01', 'LNX_DB_02', 'LNX_MGR_03',
+    'NET_WAF_01', 'NET_IAM_02', 'NET_VDI_03', 'NET_LAN_04',
+    'APP_STF_05', 'APP_SEI_06', 'APP_MNI_07', 'BKP_APP_08',
+    'H01', 'H02', 'H03', 'H04', 'H05', 'H06', 'H07', 'H08', 'H09'
+  ]
+};
+
+const MASSIVE_BUTTON_IDS = {
+  firewall: '#loopMassiveFwBtn',
+  database: '#loopMassiveDbBtn',
+  heraclitus: '#loopMassiveHdbBtn',
+  dw: '#loopMassiveDwBtn',
+  random: '#loopRandomBtn'
+};
+
+const MODE_LABELS = {
+  firewall: 'WAF / Firewall de Borda',
+  database: 'Banco de Dados Oracle RAC',
+  heraclitus: 'HeraclitusDB (WSL 8080)',
+  dw: 'Data Warehouse & Analytics',
+  random: 'Randômico (Toda a Infraestrutura)'
+};
+
+window.toggleMassiveAttack = function(mode) {
+  if (massiveLoopActive && currentMassiveMode === mode) {
+    stopAllMassiveAttacks();
+    return;
+  }
+
+  if (massiveLoopActive) {
+    stopAllMassiveAttacks(false);
+  }
+
+  currentMassiveMode = mode;
+  massiveLoopActive = true;
+  massiveAttackCount = 0;
+
+  Object.values(MASSIVE_BUTTON_IDS).forEach(id => {
+    const b = $(id);
+    if (b) b.classList.remove('active-loop');
+  });
+  const activeBtn = $(MASSIVE_BUTTON_IDS[mode]);
+  if (activeBtn) activeBtn.classList.add('active-loop');
+
+  const stopBtn = $('#stopMassiveBtn');
+  if (stopBtn) stopBtn.style.display = 'inline-flex';
+
+  const banner = $('#massiveActiveBanner');
+  const bannerText = $('#massiveBannerText');
+  if (banner && bannerText) {
+    banner.style.display = 'flex';
+    bannerText.textContent = `ATAQUE MASSIVO CONTÍNUO [${MODE_LABELS[mode] || mode.toUpperCase()}]: 0 disparos`;
+  }
+
+  toast(`Iniciando ataque massivo contínuo contra ${MODE_LABELS[mode] || mode}...`);
+  runMassiveCycle();
+};
+
+window.stopAllMassiveAttacks = function(showToast = true) {
+  if (massiveLoopTimer) {
+    clearTimeout(massiveLoopTimer);
+    massiveLoopTimer = null;
+  }
+  massiveLoopActive = false;
+
+  Object.values(MASSIVE_BUTTON_IDS).forEach(id => {
+    const b = $(id);
+    if (b) b.classList.remove('active-loop');
+  });
+
+  const stopBtn = $('#stopMassiveBtn');
+  if (stopBtn) stopBtn.style.display = 'none';
+
+  const banner = $('#massiveActiveBanner');
+  if (banner) banner.style.display = 'none';
+
+  if (showToast && currentMassiveMode) {
+    toast(`Ataque massivo interrompido pelo operador. Total de ${massiveAttackCount} disparos auditados no HeraclitusDB.`);
+  }
+  currentMassiveMode = null;
+  loadRealHeraclitusTrail();
+};
+
+async function runMassiveCycle() {
+  if (!massiveLoopActive || !currentMassiveMode) return;
+
+  const targetList = MASSIVE_TARGETS[currentMassiveMode] || MASSIVE_TARGETS.random;
+  const attackId = targetList[Math.floor(Math.random() * targetList.length)];
+
+  try {
+    massiveAttackCount++;
+    const bannerText = $('#massiveBannerText');
+    if (bannerText) {
+      bannerText.textContent = `ATAQUE MASSIVO CONTÍNUO [${MODE_LABELS[currentMassiveMode] || currentMassiveMode.toUpperCase()}]: ${massiveAttackCount} disparos`;
+    }
+
+    if (attackId.startsWith('H')) {
+      await executeHdbAttackSilent(attackId);
+    } else {
+      await executeStfAttackSilent(attackId);
+    }
+  } catch (err) {
+    console.warn('[MassiveLoop] Erro no disparo:', err);
+  }
+
+  if (massiveLoopActive) {
+    massiveLoopTimer = setTimeout(runMassiveCycle, 650);
+  }
+}
+
+async function executeStfAttackSilent(attackId) {
+  try {
+    const res = await api('/api/stf-attacks/execute', {
+      method: 'POST',
+      body: JSON.stringify({ attack_id: attackId })
+    });
+    if (res.state) {
+      state = res.state;
+      $('#riskValue').textContent = state.risk;
+      $('#upstreamHits').textContent = state.upstream_hits;
+      if (state.equipment_counters) renderEquipmentCounters(state.equipment_counters);
+      updateFocusCard(state);
+    }
+    const atk = res.attack;
+    const targetNodeId = findNodeIdForTarget(atk?.target) || 'asset:heraclitusdb';
+    if (targetNodeId && atk) triggerNodeAttackPopup(targetNodeId, atk.id, atk.title);
+
+    if (massiveAttackCount % 2 === 0) {
+      loadRealHeraclitusTrail();
+    }
+  } catch (e) {
+    console.warn('Erro silent STF:', e);
+  }
+}
+
+async function executeHdbAttackSilent(attackId) {
+  try {
+    const res = await api('/api/heraclitus-attacks/execute', {
+      method: 'POST',
+      body: JSON.stringify({ attack_id: attackId })
+    });
+    if (res.state) {
+      state = res.state;
+      $('#riskValue').textContent = state.risk;
+      $('#upstreamHits').textContent = state.upstream_hits;
+      if (state.equipment_counters) renderEquipmentCounters(state.equipment_counters);
+      updateFocusCard(state);
+    }
+    const atk = res.attack;
+    const targetNodeId = findNodeIdForTarget(atk?.target) || 'asset:heraclitusdb';
+    if (targetNodeId && atk) triggerNodeAttackPopup(targetNodeId, atk.id, atk.title);
+
+    if (massiveAttackCount % 2 === 0) {
+      loadRealHeraclitusTrail();
+    }
+  } catch (e) {
+    console.warn('Erro silent HDB:', e);
+  }
+}
+
+// CONTROLE DE NAVEGAÇÃO DE ABAS NO PAINEL ESQUERDO
+function setupLeftPanelTabs() {
+  const tabInfra = $('#tabStfInfraBtn');
+  const tabHdb = $('#tabHdbAttacksBtn');
+  const tabStf = $('#tabStfAttacksBtn');
+  const tabCounters = $('#tabEquipCountersBtn');
+
+  const contentInfra = $('#contentStfInfraAttacks');
+  const contentHdb = $('#contentHdbAttacks');
+  const contentStf = $('#contentStfAttacks');
+  const contentCounters = $('#contentEquipCounters');
+
+  const allTabs = [tabInfra, tabHdb, tabStf, tabCounters];
+  const allContents = [contentInfra, contentHdb, contentStf, contentCounters];
+
+  function activateTab(activeTab, activeContent) {
+    allTabs.forEach(t => t && t.classList.remove('active'));
+    allContents.forEach(c => c && c.classList.remove('active'));
+    if (activeTab) activeTab.classList.add('active');
+    if (activeContent) activeContent.classList.add('active');
+  }
+
+  if (tabInfra) {
+    tabInfra.onclick = () => {
+      activateTab(tabInfra, contentInfra);
+      loadAndRenderStfAttacks();
+    };
+  }
+
+  if (tabHdb) {
+    tabHdb.onclick = () => {
+      activateTab(tabHdb, contentHdb);
+      loadAndRenderHdbAttacks();
+    };
+  }
+
+  if (tabStf) {
+    tabStf.onclick = () => {
+      activateTab(tabStf, contentStf);
+    };
+  }
+
+  if (tabCounters) {
+    tabCounters.onclick = () => {
+      activateTab(tabCounters, contentCounters);
+      if (state?.equipment_counters) renderEquipmentCounters(state.equipment_counters);
+    };
+  }
+
+  const runAllInfraBtn = $('#runAllStfInfraBtn');
+  if (runAllInfraBtn) runAllInfraBtn.onclick = () => executeStfCategoryAttacks('ALL');
+
+  const runAllHdbBtn = $('#runAllHdbBtn');
+  if (runAllHdbBtn) runAllHdbBtn.onclick = () => executeAllHdbAttacks();
+}
+
 // RENDERIZAÇÃO GERAL DO ESTADO
 function render(s) {
   state = s;
@@ -1167,6 +2199,7 @@ function render(s) {
 
   updateInfraStatusBar(s);
   renderAttackList(s);
+  if (s.equipment_counters) renderEquipmentCounters(s.equipment_counters);
   renderGraph(s);
   renderTrail(s);
   updateFocusCard(s);
@@ -1174,13 +2207,20 @@ function render(s) {
 
 // INICIALIZAÇÃO
 async function init() {
+  setupLeftPanelTabs();
+  const refreshTrailBtn = $('#refreshTrailBtn');
+  if (refreshTrailBtn) refreshTrailBtn.onclick = () => loadRealHeraclitusTrail();
   try {
     const s = await api('/api/state');
     render(s);
   } catch (e) {
     toast('Falha ao conectar à POC: ' + e.message);
   }
-  loadHeraclitusWslData();
+  loadRealHeraclitusTrail();
+  loadAndRenderStfAttacks();
+  loadAndRenderHdbAttacks();
+  // Atualização contínua leve da trilha real do HeraclitusDB
+  setInterval(loadRealHeraclitusTrail, 4000);
 }
 
 init();

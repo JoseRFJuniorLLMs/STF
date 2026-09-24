@@ -824,6 +824,11 @@ body.panel-fullscreen-active {
   gap: 14px;
   flex-wrap: wrap;
 }
+.trail-meta-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 .trail-tabs {
   display: flex;
   gap: 6px;
@@ -974,6 +979,16 @@ body.panel-fullscreen-active {
 .attack-hint.hitl {
   border-left-color: var(--gov-gold-light);
 }
+.attack-hint.pass {
+  border-left-color: var(--gov-green);
+}
+.attack-hint.info {
+  border-left-color: var(--gov-blue-primary);
+  box-shadow: 0 16px 42px rgba(12, 50, 111, 0.28);
+}
+.attack-hint.info .hint-badge {
+  color: var(--gov-blue-primary);
+}
 .trail-timestamp {
   font-size: 10.5px;
   font-family: ui-monospace, Consolas, monospace;
@@ -1106,4 +1121,407 @@ body.panel-fullscreen-active {
 .toast.show {
   opacity: 1;
   transform: none;
+}
+
+/* ========================================================
+   ABAS DO PAINEL ESQUERDO (CAMPANHA STF, HERACLITUS, CONTADORES)
+   ======================================================== */
+.left-panel-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 14px;
+  background: #f0f4f9;
+  border-bottom: 1px solid var(--gov-border);
+}
+.left-tab-btn {
+  flex: 1;
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 6px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gov-muted);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  text-align: center;
+}
+.left-tab-btn:hover {
+  background: #e2eaf5;
+  color: var(--gov-blue-primary);
+}
+.left-tab-btn.active {
+  background: #ffffff;
+  color: var(--gov-blue-primary);
+  border-color: var(--gov-border);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+.left-tab-content {
+  display: none;
+  flex-direction: column;
+}
+.left-tab-content.active {
+  display: flex;
+}
+
+/* Heraclitus Attacks Header & Cards */
+.hdb-actions-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px 6px;
+  gap: 8px;
+}
+.hdb-actions-header .panel-subtitle {
+  margin: 0;
+  padding: 0;
+}
+.hdb-hypo-text {
+  display: block;
+  font-size: 11px;
+  color: var(--gov-muted);
+  margin-top: 4px;
+  line-height: 1.3;
+}
+.hdb-btn {
+  background: #0c326f !important;
+  color: #ffffff !important;
+  border-color: #0c326f !important;
+}
+.hdb-btn:hover {
+  background: #1351b4 !important;
+}
+
+/* Counters Summary & Table */
+.counters-summary-bar {
+  display: flex;
+  justify-content: space-around;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border-bottom: 1px solid var(--gov-border);
+  font-size: 11.5px;
+  color: var(--gov-text);
+}
+.counters-table-wrap {
+  max-height: 520px;
+  overflow-y: auto;
+}
+.counters-table {
+  font-size: 11px;
+  width: 100%;
+}
+.counters-table th {
+  position: sticky;
+  top: 0;
+  background: #f0f4f9;
+  z-index: 2;
+}
+.row-attacked {
+  background-color: #fffaf0 !important;
+}
+.equip-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.equip-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+.equip-sub {
+  display: block;
+  font-size: 9.5px;
+  color: var(--gov-muted);
+}
+
+/* ========================================================
+   POPUP DO NÚMERO DO ATAQUE NO NÓ DO GRAFO (APARECE E SOME)
+   ======================================================== */
+.node-attack-badge-popup {
+  animation: nodeBadgePopAndFade 4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  pointer-events: none;
+}
+
+@keyframes nodeBadgePopAndFade {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.65);
+  }
+  12% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.18);
+  }
+  22% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  75% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-16px) scale(0.8);
+  }
+}
+
+.attack-node-pulse-ring {
+  animation: nodeRingPulse 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite;
+}
+
+@keyframes nodeRingPulse {
+  0% {
+    r: 22px;
+    opacity: 0.95;
+    stroke-width: 3.5px;
+  }
+  100% {
+    r: 48px;
+    opacity: 0;
+    stroke-width: 0.5px;
+  }
+}
+
+.popup-rect-shadow {
+  filter: drop-shadow(0 4px 10px rgba(201, 24, 43, 0.55));
+}
+
+/* ========================================================
+   CATEGORIAS DA INFRAESTRUTURA DO STF (PAINEL ESQUERDO)
+   ======================================================== */
+.stf-infra-actions-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.stf-categories-container {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.stf-category-block {
+  background: #ffffff;
+  border: 1px solid var(--gov-border);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+.stf-category-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: #f1f5fa;
+  border-bottom: 1px solid var(--gov-border);
+}
+.stf-cat-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--gov-blue-dark);
+}
+.stf-cat-icon {
+  font-size: 16px;
+}
+.stf-cat-count {
+  font-size: 10.5px;
+  background: var(--gov-blue-primary);
+  color: #ffffff;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-weight: 700;
+}
+.cat-run-btn {
+  font-size: 10.5px;
+  padding: 4px 9px;
+}
+.cat-list {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.stf-infra-card {
+  border-left: 3.5px solid var(--gov-blue-light);
+}
+
+/* Escudo Verde e Amarelo (HeraclitusDB) */
+.escudo-verde-amarelo {
+  filter: drop-shadow(0 2px 6px rgba(0, 100, 40, 0.45));
+}
+
+/* ========================================================
+   BOTÕES E AÇÕES DE ATAQUE MASSIVO (PAINEL DIREITO)
+   ======================================================== */
+.head-right-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.massive-action-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  background: #f4f7fb;
+  padding: 4px 8px;
+  border: 1px solid var(--gov-border);
+  border-radius: 6px;
+}
+
+.btn.tiny {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.btn.warning {
+  background: #d97706;
+  border-color: #b45309;
+  color: #ffffff;
+}
+.btn.warning:hover {
+  background: #b45309;
+  color: #ffffff;
+}
+
+.btn.outline.danger {
+  background: #ffffff;
+  border: 1.5px solid var(--gov-red);
+  color: var(--gov-red);
+  font-weight: 800;
+}
+.btn.outline.danger:hover {
+  background: var(--gov-red-bg);
+}
+
+.btn.active-loop {
+  animation: loopPulsate 0.9s infinite alternate cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 10px rgba(220, 38, 38, 0.85);
+  font-weight: 900;
+}
+
+@keyframes loopPulsate {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 4px rgba(220, 38, 38, 0.5);
+  }
+  100% {
+    transform: scale(1.05);
+    box-shadow: 0 0 16px rgba(220, 38, 38, 0.95);
+  }
+}
+
+.massive-active-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 18px;
+  background: #fff1f0;
+  border-bottom: 2px solid var(--gov-red);
+  color: var(--gov-red);
+  font-size: 12px;
+}
+
+.massive-banner-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pulse-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--gov-red);
+  display: inline-block;
+  animation: pulseDot 0.7s infinite alternate;
+}
+
+@keyframes pulseDot {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(1.35);
+    opacity: 1;
+  }
+}
+
+/* ========================================================
+   BARRA DE PAGINAÇÃO HERACLITUSDB (PAINEL INFERIOR)
+   ======================================================== */
+.hdb-pagination-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 18px;
+  background: #f8fafc;
+  border-top: 1px solid var(--gov-border);
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.pagination-left {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.pagination-info {
+  font-weight: 700;
+  color: var(--gov-text-secondary);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11.5px;
+}
+
+.pagination-size-select {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--gov-muted);
+}
+
+.page-select {
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--gov-border);
+  background: #ffffff;
+  color: var(--gov-text);
+  font-weight: 600;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.page-select:focus {
+  outline: none;
+  border-color: var(--gov-blue-primary);
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pagination-page-indicator {
+  margin: 0 8px;
+  font-size: 11.5px;
+  color: var(--gov-text-secondary);
+  font-weight: 600;
+}
+
+.pagination-page-indicator strong {
+  color: var(--gov-blue-primary);
+  font-size: 12.5px;
 }

@@ -1,10 +1,10 @@
-"""Read-only loopback adapter to real HeraclitusDB REST surfaces confirmed in source."""
+"""Full loopback adapter for real HeraclitusDB REST surfaces (read + write/ingest)."""
 from __future__ import annotations
 import json, urllib.request, urllib.error
 from urllib.parse import urlparse, quote
 
 ALLOWED_HOSTS={"127.0.0.1","localhost","::1"}
-MAX_RESPONSE_BYTES=2*1024*1024
+MAX_RESPONSE_BYTES=15*1024*1024
 STATIC_PATHS={
     "sentinel_status":"/sentinel/status",
     "sentinel_incidents":"/sentinel/incidents",
@@ -40,12 +40,14 @@ def extract_incident_ids(value):
     return out
 
 class HeraclitusAdapter:
-    def __init__(self,base_url:str,timeout:float=1.5):
-        self.base_url=base_url.rstrip('/'); self.timeout=timeout
+    def __init__(self,base_url:str="http://127.0.0.1:8080",timeout:float=3.0):
+        self.base_url=base_url.rstrip('/')
+        self.timeout=timeout
         p=urlparse(self.base_url)
         if p.scheme not in {"http","https"} or p.hostname not in ALLOWED_HOSTS:
             raise ValueError("Safety gate: Heraclitus adapter accepts only loopback URLs")
         self._opener=urllib.request.build_opener(_NoRedirect())
+
     def get(self,path:str):
         url=self.base_url+path
         parsed=urlparse(url)
@@ -60,9 +62,52 @@ class HeraclitusAdapter:
             if len(raw)>MAX_RESPONSE_BYTES:
                 raise ValueError("Heraclitus response exceeds safety limit")
             return json.loads(raw.decode())
+
+    def post(self,path:str,payload:dict|bytes)->dict:
+        url=self.base_url+path
+        parsed=urlparse(url)
+        if parsed.hostname not in ALLOWED_HOSTS:
+            raise ValueError("Safety gate: request escaped loopback")
+        data = payload if isinstance(payload,(bytes,bytearray)) else json.dumps(payload,ensure_ascii=False).encode("utf-8")
+        req=urllib.request.Request(
+            url,data=data,
+            headers={"Content-Type":"application/json","Accept":"application/json"}
+        )
+        with self._opener.open(req,timeout=self.timeout) as r:
+            final=urlparse(r.geturl())
+            if final.hostname not in ALLOWED_HOSTS:
+                raise ValueError("Safety gate: final URL escaped loopback")
+            raw=r.read(MAX_RESPONSE_BYTES+1)
+            if len(raw)>MAX_RESPONSE_BYTES:
+                raise ValueError("Heraclitus response exceeds safety limit")
+            body=raw.decode("utf-8")
+            return json.loads(body) if body else {}
+
+    def record_red_team_event(self,event_data:dict)->dict:
+        """Persiste um evento real de ataque/telemetria no log HRKL v6 do HeraclitusDB."""
+        return self.post("/api/v1/agent/red-team/events",event_data)
+
+    def export_evidence_bundle(self)->dict:
+        """Solicita a exportação de um Evidence Bundle real assinado pelo HeraclitusDB."""
+        return self.post("/api/v1/agent/evidence/export",{})
+
+    def get_bundle_bytes(self,bundle_url_or_file:str)->bytes:
+        """Baixa o arquivo .zip real do bundle gerado pelo HeraclitusDB."""
+        if bundle_url_or_file.startswith("/"):
+            url=self.base_url+bundle_url_or_file
+        else:
+            url=f"{self.base_url}/api/v1/agent/bundles/{bundle_url_or_file}"
+        parsed=urlparse(url)
+        if parsed.hostname not in ALLOWED_HOSTS:
+            raise ValueError("Safety gate: request escaped loopback")
+        req=urllib.request.Request(url,headers={"Accept":"*/*"})
+        with self._opener.open(req,timeout=15.0) as r:
+            return r.read()
+
     def _read(self,path):
         try: return {"status":"PASS","data":self.get(path),"path":path}
         except Exception as e: return {"status":"UNAVAILABLE","error":str(e),"path":path}
+
     def snapshot(self):
         out={"connected":False,"base_url":self.base_url,"surfaces":{},"incident_drilldown":{}}
         for key,path in STATIC_PATHS.items():

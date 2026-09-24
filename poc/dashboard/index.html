@@ -42,11 +42,12 @@
   </header>
 
   <!-- MAPA DE STATUS DA INFRAESTRUTURA DO STF -->
+  <!-- MAPA DE STATUS DA INFRAESTRUTURA DO STF -->
   <section class="stf-infra-bar">
     <div class="infra-node-item" id="node-fw">
       <div class="infra-node-icon">🛡️</div>
       <div class="infra-node-info">
-        <span class="infra-node-title">Firewall / WAF</span>
+        <span class="infra-node-title">Firewall / WAF Borda</span>
         <small class="infra-node-status" id="status-fw">PERÍMETRO NORMAL</small>
       </div>
     </div>
@@ -54,7 +55,7 @@
     <div class="infra-node-item" id="node-ministro">
       <div class="infra-node-icon">⚖️</div>
       <div class="infra-node-info">
-        <span class="infra-node-title">Máquinas Ministros (VDI)</span>
+        <span class="infra-node-title">Gabinete Ministros (VDI)</span>
         <small class="infra-node-status" id="status-ministro">AUTENTICAÇÃO SEGURA</small>
       </div>
     </div>
@@ -62,23 +63,23 @@
     <div class="infra-node-item" id="node-linux">
       <div class="infra-node-icon">🐧</div>
       <div class="infra-node-info">
-        <span class="infra-node-title">Servidores Linux</span>
+        <span class="infra-node-title">SUSE Linux Enterprise</span>
         <small class="infra-node-status" id="status-linux">BACKEND REGULAR</small>
       </div>
     </div>
     <div class="infra-arrow">→</div>
-    <div class="infra-node-item" id="node-pje">
+    <div class="infra-node-item" id="node-stfdigital">
       <div class="infra-node-icon">🏛️</div>
       <div class="infra-node-info">
-        <span class="infra-node-title">PJe / STF Digital</span>
-        <small class="infra-node-status" id="status-pje">AUTOS ÍNTEGROS</small>
+        <span class="infra-node-title">STF Digital / e-STF</span>
+        <small class="infra-node-status" id="status-stfdigital">AUTOS ÍNTEGROS</small>
       </div>
     </div>
     <div class="infra-arrow">→</div>
     <div class="infra-node-item" id="node-db">
       <div class="infra-node-icon">🗄️</div>
       <div class="infra-node-info">
-        <span class="infra-node-title">Banco Judicial</span>
+        <span class="infra-node-title">Oracle Database RAC</span>
         <small class="infra-node-status" id="status-db">TRANSACIONAL ÍNTEGRO</small>
       </div>
     </div>
@@ -86,8 +87,16 @@
     <div class="infra-node-item" id="node-ia">
       <div class="infra-node-icon">🤖</div>
       <div class="infra-node-info">
-        <span class="infra-node-title">Agentes IA (VitórIA/Rafa)</span>
+        <span class="infra-node-title">IA & HPC (Victor/MARIA)</span>
         <small class="infra-node-status" id="status-ia">GOVERNANÇA HITL</small>
+      </div>
+    </div>
+    <div class="infra-arrow">→</div>
+    <div class="infra-node-item" id="node-heraclitus">
+      <div class="infra-node-icon">🛡️</div>
+      <div class="infra-node-info">
+        <span class="infra-node-title">HeraclitusDB</span>
+        <small class="infra-node-status" id="status-heraclitus">LEDGER HRKL (WSL 8080)</small>
       </div>
     </div>
   </section>
@@ -95,21 +104,129 @@
   <!-- CORPO PRINCIPAL: 2 PAINÉIS (ESQUERDO E DIREITO) -->
   <main class="main-two-columns">
 
-    <!-- PAINEL ESQUERDO: LISTA DE ATAQUES -->
+    <!-- PAINEL ESQUERDO: LISTA DE ATAQUES E CONTADORES -->
     <section class="panel panel-left attacks-panel">
       <div class="panel-head">
         <div>
           <span class="section-kicker">PAINEL ESQUERDO</span>
-          <h2>Lista de Ataques</h2>
+          <h2>Centro de Testes & Intrusão</h2>
         </div>
         <div class="head-meta">
           <span class="counter-badge" id="attackProgress">0 / 17 executados</span>
         </div>
       </div>
-      <p class="panel-subtitle">Dispare qualquer ataque contra a infraestrutura simulada do STF:</p>
-      
-      <div class="attack-list" id="attackList">
-        <!-- Renderizado dinamicamente pelo JavaScript com botões individuais -->
+
+      <!-- Abas de Navegação do Painel Esquerdo -->
+      <div class="left-panel-tabs">
+        <button class="left-tab-btn active" id="tabStfInfraBtn">Infra</button>
+        <button class="left-tab-btn" id="tabHdbAttacksBtn">HeraclitusDB</button>
+        <button class="left-tab-btn" id="tabStfAttacksBtn">Campanha</button>
+        <button class="left-tab-btn" id="tabEquipCountersBtn">Conta</button>
+      </div>
+
+      <!-- ABA 1: 20 ATAQUES NA INFRAESTRUTURA COMPLETA DO STF -->
+      <div id="contentStfInfraAttacks" class="left-tab-content active">
+        <div class="stf-infra-actions-header">
+          <p class="panel-subtitle">Ataques direcionados a todos os componentes e agentes:</p>
+          <button class="btn small primary" id="runAllStfInfraBtn" title="Disparar bateria de 20 testes em todos os equipamentos">⚡ Disparar Todos na Infraestrutura (20)</button>
+        </div>
+        
+        <!-- Categorias da Infraestrutura -->
+        <div class="stf-categories-container">
+          <!-- Categoria 1: Agentes IA -->
+          <div class="stf-category-block">
+            <div class="stf-category-head">
+              <div class="stf-cat-title">
+                <span class="stf-cat-icon">🤖</span>
+                <strong>Agentes de IA (Victor, MARIA, VitórIA, RAFA)</strong>
+                <span class="stf-cat-count" id="countCatIA">4 testes</span>
+              </div>
+              <button class="btn tiny secondary cat-run-btn" onclick="executeStfCategoryAttacks('IA')">⚡ Disparar Categoria</button>
+            </div>
+            <div class="attack-list cat-list" id="catListIA"></div>
+          </div>
+
+          <!-- Categoria 2: Bancos de Dados & Analytics -->
+          <div class="stf-category-block">
+            <div class="stf-category-head">
+              <div class="stf-cat-title">
+                <span class="stf-cat-icon">🗄️</span>
+                <strong>Bancos de Dados & Analytics (Oracle RAC, DW, BI, Data Lake)</strong>
+                <span class="stf-cat-count" id="countCatDB">5 testes</span>
+              </div>
+              <button class="btn tiny secondary cat-run-btn" onclick="executeStfCategoryAttacks('DB')">⚡ Disparar Categoria</button>
+            </div>
+            <div class="attack-list cat-list" id="catListDB"></div>
+          </div>
+
+          <!-- Categoria 3: Servidores Linux & Infra Host -->
+          <div class="stf-category-block">
+            <div class="stf-category-head">
+              <div class="stf-cat-title">
+                <span class="stf-cat-icon">🐧</span>
+                <strong>Servidores Linux (SUSE SLES, srv-app-07, srv-db-02, SUSE Manager)</strong>
+                <span class="stf-cat-count" id="countCatLINUX">3 testes</span>
+              </div>
+              <button class="btn tiny secondary cat-run-btn" onclick="executeStfCategoryAttacks('LINUX')">⚡ Disparar Categoria</button>
+            </div>
+            <div class="attack-list cat-list" id="catListLINUX"></div>
+          </div>
+
+          <!-- Categoria 4: Rede Corporativa, Perímetro & Gabinetes -->
+          <div class="stf-category-block">
+            <div class="stf-category-head">
+              <div class="stf-cat-title">
+                <span class="stf-cat-icon">🌐</span>
+                <strong>Rede, Perímetro & Gabinetes (WAF, IAM, VDI, LAN, STF Digital, SEI, MNI, Backup)</strong>
+                <span class="stf-cat-count" id="countCatNETWORK">8 testes</span>
+              </div>
+              <button class="btn tiny secondary cat-run-btn" onclick="executeStfCategoryAttacks('NETWORK')">⚡ Disparar Categoria</button>
+            </div>
+            <div class="attack-list cat-list" id="catListNETWORK"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ABA 2: 9 ATAQUES REAIS AO HERACLITUSDB (AGENT-ATACK-2.0) -->
+      <div id="contentHdbAttacks" class="left-tab-content">
+        <div class="hdb-actions-header">
+          <p class="panel-subtitle">Testes reais de <code>Agent-Atack-Heraclitus-2.0</code>:</p>
+          <button class="btn small primary" id="runAllHdbBtn" title="Executar bateria de 9 ataques no HeraclitusDB">⚡ Executar Todos no HeraclitusDB</button>
+        </div>
+        <div class="attack-list" id="hdbAttackList">
+          <!-- Renderizado dinamicamente pelo JavaScript -->
+        </div>
+      </div>
+
+      <!-- ABA 3: 17 ATAQUES DA CAMPANHA STF ROTEIRIZADA -->
+      <div id="contentStfAttacks" class="left-tab-content">
+        <p class="panel-subtitle">Dispare a sequência temporal simulada (Fase 1 e Fase 2):</p>
+        <div class="attack-list" id="attackList">
+          <!-- Renderizado dinamicamente pelo JavaScript -->
+        </div>
+      </div>
+
+      <!-- ABA 4: CONTADOR DE INTRUSÃO POR EQUIPAMENTO -->
+      <div id="contentEquipCounters" class="left-tab-content">
+        <div class="counters-summary-bar">
+          <span>Tentativas Totais: <strong id="totalAttemptsBadge">0</strong></span>
+          <span>Acessos Bloqueados: <strong id="totalBlockedBadge" style="color:var(--gov-red);">0</strong></span>
+        </div>
+        <div class="table-wrap counters-table-wrap">
+          <table class="simple-table counters-table">
+            <thead>
+              <tr>
+                <th>Equipamento / Sistema</th>
+                <th style="width: 70px; text-align: center;">Tentativas</th>
+                <th style="width: 70px; text-align: center;">Bloqueios</th>
+                <th style="width: 105px; text-align: center;">Status</th>
+              </tr>
+            </thead>
+            <tbody id="equipmentCounterRows">
+              <!-- Renderizado dinamicamente pelo JavaScript -->
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
 
@@ -124,11 +241,31 @@
           <button class="btn small ghost" id="resetBtn" title="Reiniciar Campanha de Ataques">Reiniciar</button>
           <button class="btn small" id="stepBtn" title="Executar Próximo Passo">Próximo Passo</button>
           <button class="btn small primary" id="runBtn" title="Executar Campanha Completa">Executar Campanha Completa</button>
+
+          <!-- ATAQUES MASSIVOS CONTÍNUOS & RANDÔMICOS -->
+          <div class="massive-action-group">
+            <button class="btn small warning" id="loopMassiveFwBtn" onclick="toggleMassiveAttack('firewall')" title="Ataque massivo contínuo contra Firewall / WAF Borda">🔥 Massivo: WAF/Firewall</button>
+            <button class="btn small warning" id="loopMassiveDbBtn" onclick="toggleMassiveAttack('database')" title="Ataque massivo contínuo contra Banco de Dados Oracle RAC">🔥 Massivo: Banco de Dados</button>
+            <button class="btn small warning" id="loopMassiveHdbBtn" onclick="toggleMassiveAttack('heraclitus')" title="Ataque massivo contínuo contra HeraclitusDB">🔥 Massivo: HeraclitusDB</button>
+            <button class="btn small warning" id="loopMassiveDwBtn" onclick="toggleMassiveAttack('dw')" title="Ataque massivo contínuo contra Data Warehouse e Data Lake">🔥 Massivo: DW/Analytics</button>
+            <button class="btn small danger" id="loopRandomBtn" onclick="toggleMassiveAttack('random')" title="Ataques randômicos e contínuos em toda a infraestrutura">🎲 Randômico Contínuo</button>
+            <button class="btn small outline danger" id="stopMassiveBtn" onclick="stopAllMassiveAttacks()" style="display:none;" title="Parar todos os ataques massivos imediatamente">⏹ Parar Ataque</button>
+          </div>
+
           <span id="graphStats" class="mono">0 nós / 0 arestas</span>
           <button class="btn small" id="fullscreenGraphBtn" title="Maximizar Grafo em Tela Cheia">
             <span id="fsBtnIcon">⛶</span> <span id="fsBtnText">Tela Cheia</span>
           </button>
         </div>
+      </div>
+
+      <!-- Banner de Status de Ataque Massivo Ativo -->
+      <div id="massiveActiveBanner" class="massive-active-banner" style="display:none;">
+        <div class="massive-banner-content">
+          <span class="pulse-dot"></span>
+          <strong id="massiveBannerText">ATAQUE MASSIVO ATIVO (0 disparos)</strong>
+        </div>
+        <button class="btn tiny danger" onclick="stopAllMassiveAttacks()">⏹ Parar Ataque</button>
       </div>
 
       <!-- O Grafo SVG com a topologia do STF e nós de ataque -->
@@ -168,73 +305,65 @@
 
   </main>
 
-  <!-- PAINEL INFERIOR: TRILHA (Eventos e Rastros) E HERACLITUSDB -->
+  <!-- PAINEL INFERIOR: SOMENTE HERACLITUSDB (WSL Linux — 127.0.0.1:8080) -->
   <section class="panel bottom-trail-panel">
     <div class="panel-head trail-header">
       <div>
         <span class="section-kicker">EMBAIXO</span>
-        <h2>TRILHA — Eventos e rastros</h2>
+        <h2>HeraclitusDB (WSL Linux — 127.0.0.1:8080)</h2>
       </div>
 
-      <!-- Seletor de Abas -->
-      <div class="trail-tabs">
-        <button class="tab-btn active" id="tabTrailBtn">Trilha da POC (Eventos e Rastros)</button>
-        <button class="tab-btn" id="tabHeraclitusBtn">HeraclitusDB (WSL Linux — 127.0.0.1:8080)</button>
-      </div>
-
-      <!-- Ações de Evidência -->
-      <div class="trail-actions">
-        <button class="btn small success" id="exportBtn">Gerar Evidence Bundle</button>
-        <button class="btn small" id="downloadBtn">Baixar JSON</button>
+      <!-- Metadados de Conexão com HeraclitusDB -->
+      <div class="trail-meta-info">
+        <span id="heraclitusSummaryBadge" class="badge">Carregando eventos reais do HeraclitusDB...</span>
       </div>
     </div>
 
-    <!-- CONTEÚDO TAB 1: TRILHA DA POC -->
-    <div id="trailTabContent" class="tab-content active">
-      <div class="table-wrap">
-        <table class="simple-table">
-          <thead>
-            <tr>
-              <th style="width: 55px;">LSN</th>
-              <th style="width: 145px;">Data / Hora</th>
-              <th style="width: 135px;">Fonte</th>
-              <th>Evento / Ação</th>
-              <th>Ator → Local Atacado</th>
-              <th style="width: 130px;">Decisão</th>
-              <th style="width: 75px;">Upstream</th>
-              <th style="width: 105px;">Hash Resumo</th>
-            </tr>
-          </thead>
-          <tbody id="eventRows">
-            <tr><td colspan="8" class="empty">Nenhum evento registrado. Dispare um ataque acima.</td></tr>
-          </tbody>
-        </table>
-      </div>
+    <!-- TABELA EXCLUSIVA COM DADOS REAIS DO HERACLITUSDB -->
+    <div class="table-wrap">
+      <table class="simple-table trail-real-table">
+        <thead>
+          <tr>
+            <th style="width: 75px;">LSN</th>
+            <th style="width: 155px;">Data / Hora</th>
+            <th style="width: 175px;">Attack ID</th>
+            <th>Vetor de Ataque / Ação</th>
+            <th style="width: 200px;">Alvo / Equipamento</th>
+            <th style="width: 135px;">Decisão / Resultado</th>
+            <th style="width: 75px; text-align: center;">Upstream</th>
+            <th style="width: 140px;">Hash Resumo</th>
+            <th style="width: 170px;">Evidence ID</th>
+          </tr>
+        </thead>
+        <tbody id="heraclitusEventRows">
+          <tr><td colspan="9" class="empty">Conectando ao HeraclitusDB no WSL (127.0.0.1:8080)...</td></tr>
+        </tbody>
+      </table>
     </div>
 
-    <!-- CONTEÚDO TAB 2: HERACLITUSDB WSL LINUX -->
-    <div id="heraclitusTabContent" class="tab-content">
-      <div class="heraclitus-meta-bar">
-        <span>Conexão ativa com o HeraclitusDB em: <code>http://127.0.0.1:8080</code> (WSL Ubuntu)</span>
-        <span id="heraclitusSummaryBadge" class="badge">Carregando telemetria ao vivo...</span>
+    <!-- BARRA DE PAGINAÇÃO DA GRADE DE DADOS DO HERACLITUSDB -->
+    <div class="hdb-pagination-bar" id="hdbPaginationBar">
+      <div class="pagination-left">
+        <span id="hdbPageInfo" class="pagination-info">Carregando dados...</span>
+        <div class="pagination-size-select">
+          <label for="hdbPageSize">Exibir por página:</label>
+          <select id="hdbPageSize" class="page-select" onchange="changeHdbPageSize(this.value)">
+            <option value="10">10</option>
+            <option value="15" selected>15</option>
+            <option value="25">25</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
       </div>
-      <div class="table-wrap">
-        <table class="simple-table">
-          <thead>
-            <tr>
-              <th style="width: 75px;">LSN WSL</th>
-              <th style="width: 145px;">Data / Hora</th>
-              <th style="width: 180px;">Attack ID</th>
-              <th>Vetor de Ataque</th>
-              <th style="width: 160px;">Target / Alvo</th>
-              <th style="width: 105px;">Resultado</th>
-              <th style="width: 160px;">Hash do Registro</th>
-            </tr>
-          </thead>
-          <tbody id="heraclitusEventRows">
-            <tr><td colspan="7" class="empty">Carregando eventos do HeraclitusDB no WSL...</td></tr>
-          </tbody>
-        </table>
+      <div class="pagination-controls">
+        <button class="btn tiny ghost" id="hdbPageFirst" onclick="gotoHdbPage('first')" title="Primeira página" disabled>&laquo; Primeira</button>
+        <button class="btn tiny ghost" id="hdbPagePrev" onclick="gotoHdbPage('prev')" title="Página anterior" disabled>&lsaquo; Anterior</button>
+        <span class="pagination-page-indicator">
+          Página <strong id="hdbCurrentPageBadge">1</strong> de <span id="hdbTotalPagesBadge">1</span>
+        </span>
+        <button class="btn tiny ghost" id="hdbPageNext" onclick="gotoHdbPage('next')" title="Próxima página" disabled>Próxima &rsaquo;</button>
+        <button class="btn tiny ghost" id="hdbPageLast" onclick="gotoHdbPage('last')" title="Última página" disabled>Última &raquo;</button>
       </div>
     </div>
   </section>
@@ -254,7 +383,7 @@
     <div class="hint-attack-title" id="hintAttackName">Nome do Ataque</div>
     <div class="hint-target-line">
       <span class="hint-label">Infraestrutura:</span>
-      <strong id="hintInfraName">PJe / STF Digital</strong>
+      <strong id="hintInfraName">STF Digital / e-STF</strong>
     </div>
     <div class="hint-outcome-line">
       <span class="hint-label">Resultado:</span>
