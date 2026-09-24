@@ -278,25 +278,52 @@ class PocEngine:
 
     def evidence_bundle(self) -> dict[str, Any]:
         event_dicts=[asdict(e) for e in self.events]; event_hashes=[e.event_hash for e in self.events]
+        trust={"local_content_integrity":"PASS" if self.events else "NOT_RUN","external_timestamp":"NOT_CONFIGURED","institutional_signature":"NOT_CONFIGURED","institutional_trust":"UNVERIFIED"}
+        limitations=["Dados integralmente sintéticos","Nenhuma conexão com infraestrutura real do STF","Sem IAM, HSM ou trust anchor institucional"]
+        sections={
+            "events":event_dicts,
+            "signals":self.signals,
+            "incident":self.incident,
+            "attack_graph":self.attack_graph,
+            "qualification":self.qualification(),
+            "trust":trust,
+            "limitations":limitations,
+        }
+        manifest={name:sha256_hex(value) for name,value in sections.items()}
+        package_root=merkle_root([manifest[name] for name in sorted(manifest)])
         return {
-            "schema_version":"stf-poc-evidence/1","package_id":"POC-STF-001","campaign_id":CAMPAIGN_ID,
+            "schema_version":"stf-poc-evidence/2","package_id":"POC-STF-001","campaign_id":CAMPAIGN_ID,
             "incident_id":INCIDENT_ID if self.incident else None,"generated_at_claimed":"2026-09-23T20:00:00-03:00",
             "event_count":len(self.events),"lsn_range":[1,len(self.events)] if self.events else [0,0],
-            "merkle_root":merkle_root(event_hashes),"events":event_dicts,"signals":self.signals,"incident":self.incident,
-            "attack_graph":self.attack_graph,"qualification":self.qualification(),
-            "trust":{"local_content_integrity":"PASS" if self.events else "NOT_RUN","external_timestamp":"NOT_CONFIGURED","institutional_signature":"NOT_CONFIGURED","institutional_trust":"UNVERIFIED"},
-            "limitations":["Dados integralmente sintéticos","Nenhuma conexão com infraestrutura real do STF","Sem IAM, HSM ou trust anchor institucional"],
+            "merkle_root":merkle_root(event_hashes),"package_root":package_root,"manifest":manifest,
+            **sections,
         }
 
     def verify_bundle(self,bundle:dict[str,Any])->dict[str,Any]:
         events=bundle.get("events",[]); prev="0"*64; hashes=[]; chain_ok=True
         for raw in events:
+            if not isinstance(raw,dict):
+                chain_ok=False; continue
             item=dict(raw); event_hash=item.pop("event_hash","")
             if item.get("prev_hash") != prev: chain_ok=False
             if sha256_hex(item) != event_hash: chain_ok=False
-            hashes.append(event_hash); prev=event_hash
+            if isinstance(event_hash,str) and len(event_hash)==64: hashes.append(event_hash)
+            else: chain_ok=False
+            prev=event_hash
         root_ok=merkle_root(hashes)==bundle.get("merkle_root")
-        return {"chain":"PASS" if chain_ok else "FAIL","merkle":"PASS" if root_ok else "FAIL","overall":"PASS" if chain_ok and root_ok else "FAIL"}
+        section_names=("events","signals","incident","attack_graph","qualification","trust","limitations")
+        manifest=bundle.get("manifest") if isinstance(bundle.get("manifest"),dict) else {}
+        manifest_ok=all(manifest.get(name)==sha256_hex(bundle.get(name)) for name in section_names)
+        expected_package_root=merkle_root([manifest[name] for name in sorted(manifest)]) if manifest and all(isinstance(v,str) and len(v)==64 for v in manifest.values()) else None
+        package_ok=expected_package_root is not None and expected_package_root==bundle.get("package_root")
+        overall=chain_ok and root_ok and manifest_ok and package_ok
+        return {
+            "chain":"PASS" if chain_ok else "FAIL",
+            "merkle":"PASS" if root_ok else "FAIL",
+            "manifest":"PASS" if manifest_ok else "FAIL",
+            "package_root":"PASS" if package_ok else "FAIL",
+            "overall":"PASS" if overall else "FAIL",
+        }
 
 
     def source_health(self) -> list[dict[str, Any]]:
