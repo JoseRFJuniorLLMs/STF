@@ -155,6 +155,24 @@
       </div>
     </section>
 
+    <section class="panel span-12 api-lab-panel">
+      <div class="panel-head"><div><span class="section-kicker">API LAB</span><h3>Pipeline externo: Telemetria → Incidente → Policy → HITL</h3></div><span class="badge">LOOPBACK</span></div>
+      <div class="api-lab-flow">
+        <button id="apiPhase1Btn" class="api-step"><span>01</span><b>Ingerir Fase 1</b><small>6 logs brutos</small></button>
+        <div class="api-arrow">→</div>
+        <button id="apiWriteBtn" class="api-step"><span>02</span><b>Tentar WRITE</b><small>esperado DENY</small></button>
+        <div class="api-arrow">→</div>
+        <button id="apiExportBtn" class="api-step"><span>03</span><b>Pedir EXPORT</b><small>esperado HITL</small></button>
+        <div class="api-arrow">→</div>
+        <button id="apiApproveBtn" class="api-step"><span>04</span><b>Aprovar HITL</b><small>single-use</small></button>
+        <div class="api-arrow">→</div>
+        <button id="apiExecuteBtn" class="api-step"><span>05</span><b>Executar EXPORT</b><small>1 efeito</small></button>
+        <div class="api-arrow">→</div>
+        <button id="apiReplayBtn" class="api-step"><span>06</span><b>Replay</b><small>esperado DENY</small></button>
+      </div>
+      <div id="apiLabLog" class="api-lab-log">Use após <b>Reiniciar</b> para demonstrar o caminho externo sem o roteiro embutido.</div>
+    </section>
+
     <section class="panel span-12 qualification-panel">
       <div class="panel-head"><div><span class="section-kicker">QUALIFICATION</span><h3>Scorecard da POC</h3></div><span class="badge" id="qualificationBadge">EM EXECUÇÃO</span></div>
       <div id="qualification" class="qualification-grid"></div>
