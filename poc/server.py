@@ -40,6 +40,9 @@ CAMPAIGN_ID = "STF-POC-CAMPAIGN-001"
 INCIDENT_ID = "STF-POC-INCIDENT-001"
 SYNTHETIC_CASE = "case://SYNTHETIC/RE-000001"
 COMPROMISED_PRINCIPAL = "service-account-17"
+# Janela do ledger para a grade e os gráficos. Com ataques massivos 200 enchia em
+# segundos; o Agent Black Box aceita até 1000 por pedido.
+LEDGER_EVENTS_LIMIT = 500
 LOCAL_HOSTS={"127.0.0.1","localhost","::1"}
 
 EQUIPMENT_DEFINITIONS = [
@@ -734,15 +737,17 @@ class PocEngine:
             scenario[offset]["normalized_telemetry"] = normalize(kind, raw)
         return scenario
 
-    def _append(self, spec: dict[str, Any], incident_id: str | None = None) -> EvidenceEvent:
+    def _append(self, spec: dict[str, Any], incident_id: str | None = None, *, persist: bool = True) -> EvidenceEvent:
         local_lsn = len(self.events) + 1
         prev = self.events[-1].event_hash if self.events else "0" * 64
         lsn = local_lsn
         hlc = 1_800_000_000_000 + local_lsn
 
         # PERSISTÊNCIA REAL NO HERACLITUSDB (WSL LINUX)
+        # `persist=False`: quem chama já gravou o evento no ledger. Gravar de novo
+        # aqui duplicava cada ataque (e as contagens dos gráficos).
         heraclitus_record = None
-        adapter = getattr(self, "adapter", None)
+        adapter = getattr(self, "adapter", None) if persist else None
         if adapter is not None:
             camp = getattr(self, "campaign_id", CAMPAIGN_ID)
             red_team_payload = {
@@ -1292,7 +1297,7 @@ class PocEngine:
                 "oracle_reason": oracle_reason,
                 "status_code": status_code,
             }
-            ev = self._append(ev_spec)
+            ev = self._append(ev_spec, persist=False)
             if real_hash:
                 ev.event_hash = real_hash
             ev.lsn = real_lsn
@@ -1389,7 +1394,7 @@ class PocEngine:
                 "stf_attack_id": atk["id"],
                 "status_code": 403 if outcome == "DENY" else 202,
             }
-            ev = self._append(ev_spec)
+            ev = self._append(ev_spec, persist=False)
             if real_hash:
                 ev.event_hash = real_hash
             ev.lsn = real_lsn
@@ -1984,8 +1989,8 @@ class Handler(BaseHTTPRequestHandler):
             base=getattr(ENGINE, "heraclitus_url", None) or os.environ.get("HERACLITUS_URL", "http://127.0.0.1:8080")
             try:
                 from heraclitus_adapter import HeraclitusAdapter
-                data = HeraclitusAdapter(base).get("/api/v1/agent/red-team/events?limit=200")
-                return self._json({"status": "PASS", "data": data})
+                data = HeraclitusAdapter(base).get(f"/api/v1/agent/red-team/events?limit={LEDGER_EVENTS_LIMIT}")
+                return self._json({"status": "PASS", "limit": LEDGER_EVENTS_LIMIT, "data": data})
             except Exception as e:
                 return self._json({"status": "UNAVAILABLE", "error": str(e), "data": {"events": []}})
         if path=="/api/heraclitus-attacks":

@@ -1451,6 +1451,7 @@ function updateFocusCard(s) {
 let hdbCurrentPage = 1;
 let hdbPageSize = 15;
 let hdbAllEvents = [];
+let hdbLedgerLimit = 500;
 
 async function loadRealHeraclitusTrail() {
   const badge = $('#integrationBadge');
@@ -1462,6 +1463,7 @@ async function loadRealHeraclitusTrail() {
     const res = await api('/api/heraclitus-events');
     const data = res.data || {};
     const events = data.events || [];
+    if (res.limit) hdbLedgerLimit = res.limit;
 
     if (res.status === 'PASS' && Array.isArray(events)) {
       if (badge) {
@@ -2572,8 +2574,8 @@ function renderIncidentCharts() {
   const total = events.length;
   const setText = (id, v) => { const el = $(id); if (el) el.textContent = v; };
   setText('#kpiEvents', fmtInt(total));
-  // O servidor pede ao ledger no máximo 200 eventos (limit=200 em /api/heraclitus-events)
-  setText('#kpiEventsSub', total >= 200 ? 'os 200 mais recentes do ledger' : 'todos os eventos do ledger');
+  // O servidor pede ao ledger no máximo hdbLedgerLimit eventos (/api/heraclitus-events)
+  setText('#kpiEventsSub', total >= hdbLedgerLimit ? `as ${fmtInt(hdbLedgerLimit)} mais recentes do ledger` : 'todas as do ledger');
   setText('#kpiBlocked', fmtInt(byDecision.DENY));
   setText('#kpiBlockedPct', total ? `${Math.round((byDecision.DENY / total) * 100)}% do total` : '');
   setText('#kpiHitl', fmtInt(byDecision.REQUIRE_HITL));
@@ -2587,7 +2589,12 @@ function renderIncidentCharts() {
   renderVectorChart(events);
 }
 
-// Colunas empilhadas por decisão ao longo do tempo (intervalo escolhido pelo alcance dos dados)
+// Mesma legenda do grafo: cada evento do ledger é uma TENTATIVA (vermelho); ao lado, o
+// que lhe aconteceu (verde = bloqueado, roxo = invadiu, ...). Sem a coluna vermelha o
+// gráfico ficava só verde e o ataque desaparecia.
+const ATTEMPT_CAT = { key: 'ATTEMPT', label: 'Tentativas de ataque', color: 'var(--chart-attempts)' };
+
+// Por intervalo de tempo: coluna de tentativas + coluna empilhada com o desfecho
 function renderTimelineChart(events) {
   const host = $('#chartTimeline');
   const legend = $('#legendTimeline');
@@ -2613,13 +2620,13 @@ function renderTimelineChart(events) {
     b.total++;
   }
   const present = DECISION_CATS.filter(d => buckets.some(b => b.c[d.key]));
-  if (legend) legend.innerHTML = present.map(d => `<span class="lg-item"><i class="lg-swatch" style="background:${d.color}"></i>${d.label}</span>`).join('');
+  if (legend) legend.innerHTML = [ATTEMPT_CAT, ...present].map(d => `<span class="lg-item"><i class="lg-swatch" style="background:${d.color}"></i>${d.label}</span>`).join('');
 
   const W = 1000, H = 220, padL = 36, padR = 8, padT = 10, padB = 26;
   const plotW = W - padL - padR, plotH = H - padT - padB;
   const maxY = niceMax(Math.max(...buckets.map(b => b.total)));
   const slot = plotW / nBuckets;
-  const barW = Math.max(3, Math.min(28, slot - 2));
+  const barW = Math.max(2, Math.min(18, (slot - 3) / 2));
   const y = v => padT + plotH - (v / maxY) * plotH;
 
   const fmtTick = t => {
@@ -2637,7 +2644,9 @@ function renderTimelineChart(events) {
 
   const labelEvery = Math.ceil(nBuckets / 8);
   const bars = buckets.map((b, i) => {
-    const x = padL + i * slot + (slot - barW) / 2;
+    const xAttempt = padL + i * slot + (slot - (barW * 2 + 2)) / 2;
+    const x = xAttempt + barW + 2;
+    const attempt = b.total ? `<rect class="mark" x="${xAttempt}" y="${y(b.total)}" width="${barW}" height="${Math.max(1, y(0) - y(b.total))}" rx="1.5" fill="${ATTEMPT_CAT.color}"/>` : '';
     let acc = 0;
     const segs = present.map(d => {
       const v = b.c[d.key];
@@ -2648,10 +2657,10 @@ function renderTimelineChart(events) {
       return `<rect class="mark" x="${x}" y="${y1}" width="${barW}" height="${Math.max(1, y0 - y1 - 1)}" rx="1.5" fill="${d.color}"/>`;
     }).join('');
     const tip = `<strong>${esc(new Date(b.t).toLocaleString('pt-BR'))}</strong>` +
-      present.map(d => `<div class="tt-row"><i class="lg-swatch" style="background:${d.color}"></i>${d.label}<b>${fmtInt(b.c[d.key])}</b></div>`).join('') +
-      `<div class="tt-row">Total<b>${fmtInt(b.total)}</b></div>`;
-    const tick = i % labelEvery === 0 ? `<text class="axis-text" x="${x + barW / 2}" y="${H - 8}" text-anchor="middle">${fmtTick(b.t)}</text>` : '';
-    return `<g class="bar-group" data-tip="${esc(tip)}"><rect class="hit" x="${padL + i * slot}" y="${padT}" width="${slot}" height="${plotH}"/>${segs}</g>${tick}`;
+      `<div class="tt-row"><i class="lg-swatch" style="background:${ATTEMPT_CAT.color}"></i>${ATTEMPT_CAT.label}<b>${fmtInt(b.total)}</b></div>` +
+      present.map(d => `<div class="tt-row"><i class="lg-swatch" style="background:${d.color}"></i>${d.label}<b>${fmtInt(b.c[d.key])}</b></div>`).join('');
+    const tick = i % labelEvery === 0 ? `<text class="axis-text" x="${xAttempt + barW + 1}" y="${H - 8}" text-anchor="middle">${fmtTick(b.t)}</text>` : '';
+    return `<g class="bar-group" data-tip="${esc(tip)}"><rect class="hit" x="${padL + i * slot}" y="${padT}" width="${slot}" height="${plotH}"/>${attempt}${segs}</g>${tick}`;
   }).join('');
 
   host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="height:${H}px">${grid}
@@ -2665,7 +2674,8 @@ function renderDecisionDonut(byDecision, total) {
     host.innerHTML = '<div class="chart-empty">Sem decisões registadas.</div>';
     return;
   }
-  const R = 62, r = 40, C = 75;
+  // Anel exterior vermelho = todas as tentativas; anel interior = o desfecho de cada uma.
+  const R = 58, r = 38, C = 75, RA = 70, ra = 64;
   const cats = DECISION_CATS.filter(d => byDecision[d.key]);
   let a0 = -Math.PI / 2;
   const gap = cats.length > 1 ? 0.025 : 0;
@@ -2683,15 +2693,19 @@ function renderDecisionDonut(byDecision, total) {
     const p = (rad, ang) => `${C + rad * Math.cos(ang)} ${C + rad * Math.sin(ang)}`;
     return `<g data-tip="${esc(tip)}"><path class="mark" fill="${d.color}" d="M ${p(R, s)} A ${R} ${R} 0 ${large} 1 ${p(R, e)} L ${p(r, e)} A ${r} ${r} 0 ${large} 0 ${p(r, s)} Z"/></g>`;
   }).join('');
-  const blockedPct = Math.round((byDecision.DENY / total) * 100);
+  const attemptTip = `<strong>${ATTEMPT_CAT.label}</strong><div class="tt-row">Eventos<b>${fmtInt(total)}</b></div>`;
+  const attemptRing = `<g data-tip="${esc(attemptTip)}"><circle class="mark" cx="${C}" cy="${C}" r="${(RA + ra) / 2}" fill="none" stroke="${ATTEMPT_CAT.color}" stroke-width="${RA - ra}"/></g>`;
+  const pctOf = n => `${Math.round((n / total) * 100)}%`;
 
   host.innerHTML = `<div class="donut-wrap">
-    <svg viewBox="0 0 150 150">${arcs}
-      <text x="${C}" y="${C - 6}" text-anchor="middle" class="value-text" style="font-size:20px">${blockedPct}%</text>
-      <text x="${C}" y="${C + 13}" text-anchor="middle" class="axis-text">bloqueados</text>
+    <svg viewBox="0 0 150 150">${attemptRing}${arcs}
+      <text x="${C}" y="${C - 5}" text-anchor="middle" class="value-text" style="font-size:20px; fill:${ATTEMPT_CAT.color}">${fmtInt(total)}</text>
+      <text x="${C}" y="${C + 13}" text-anchor="middle" class="axis-text">tentativas</text>
     </svg>
-    <div class="donut-legend">${cats.map(d =>
-      `<span class="lg-item"><span><i class="lg-swatch" style="background:${d.color}"></i> ${d.label}</span><b>${fmtInt(byDecision[d.key])}</b></span>`).join('')}
+    <div class="donut-legend">
+      <span class="lg-item"><span><i class="lg-swatch" style="background:${ATTEMPT_CAT.color}"></i> ${ATTEMPT_CAT.label}</span><b>${fmtInt(total)}</b></span>
+      ${cats.map(d =>
+        `<span class="lg-item"><span><i class="lg-swatch" style="background:${d.color}"></i> ${d.label}</span><b>${fmtInt(byDecision[d.key])} · ${pctOf(byDecision[d.key])}</b></span>`).join('')}
     </div></div>`;
 }
 
