@@ -131,4 +131,38 @@ class PocEngineTests(unittest.TestCase):
         self.assertEqual(result["manifest"],"FAIL")
         self.assertEqual(result["overall"],"FAIL")
 
+
+    def test_signal_provenance_matches_final_event_hash_on_incident_open(self):
+        for _ in range(5): self.e.step()
+        self.assertIsNotNone(self.e.incident)
+        event_by_lsn={e.lsn:e for e in self.e.events}
+        for signal in self.e.signals:
+            self.assertEqual(signal["evidence_hash"],event_by_lsn[signal["lsn"]].event_hash)
+
+    def test_metadata_tampering_fails_semantic_verification(self):
+        self.e.run_all()
+        bundle=json.loads(json.dumps(self.e.evidence_bundle()))
+        bundle["campaign_id"]="OTHER"
+        result=self.e.verify_bundle(bundle)
+        self.assertEqual(result["semantic"],"FAIL")
+        self.assertEqual(result["overall"],"FAIL")
+
+    def test_invalid_hex_hash_fails_without_exception(self):
+        self.e.run_all()
+        bundle=json.loads(json.dumps(self.e.evidence_bundle()))
+        bundle["events"][0]["event_hash"]="z"*64
+        result=self.e.verify_bundle(bundle)
+        self.assertEqual(result["overall"],"FAIL")
+
+    def test_as_of_matches_external_runtime_correlation(self):
+        import telemetry
+        e=mod.PocEngine()
+        for kind,raw in telemetry.sample_campaign():
+            e.ingest_telemetry(kind,raw)
+        live=e.snapshot()
+        historic=e.as_of(len(e.events))
+        self.assertEqual(bool(live["incident"]),bool(historic["incident"]))
+        self.assertEqual(live["risk"],historic["risk"])
+        self.assertEqual(live["incident"]["principal"],historic["incident"]["principal"])
+
 if __name__=="__main__": unittest.main()
