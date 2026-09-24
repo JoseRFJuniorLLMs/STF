@@ -62,13 +62,49 @@
       <div class="panel-head"><div><span class="section-kicker">HRKL</span><h3>Integridade e rastreabilidade</h3></div></div>
       <div class="integrity-orbit"><div><span>LSN</span><b id="lastLsn">0</b></div><div><span>Eventos</span><b id="eventCount">0</b></div><div><span>Merkle</span><b id="merkleState">—</b></div></div>
       <div class="hash-box"><span>Raiz Merkle atual</span><code id="merkleRoot">—</code></div>
-      <button id="tamperBtn" class="btn danger full">Executar sabotagem controlada</button><div id="tamperResult" class="mini-result">A sabotagem altera uma cópia do bundle e verifica se a prova quebra.</div>
+      <div class="tamper-controls"><select id="tamperKind"><option value="modify">Modificar evento</option><option value="delete">Apagar evento</option><option value="reorder">Reordenar eventos</option><option value="truncate">Truncar histórico</option></select><button id="tamperBtn" class="btn danger">Executar sabotagem</button></div><div id="tamperResult" class="mini-result">A sabotagem altera uma cópia do bundle e verifica se a prova quebra.</div>
     </section>
 
     <section class="panel span-4">
       <div class="panel-head"><div><span class="section-kicker">EVIDENCE</span><h3>Pacote verificável</h3></div></div>
       <div class="evidence-stack"><div><span>Hash-chain</span><b id="chainVerify">NOT RUN</b></div><div><span>Merkle</span><b id="merkleVerify">NOT RUN</b></div><div><span>Timestamp externo</span><b class="warn">NOT CONFIGURED</b></div><div><span>Assinatura institucional</span><b class="warn">NOT CONFIGURED</b></div></div>
-      <button id="exportBtn" class="btn success full">Gerar Evidence Bundle</button><div id="exportResult" class="mini-result">Bundle ainda não exportado.</div>
+      <div class="evidence-actions"><button id="exportBtn" class="btn success">Gerar Evidence Bundle</button><button id="downloadBtn" class="btn">Baixar JSON</button></div><div id="exportResult" class="mini-result">Bundle ainda não exportado.</div>
+    </section>
+
+
+    <section class="panel span-4">
+      <div class="panel-head"><div><span class="section-kicker">TELEMETRIA</span><h3>Saúde das fontes</h3></div><span class="badge" id="sourceCountBadge">0 ativas</span></div>
+      <div id="sourceHealth" class="source-health"></div>
+    </section>
+
+    <section class="panel span-4">
+      <div class="panel-head"><div><span class="section-kicker">EXPLAINABILITY</span><h3>Por que este incidente?</h3></div><span class="badge" id="whyBadge">AGUARDANDO</span></div>
+      <div id="whySummary" class="why-summary">O Sentinel ainda não acumulou sinais suficientes.</div>
+      <div id="whyList" class="why-list"></div>
+    </section>
+
+    <section class="panel span-4">
+      <div class="panel-head"><div><span class="section-kicker">TIME TRAVEL</span><h3>Reconstrução AS-OF</h3></div><span class="mono" id="asofLabel">LSN 0</span></div>
+      <div class="time-machine">
+        <input id="asofSlider" type="range" min="0" max="17" value="0" />
+        <div class="asof-kpis"><div><span>Risco</span><b id="asofRisk">0</b></div><div><span>Incidente</span><b id="asofIncident">NÃO</b></div><div><span>Upstream</span><b id="asofUpstream">0</b></div><div><span>Approval</span><b id="asofApproval">NONE</b></div></div>
+        <div id="asofNarrative" class="mini-result">Arraste o LSN para reconstruir o estado passado.</div>
+      </div>
+    </section>
+
+    <section class="panel span-6">
+      <div class="panel-head"><div><span class="section-kicker">FORENSICS</span><h3>Inspector de evidência</h3></div><div class="evidence-picker"><label>LSN</label><input id="evidenceLsn" type="number" min="1" value="1"/><button id="loadEvidenceBtn" class="btn">Inspecionar</button></div></div>
+      <div class="evidence-inspector">
+        <div id="evidenceMeta" class="evidence-meta">Selecione um LSN para ver evento, hash e ligação causal.</div>
+        <pre id="evidenceJson" class="evidence-json">{}</pre>
+      </div>
+    </section>
+
+    <section class="panel span-6">
+      <div class="panel-head"><div><span class="section-kicker">ANALYST</span><h3>Relatório do incidente</h3></div><button id="reportBtn" class="btn">Atualizar relatório</button></div>
+      <div id="reportSummary" class="report-summary">Aguardando execução da campanha.</div>
+      <div id="reportControls" class="report-controls"></div>
+      <div class="report-limitations"><b>Limites da POC</b><ul id="reportLimitations"></ul></div>
     </section>
 
     <section class="panel span-12 qualification-panel">
