@@ -98,6 +98,7 @@ class PocEngine:
             self.incident: dict[str, Any] | None = None
             self.attack_graph = {"nodes": [], "edges": []}
             self.step_index = 0
+            self.execution_mode = "IDLE"
             self.risk = 0
             self.upstream_hits = 0
             self.pending_approval: dict[str, Any] | None = None
@@ -271,6 +272,9 @@ class PocEngine:
 
     def ingest_telemetry(self, kind: str, raw: dict[str, Any]) -> dict[str, Any]:
         with self.lock:
+            if self.execution_mode=="SCRIPTED":
+                return {"status":"MODE_CONFLICT","detail":"reset before switching from scripted to API lab","state":self.snapshot()}
+            self.execution_mode="API_LAB"
             normalized=normalize(kind,raw)
             raw_key=f"{normalized['source_class']}:{normalized['raw_id']}"
             raw_digest=sha256_hex(raw)
@@ -307,6 +311,8 @@ class PocEngine:
 
     def submit_action(self, action: str, principal: str, target: str, parameters: dict[str, Any] | None = None) -> dict[str, Any]:
         with self.lock:
+            if self.execution_mode=="IDLE":
+                self.execution_mode="API_LAB"
             parameters=parameters or {}
             params_digest=sha256_hex(parameters)
             selected=self._matching_approval(action,principal,target,params_digest)
@@ -380,6 +386,9 @@ class PocEngine:
 
     def step(self) -> dict[str, Any]:
         with self.lock:
+            if self.execution_mode=="API_LAB":
+                return self.snapshot(message="Modo API Lab ativo; reinicie antes de usar o roteiro embutido")
+            self.execution_mode="SCRIPTED"
             if self.step_index >= len(self._scenario):
                 return self.snapshot(message="Campanha concluída")
             spec=dict(self._scenario[self.step_index]); self.step_index += 1
@@ -425,6 +434,9 @@ class PocEngine:
 
     def run_all(self) -> dict[str, Any]:
         with self.lock:
+            if self.execution_mode=="API_LAB":
+                return self.snapshot(message="Modo API Lab ativo; reinicie antes de executar a campanha roteirizada")
+            self.execution_mode="SCRIPTED"
             while self.step_index < len(self._scenario):
                 self.step()
             return self.snapshot(message="Campanha completa executada")
@@ -855,7 +867,7 @@ class PocEngine:
             "verification":verify,"qualification":deepcopy(self.qualification()),
             "severity_counts":counts,"source_health":deepcopy(self.source_health()),
             "why_incident":deepcopy(self.why_incident()),"last_action":self.last_action,
-            "message":message or "OK","mode":"SYNTHETIC / LOOPBACK ONLY",
+            "message":message or "OK","mode":"SYNTHETIC / LOOPBACK ONLY","execution_mode":self.execution_mode,
         }
 
 ENGINE=PocEngine()
