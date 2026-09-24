@@ -42,6 +42,26 @@
       <div class="callout"><b>Regra de ouro</b><span>Sem telemetria, não existe claim de detecção. Sem enforcement, não existe claim de bloqueio.</span></div>
     </section>
 
+    <section class="panel span-12 decision-pipeline-panel">
+      <div class="panel-head"><div><span class="section-kicker">DECISION PIPELINE</span><h3>Detecção → Correlação → Policy</h3></div><span class="badge" id="pipelineBadge">AGUARDANDO</span></div>
+      <div class="decision-pipeline">
+        <div class="decision-column">
+          <div class="decision-title"><span>01</span><div><b>Detecção</b><small>regras sobre telemetria normalizada</small></div></div>
+          <div id="detectionRules" class="decision-list"><div class="empty">Nenhuma regra disparada.</div></div>
+        </div>
+        <div class="decision-arrow">→</div>
+        <div class="decision-column">
+          <div class="decision-title"><span>02</span><div><b>Correlação</b><small>entidades e fontes compartilhadas</small></div></div>
+          <div id="correlationDecision" class="correlation-decision"><div class="empty">Sem componente qualificado.</div></div>
+        </div>
+        <div class="decision-arrow">→</div>
+        <div class="decision-column">
+          <div class="decision-title"><span>03</span><div><b>Policy</b><small>enforcement, HITL e anti-replay</small></div></div>
+          <div id="policyDecisions" class="decision-list"><div class="empty">Nenhuma decisão de policy.</div></div>
+        </div>
+      </div>
+    </section>
+
     <section class="panel span-7">
       <div class="panel-head"><div><span class="section-kicker">TRILHA</span><h3>Eventos e rastros</h3></div><span class="mono" id="merkleShort">Merkle: —</span></div>
       <div class="event-table-wrap"><table class="event-table"><thead><tr><th>LSN</th><th>Fonte</th><th>Evento</th><th>Ator / Ativo</th><th>Resultado</th></tr></thead><tbody id="eventRows"><tr><td colspan="5" class="empty">Nenhum evento processado.</td></tr></tbody></table></div>
