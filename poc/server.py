@@ -524,7 +524,7 @@ class PocEngine:
             "completed":self.step_index>=len(self._scenario),"risk":self.risk,"incident":self.incident,"signals":self.signals,
             "events":[asdict(e) for e in self.events],"graph":self.attack_graph,"pending_approval":self.pending_approval,
             "case_state":self.case_state,"upstream_hits":self.upstream_hits,"tamper_status":self.tamper_status,
-            "offline_verify":self.offline_verify,"merkle_root":bundle["merkle_root"],"verification":verify,
+            "offline_verify":self.offline_verify,"merkle_root":bundle["merkle_root"],"package_root":bundle["package_root"],"verification":verify,
             "qualification":self.qualification(),"severity_counts":counts,"source_health":self.source_health(),"why_incident":self.why_incident(),"last_action":self.last_action,
             "message":message or "OK","mode":"SYNTHETIC / LOOPBACK ONLY"
         }
