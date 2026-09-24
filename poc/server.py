@@ -12,6 +12,9 @@ import json
 import mimetypes
 import os
 import threading
+import time
+from copy import deepcopy
+from functools import wraps
 from dataclasses import dataclass, field, asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -49,6 +52,13 @@ def merkle_root(hashes: list[str]) -> str:
             level.append(level[-1])
         level = [hashlib.sha256(level[i] + level[i + 1]).digest() for i in range(0, len(level), 2)]
     return level[0].hex()
+
+def locked_method(fn):
+    @wraps(fn)
+    def wrapped(self, *args, **kwargs):
+        with self.lock:
+            return fn(self, *args, **kwargs)
+    return wrapped
 
 @dataclass
 class EvidenceEvent:
@@ -90,7 +100,10 @@ class PocEngine:
             self.risk = 0
             self.upstream_hits = 0
             self.pending_approval: dict[str, Any] | None = None
+            self.approvals: dict[str, dict[str, Any]] = {}
             self.approvals_consumed: set[str] = set()
+            self.raw_registry: dict[str, dict[str, Any]] = {}
+            self.export_count = 0
             self.case_state = {
                 "id": SYNTHETIC_CASE,
                 "status": "ACTIVE",
@@ -164,7 +177,7 @@ class PocEngine:
     def _signal(self, ev: EvidenceEvent, detection: Any) -> None:
         normalized=ev.details.get("normalized_telemetry",{}) if isinstance(ev.details,dict) else {}
         self.signals.append({
-            "signal_id":f"SIG-{len(self.signals)+1:03d}","lsn":ev.lsn,"source":ev.source,
+            "signal_id":f"SIG-{len(self.signals)+1:03d}","lsn":ev.lsn,"hlc":ev.hlc,"source":ev.source,
             "source_class":normalized.get("source_class",ev.source),
             "severity":detection.severity,"reason_code":detection.reason_code,
             "rule_id":detection.rule_id,"rule_explanation":detection.explanation,
@@ -173,34 +186,94 @@ class PocEngine:
             "campaign_id":CAMPAIGN_ID,"evidence_hash":ev.event_hash,
         })
 
+    @staticmethod
+    def _principal_from_component(signals: list[dict[str, Any]], component: dict[str, Any]) -> str | None:
+        ids=set(component.get("signal_ids",[]))
+        subset=[s for s in signals if s.get("signal_id") in ids]
+        for signal in subset:
+            if signal.get("source_class")=="IDENTITY" and signal.get("actor"):
+                return str(signal["actor"])
+        counts: dict[str,int]={}
+        for signal in subset:
+            actor=str(signal.get("actor") or "")
+            if actor and not actor.startswith(("203.","198.","192.","10.")):
+                counts[actor]=counts.get(actor,0)+1
+        return max(counts,key=counts.get) if counts else None
+
+    def _component_for_incident(self, corr: dict[str, Any]) -> dict[str, Any] | None:
+        if not self.incident:
+            return corr.get("best")
+        principal_entity=f"principal:{self.incident.get('principal')}"
+        matches=[x for x in corr.get("components",[]) if principal_entity in set(x.get("entities",[]))]
+        if not matches:
+            return None
+        matches.sort(key=lambda x:(x.get("qualifies",False),x.get("score",0),len(x.get("signal_ids",[]))),reverse=True)
+        return matches[0]
+
     def _maybe_open_incident(self) -> None:
         corr=correlate(self.signals)
-        best=corr["best"]
-        self.risk=max(self.risk,int(best.get("score",0)))
+        candidate=self._component_for_incident(corr)
         if self.incident is not None:
-            self.incident["risk_score"]=max(self.incident["risk_score"],best.get("score",0))
-            self.incident["severity"]="CRITICAL" if self.incident["risk_score"] >= 90 else "HIGH"
-            self.incident["evidence_lsns"]=best.get("lsns",[])
-            self.incident["correlation"]=best
-            self.incident["correlation_explanation"]=corr["explanation"]
+            if candidate and candidate.get("qualifies"):
+                self.risk=int(candidate.get("score",0))
+                self.incident["risk_score"]=self.risk
+                self.incident["severity"]="CRITICAL" if self.risk >= 90 else "HIGH"
+                self.incident["evidence_lsns"]=list(candidate.get("lsns",[]))
+                self.incident["correlation"]=deepcopy(candidate)
+                self.incident["correlation_explanation"]=corr["explanation"]
             return
+        best=corr["best"]
+        self.risk=int(best.get("score",0))
         if best.get("qualifies"):
+            principal=self._principal_from_component(self.signals,best)
+            if not principal:
+                return
             self.incident={
                 "incident_id":INCIDENT_ID,"campaign_id":CAMPAIGN_ID,"state":"OPEN",
                 "severity":"CRITICAL" if best["score"] >= 90 else "HIGH",
-                "risk_score":best["score"],"principal":COMPROMISED_PRINCIPAL,
+                "risk_score":best["score"],"principal":principal,
                 "summary":"Campanha multi-fonte correlacionada por entidades observáveis",
                 "policy_tags":["COMPROMISE_SUSPECTED","REQUIRE_STRONGER_APPROVAL"],
-                "evidence_lsns":best["lsns"],
-                "correlation":best,
+                "evidence_lsns":list(best["lsns"]),
+                "correlation":deepcopy(best),
                 "correlation_explanation":corr["explanation"],
             }
             self.last_action="Incidente correlacionado e aberto"
 
+    def _matching_approval(self, action: str, principal: str, target: str, params_digest: str | None) -> dict[str, Any] | None:
+        candidates=[
+            a for a in self.approvals.values()
+            if a.get("action")==action and a.get("principal")==principal
+            and a.get("target")==target and a.get("parameters_digest")==params_digest
+            and a.get("state") in {"PENDING","APPROVED","CONSUMED"}
+        ]
+        if not candidates:
+            return None
+        candidates.sort(key=lambda a:a.get("created_at_epoch",0),reverse=True)
+        return candidates[0]
+
+    def _create_approval(self, action: str, principal: str, target: str, params_digest: str | None, approval_id: str) -> dict[str, Any]:
+        now=time.time()
+        approval={
+            "approval_id":approval_id,"state":"PENDING","action":action,"principal":principal,
+            "tool":"export_restricted_document" if action=="export_restricted" else action,
+            "target":target,"parameters_digest":params_digest,"single_use":True,
+            "created_at_epoch":now,"expires_at_epoch":now+300,"expires_in":"5m",
+        }
+        self.approvals[approval_id]=approval
+        self.pending_approval=approval
+        return approval
 
     def ingest_telemetry(self, kind: str, raw: dict[str, Any]) -> dict[str, Any]:
         with self.lock:
             normalized=normalize(kind,raw)
+            raw_key=f"{normalized['source_class']}:{normalized['raw_id']}"
+            raw_digest=sha256_hex(raw)
+            previous=self.raw_registry.get(raw_key)
+            if previous:
+                if previous["digest"]==raw_digest:
+                    return {"status":"IDEMPOTENT","duplicate_of_lsn":previous["lsn"],"state":self.snapshot()}
+                return {"status":"CONFLICT","raw_id":normalized["raw_id"],"existing_lsn":previous["lsn"],"state":self.snapshot()}
             detection=detect_event(normalized)
             source_names={
                 "EDGE":"Firewall/WAF","IDENTITY":"IAM","HOST":"Linux Host",
@@ -213,32 +286,28 @@ class PocEngine:
                 "actor":normalized.get("actor","unknown"),"asset":normalized.get("asset","unknown"),
                 "summary":detection.explanation if detection else f"Telemetria {kind} normalizada sem sinal de segurança",
                 "outcome":normalized.get("outcome","OBSERVED"),
-                "raw_telemetry":raw,"normalized_telemetry":normalized,"ingest_mode":"external_loopback",
+                "raw_telemetry":deepcopy(raw),"normalized_telemetry":deepcopy(normalized),"ingest_mode":"external_loopback",
             }
             ev=self._append(spec,INCIDENT_ID if self.incident else None)
+            self.raw_registry[raw_key]={"digest":raw_digest,"lsn":ev.lsn}
             if detection is not None:
-                self.risk += int(detection.score)
                 self._signal(ev,detection)
             self._maybe_open_incident()
-            if self.incident and ev.incident_id is None:
-                ev.incident_id=INCIDENT_ID; ev.event_hash=sha256_hex(ev.material())
+            # Do not mutate incident_id/hash after persistence. The opening event is
+            # associated through incident.evidence_lsns and the graph, preserving its hash.
             self._add_graph(ev)
             self.last_action=f"Telemetria externa local ingerida: {kind}"
-            return {"ingested":asdict(ev),"detection":detection.to_dict() if detection else None,"state":self.snapshot()}
+            return {"status":"INGESTED","ingested":asdict(ev),"detection":detection.to_dict() if detection else None,"state":self.snapshot()}
 
 
     def submit_action(self, action: str, principal: str, target: str, parameters: dict[str, Any] | None = None) -> dict[str, Any]:
         with self.lock:
             parameters=parameters or {}
-            params_digest=sha256_hex(parameters) if parameters else None
+            params_digest=sha256_hex(parameters)
+            selected=self._matching_approval(action,principal,target,params_digest)
             decision=policy_decide(
-                action=action,
-                incident=self.incident,
-                principal=principal,
-                target=target,
-                parameters_digest=params_digest,
-                approval=self.pending_approval,
-                consumed=self.approvals_consumed,
+                action=action,incident=self.incident,principal=principal,target=target,
+                parameters_digest=params_digest,approval=selected,consumed=self.approvals_consumed,
             )
             if action=="case_write":
                 event_type="app.case_update_requested"; source="Policy Gateway"; severity="CRITICAL"
@@ -254,50 +323,55 @@ class PocEngine:
                 "phase":"FASE 2","source":source,"type":event_type,"severity":severity,
                 "actor":principal,"asset":target,"summary":summary,
                 "outcome":"PASS" if decision.effect_allowed else decision.outcome,
-                "reason":decision.reason_code,
-                "upstream":1 if decision.effect_allowed else 0,
-                "policy_action":action,"policy_params":parameters,
+                "reason":decision.reason_code,"upstream":1 if decision.effect_allowed else 0,
+                "policy_action":action,"policy_params":deepcopy(parameters),
                 "policy_decision":decision.to_dict(),"ingest_mode":"external_loopback",
+                "approval_id":selected.get("approval_id") if selected else None,
             }
             ev=self._append(spec,INCIDENT_ID if self.incident else None)
-            if decision.requires_human and action=="export_restricted":
-                self.pending_approval={
-                    "approval_id":f"APR-LAB-{ev.lsn:03d}","state":"PENDING","principal":principal,
-                    "tool":"export_restricted_document","target":target,
-                    "parameters_digest":params_digest,"single_use":True,"expires_in":"5m",
-                }
+            if decision.requires_human:
+                existing=selected if selected and selected.get("state")=="PENDING" else None
+                if existing is None:
+                    selected=self._create_approval(action,principal,target,params_digest,f"APR-LAB-{ev.lsn:03d}")
+                else:
+                    self.pending_approval=existing
             if decision.effect_allowed:
                 self.upstream_hits += 1
-                if self.pending_approval:
-                    self.pending_approval["state"]="CONSUMED"
-                    self.approvals_consumed.add(self.pending_approval["approval_id"])
-                self.case_state["last_effect"]="DOCUMENT_EXPORT_SYNTHETIC" if action=="export_restricted" else "SYNTHETIC_EFFECT"
+                if selected:
+                    selected["state"]="CONSUMED"
+                    self.approvals_consumed.add(selected["approval_id"])
+                    self.pending_approval=selected
+                self.case_state["last_effect"]="DOCUMENT_EXPORT_SYNTHETIC" if action=="export_restricted" else "SYNTHETIC_CASE_WRITE"
             self._add_graph(ev)
             self.last_action=f"Policy externa local: {action} -> {spec['outcome']}"
             return {
                 "event":asdict(ev),"decision":decision.to_dict(),
-                "pending_approval":self.pending_approval,"upstream_hits":self.upstream_hits,
+                "pending_approval":deepcopy(self.pending_approval),"upstream_hits":self.upstream_hits,
                 "state":self.snapshot(),
             }
 
     def grant_approval(self, approval_id: str, approver: str) -> dict[str, Any]:
         with self.lock:
-            approval=self.pending_approval
-            if not approval or approval.get("approval_id")!=approval_id:
-                return {"status":"REJECT","reason":"APPROVAL_NOT_FOUND","pending_approval":approval}
+            approval=self.approvals.get(approval_id)
+            if not approval:
+                return {"status":"REJECT","reason":"APPROVAL_NOT_FOUND","pending_approval":deepcopy(self.pending_approval)}
             if approval.get("state")!="PENDING":
-                return {"status":"REJECT","reason":"APPROVAL_NOT_PENDING","pending_approval":approval}
+                return {"status":"REJECT","reason":"APPROVAL_NOT_PENDING","pending_approval":deepcopy(approval)}
+            if time.time()>float(approval.get("expires_at_epoch",0)):
+                approval["state"]="EXPIRED"
+                return {"status":"REJECT","reason":"APPROVAL_EXPIRED","pending_approval":deepcopy(approval)}
             approval["state"]="APPROVED"; approval["approved_by"]=approver
+            self.pending_approval=approval
             spec={
                 "phase":"FASE 2","source":"HITL","type":"approval.granted","severity":"INFO",
                 "actor":approver,"asset":approval["target"],
                 "summary":"Aprovação humana sintética concedida via API local",
                 "outcome":"APPROVED","reason":"HUMAN_APPROVAL_GRANTED",
-                "approval_id":approval_id,"ingest_mode":"external_loopback",
+                "approval_id":approval_id,"policy_action":approval.get("action"),"ingest_mode":"external_loopback",
             }
             ev=self._append(spec,INCIDENT_ID if self.incident else None)
             self._add_graph(ev); self.last_action=f"HITL aprovado: {approval_id}"
-            return {"status":"APPROVED","event":asdict(ev),"pending_approval":approval,"state":self.snapshot()}
+            return {"status":"APPROVED","event":asdict(ev),"pending_approval":deepcopy(approval),"state":self.snapshot()}
 
     def step(self) -> dict[str, Any]:
         with self.lock:
@@ -313,7 +387,7 @@ class PocEngine:
                     principal=spec.get("actor","unknown"),
                     target=spec.get("asset","unknown"),
                     parameters_digest=params_digest,
-                    approval=self.pending_approval,
+                    approval=self._matching_approval(spec["policy_action"],spec.get("actor","unknown"),spec.get("asset","unknown"),params_digest),
                     consumed=self.approvals_consumed,
                 )
                 spec["reason"]=decision.reason_code
@@ -325,20 +399,13 @@ class PocEngine:
             normalized=ev.details.get("normalized_telemetry") if isinstance(ev.details,dict) else None
             detection=detect_event(normalized)
             if detection is not None:
-                self.risk += int(detection.score)
                 self._signal(ev,detection)
-            elif normalized is None:
-                self.risk += int(spec.get("risk",0))
             self._maybe_open_incident()
-            if self.incident and ev.incident_id is None:
-                ev.incident_id=INCIDENT_ID; ev.event_hash=sha256_hex(ev.material())
             if spec.get("approval"):
-                self.pending_approval={
-                    "approval_id":"APR-001","state":"PENDING","principal":COMPROMISED_PRINCIPAL,
-                    "tool":"export_restricted_document","target":"document://SYNTHETIC/DOC-001",
-                    "parameters_digest":sha256_hex({"document":"DOC-001","format":"pdf"}),
-                    "single_use":True,"expires_in":"5m",
-                }
+                self._create_approval(
+                    "export_restricted",COMPROMISED_PRINCIPAL,"document://SYNTHETIC/DOC-001",
+                    sha256_hex({"document":"DOC-001","format":"pdf"}),"APR-001"
+                )
             if spec.get("approve") and self.pending_approval:
                 self.pending_approval["state"]="APPROVED"; self.pending_approval["approved_by"]="human:approver-01"
             if spec.get("execute") and spec.get("upstream")==1:
