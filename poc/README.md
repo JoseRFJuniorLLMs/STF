@@ -117,3 +117,16 @@ POST /api/tamper-demo?kind=modify|delete|reorder|truncate
 - aplicação.
 
 Os eventos usam somente identidades, hosts e endereços sintéticos ou reservados para documentação. O dado bruto é preservado junto do resultado normalizado para que o analista possa auditar a transformação.
+
+
+## Fault injection
+
+O dashboard possui cenários controlados de resiliência:
+
+- `policy_store_down`: ação HIGH falha fechada em `DENY`;
+- `timeout_before_effect`: estado inicial `UNKNOWN`, reconciliado com `upstream_delta=0`;
+- `timeout_after_effect`: estado inicial `UNKNOWN`, reconciliado com `upstream_delta=1`;
+- `exporter_interrupted`: falha do exporter não modifica a história canônica;
+- `clock_jump`: relógio de origem pode regredir sem reordenar LSN/HLC.
+
+Esses cenários não atacam serviços reais; exercitam a semântica de erro e reconciliação da POC.
