@@ -132,8 +132,8 @@ class PocEngine:
             {"phase":"FASE 2","source":"HITL","type":"approval.granted","severity":"INFO","actor":"human:approver-01","asset":"document://SYNTHETIC/DOC-001","summary":"Aprovação humana vinculada à identidade, ação e parâmetros","outcome":"APPROVED","approve":True},
             {"phase":"FASE 2","source":"Agent Gateway","type":"tool.executed","severity":"MEDIUM","actor":COMPROMISED_PRINCIPAL,"asset":"document://SYNTHETIC/DOC-001","summary":"Operação aprovada executada exatamente uma vez","outcome":"PENDING_POLICY","policy_action":"export_restricted","policy_params":{"document":"DOC-001","format":"pdf"},"execute":True},
             {"phase":"FASE 2","source":"Agent Gateway","type":"approval.replay","severity":"CRITICAL","actor":COMPROMISED_PRINCIPAL,"asset":"document://SYNTHETIC/DOC-001","summary":"Tentativa de reutilizar aprovação já consumida","outcome":"PENDING_POLICY","policy_action":"export_restricted","policy_params":{"document":"DOC-001","format":"pdf"},"replay":True},
-            {"phase":"FASE 2","source":"Agent Gateway","type":"identity.swap","severity":"CRITICAL","actor":"agent:other-identity","asset":"document://SYNTHETIC/DOC-001","summary":"Outra identidade tenta usar autorização da campanha","outcome":"PENDING_POLICY","policy_action":"export_restricted","policy_params":{"document":"DOC-001","format":"pdf"}},
-            {"phase":"FASE 2","source":"Agent Gateway","type":"parameters.swap","severity":"CRITICAL","actor":COMPROMISED_PRINCIPAL,"asset":"document://SYNTHETIC/DOC-999","summary":"Parâmetros são alterados depois da aprovação","outcome":"PENDING_POLICY","policy_action":"export_restricted","policy_params":{"document":"DOC-999","format":"pdf"}},
+            {"phase":"FASE 2","source":"Agent Gateway","type":"identity.swap","severity":"CRITICAL","actor":"agent:other-identity","asset":"document://SYNTHETIC/DOC-001","summary":"Outra identidade tenta usar autorização da campanha","outcome":"PENDING_POLICY","policy_action":"export_restricted","policy_params":{"document":"DOC-001","format":"pdf"},"approval_ref":"APR-001"},
+            {"phase":"FASE 2","source":"Agent Gateway","type":"parameters.swap","severity":"CRITICAL","actor":COMPROMISED_PRINCIPAL,"asset":"document://SYNTHETIC/DOC-999","summary":"Parâmetros são alterados depois da aprovação","outcome":"PENDING_POLICY","policy_action":"export_restricted","policy_params":{"document":"DOC-999","format":"pdf"},"approval_ref":"APR-001"},
             {"phase":"FASE 2","source":"HRKL","type":"tamper.attempt","severity":"CRITICAL","actor":"ai-attacker-synthetic","asset":"evidence-log","summary":"Tentativa de modificar e reordenar evidência histórica","outcome":"DETECTED","reason":"MERKLE_ROOT_MISMATCH","tamper":True},
             {"phase":"FASE 2","source":"Evidence","type":"evidence.exported","severity":"INFO","actor":"service:evidence-exporter","asset":"evidence://STF-POC-001","summary":"Pacote de evidências gerado para verificação independente","outcome":"PASS","evidence":True},
             {"phase":"FASE 2","source":"Offline Verifier","type":"evidence.verified","severity":"INFO","actor":"service:offline-verifier","asset":"evidence://STF-POC-001","summary":"Integridade local verificada sem depender do sistema de origem","outcome":"PASS","verify":True},
@@ -243,16 +243,12 @@ class PocEngine:
             self.last_action="Incidente correlacionado e aberto"
 
     def _matching_approval(self, action: str, principal: str, target: str, params_digest: str | None) -> dict[str, Any] | None:
-        same_action=[
+        candidates=[
             a for a in self.approvals.values()
-            if a.get("action")==action and a.get("state") in {"PENDING","APPROVED","CONSUMED"}
+            if a.get("action")==action and a.get("principal")==principal
+            and a.get("target")==target and a.get("parameters_digest")==params_digest
+            and a.get("state") in {"PENDING","APPROVED","CONSUMED"}
         ]
-        exact=[
-            a for a in same_action
-            if a.get("principal")==principal and a.get("target")==target
-            and a.get("parameters_digest")==params_digest
-        ]
-        candidates=exact or [a for a in same_action if a.get("state") in {"APPROVED","CONSUMED"}]
         if not candidates:
             return None
         candidates.sort(key=lambda a:a.get("created_at_epoch",0),reverse=True)
@@ -309,13 +305,13 @@ class PocEngine:
             return {"status":"INGESTED","ingested":asdict(ev),"detection":detection.to_dict() if detection else None,"state":self.snapshot()}
 
 
-    def submit_action(self, action: str, principal: str, target: str, parameters: dict[str, Any] | None = None) -> dict[str, Any]:
+    def submit_action(self, action: str, principal: str, target: str, parameters: dict[str, Any] | None = None, approval_id: str | None = None) -> dict[str, Any]:
         with self.lock:
             if self.execution_mode=="IDLE":
                 self.execution_mode="API_LAB"
             parameters=parameters or {}
             params_digest=sha256_hex(parameters)
-            selected=self._matching_approval(action,principal,target,params_digest)
+            selected=self.approvals.get(approval_id) if approval_id else self._matching_approval(action,principal,target,params_digest)
             decision=policy_decide(
                 action=action,incident=self.incident,principal=principal,target=target,
                 parameters_digest=params_digest,approval=selected,consumed=self.approvals_consumed,
@@ -401,7 +397,7 @@ class PocEngine:
                     principal=spec.get("actor","unknown"),
                     target=spec.get("asset","unknown"),
                     parameters_digest=params_digest,
-                    approval=self._matching_approval(spec["policy_action"],spec.get("actor","unknown"),spec.get("asset","unknown"),params_digest),
+                    approval=self.approvals.get(spec.get("approval_ref")) if spec.get("approval_ref") else self._matching_approval(spec["policy_action"],spec.get("actor","unknown"),spec.get("asset","unknown"),params_digest),
                     consumed=self.approvals_consumed,
                 )
                 spec["reason"]=decision.reason_code
@@ -968,11 +964,13 @@ class Handler(BaseHTTPRequestHandler):
                 principal=body.get("principal",COMPROMISED_PRINCIPAL)
                 target=body.get("target")
                 parameters=body.get("parameters") or {}
+                approval_id=body.get("approval_id")
                 if not isinstance(action,str) or not action.strip(): raise ValueError("action must be a non-empty string")
                 if not isinstance(principal,str) or not principal.strip(): raise ValueError("principal must be a non-empty string")
                 if not isinstance(target,str) or not target.strip(): raise ValueError("target must be a non-empty string")
                 if not isinstance(parameters,dict): raise ValueError("parameters must be an object")
-                return self._json(ENGINE.submit_action(action.strip(),principal.strip(),target.strip(),parameters),200)
+                if approval_id is not None and (not isinstance(approval_id,str) or not approval_id.strip()): raise ValueError("approval_id must be a non-empty string when supplied")
+                return self._json(ENGINE.submit_action(action.strip(),principal.strip(),target.strip(),parameters,approval_id.strip() if approval_id else None),200)
             except (ValueError,KeyError,TypeError) as e:
                 return self._json({"error":"invalid_action","detail":str(e)},400)
         if path=="/api/approval/grant":
