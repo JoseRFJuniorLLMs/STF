@@ -65,6 +65,7 @@ TPU = {
     1051: "Decurso de Prazo",
     1061: "Disponibilização no Diário da Justiça Eletrônico",
     11010: "Mero expediente",
+    11383: "Praticado ato ordinatório",
     12104: "Inclusão em pauta",
     12105: "Inclusão em Pauta de Sessão Virtual",
     12164: "Outras Decisões",
@@ -329,11 +330,11 @@ def construir_conteudo(proc: dict[str, Any], seq: int, quando: datetime) -> dict
     return out
 
 
-def _attrs(proc: dict[str, Any], seq: int, conteudo: dict[str, Any]) -> dict[str, str]:
+def _attrs(proc: dict[str, Any], seq: int, conteudo: dict[str, Any], origem: str = "roteiro") -> dict[str, str]:
     attrs = {
         "generated_by": GENERATED_BY, "processo_id": proc["id"], "classe": proc["classe"],
         "numero_unico": conteudo["numeroProcesso"], "seq": f"{seq:03d}", "tipo": conteudo["tipo"],
-        "data": conteudo["dataHora"],
+        "data": conteudo["dataHora"], "origem": origem,
     }
     if conteudo.get("movimento"):
         attrs["tpu"] = str(conteudo["movimento"]["codigo"])
@@ -392,6 +393,8 @@ class ProcessLedger:
                 "kind": row.get("kind"), "ts_ms": int(row.get("ts_hlc", 0)) >> 16,
                 "idempotency_key": attrs.get("__heraclitus_idempotency_key"),
                 "processo_id": attrs.get("processo_id"), "seq": seq, "tipo": attrs.get("tipo"),
+                "origem": attrs.get("origem", "roteiro"),
+                "approval_id": attrs.get("approval_id"),
                 "conteudo": conteudo,
             })
         eventos.sort(key=lambda e: (e["processo_id"] or "", e["seq"], e["lsn"]))
@@ -486,3 +489,51 @@ class ProcessLedger:
             if seq > len(_passos(proc)):
                 raise LookupError(f"{proc['id']} já tem a tramitação concluída")
             return self._gravar(proc, seq, (agora or datetime.now(BRT)).replace(microsecond=0), evs[-1]["id"])
+
+    def acrescentar_avulso(
+        self,
+        processo_id: str,
+        codigo: int,
+        complemento: str,
+        aprovacao: dict[str, Any],
+        agora: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Acrescenta um andamento avulso (fora do roteiro) aprovado por operador humano."""
+        proc = POR_ID.get(processo_id)
+        if proc is None:
+            raise KeyError(processo_id)
+        if codigo not in TPU:
+            raise ValueError(f"código TPU não catalogado: {codigo}")
+        approval_id = str(aprovacao.get("approval_id", ""))
+        if not re.fullmatch(r"[A-Za-z0-9-]{4,40}", approval_id):
+            raise ValueError("approval_id inválido")
+        with self.lock:
+            evs = self._eventos(proc["id"])
+            if not evs:
+                raise LookupError(f"{proc['id']} ainda não foi protocolado no HeraclitusDB")
+            for ev in evs:
+                if ev.get("approval_id") == approval_id:
+                    return {
+                        "lsn": ev["lsn"], "deduplicated": True, "event_id": ev["id"],
+                        "processo_id": proc["id"], "seq": ev["seq"], "conteudo": ev["conteudo"],
+                    }
+            seq = len(evs) + 1
+            capa = _capa(proc)
+            quando = (agora or datetime.now(BRT)).replace(microsecond=0).isoformat(timespec="seconds")
+            conteudo = {
+                "schema": SCHEMA, "sintetico": True, "processo": capa["numero"], "processoId": proc["id"],
+                "numeroProcesso": capa["numeroUnico"], "seq": seq, "tipo": "andamento", "dataHora": quando,
+                "origem": "avulso",
+                "movimento": {"codigo": codigo, "nome": TPU[codigo], "complemento": complemento,
+                              "orgaoJulgador": {"nome": proc["orgao"]}},
+                "aprovacao": dict(aprovacao),
+            }
+            attrs = {**_attrs(proc, seq, conteudo, "avulso"), "approval_id": approval_id,
+                     "aprovado_por": str(aprovacao.get("aprovador", ""))}
+            res = self.core.append(
+                agent_id=AGENT_ID, session_id=capa["numeroUnico"], kind=KINDS["andamento"], content=conteudo,
+                attrs=attrs, parents=[evs[-1]["id"]],
+                idempotency_key=f"stf-proc:{capa['numeroUnico']}:av:{approval_id}",
+            )
+            return {**res, "processo_id": proc["id"], "seq": seq, "conteudo": conteudo}
+

@@ -9,6 +9,7 @@ const PROC_SITUACAO = {
 };
 const PROC_SUBTABS = [
   { id: 'andamentos', label: 'Andamentos' },
+  { id: 'timeline', label: '⏳ Linha do tempo' },
   { id: 'peticoes', label: 'Protocolo e petições' },
   { id: 'deslocamentos', label: 'Deslocamentos' },
   { id: 'log', label: 'Log HeraclitusDB' }
@@ -30,12 +31,15 @@ const procLsnRenderizado = new Map();   // id -> maior LSN já desenhado no deta
 const procDataFmt = new Intl.DateTimeFormat('pt-BR', {
   timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
 });
-const procHoraFmt = new Intl.DateTimeFormat('pt-BR', {
+const procDataHoraFmt = new Intl.DateTimeFormat('pt-BR', {
   timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric',
   hour: '2-digit', minute: '2-digit', second: '2-digit'
 });
 const procData = iso => (iso ? procDataFmt.format(new Date(iso)) : '—');
-const procHora = ms => (ms ? procHoraFmt.format(new Date(ms)) : '—');
+const procDataHora = iso => (iso ? procDataHoraFmt.format(new Date(iso)) : '—');
+const procHora = ms => (ms ? procDataHoraFmt.format(new Date(ms)) : '—');
+
+const ALL_VIEWS = ['defesa', 'processos', 'incidente', 'auditoria', 'resiliencia', 'interoperabilidade'];
 
 function procViewAtiva() {
   return !$('#viewProcessos').hidden;
@@ -46,29 +50,42 @@ function setupMainTabs() {
   document.querySelectorAll('.main-tab').forEach(btn => {
     btn.addEventListener('click', () => mostrarView(btn.dataset.view));
   });
-  window.addEventListener('hashchange', () => mostrarView(location.hash === '#processos' ? 'processos' : 'defesa', false));
-  if (location.hash === '#processos') mostrarView('processos', false);
+  const hashView = () => {
+    const h = (location.hash || '').replace(/^#/, '');
+    return ALL_VIEWS.includes(h) ? h : 'defesa';
+  };
+  window.addEventListener('hashchange', () => mostrarView(hashView(), false));
+  if (location.hash) mostrarView(hashView(), false);
 }
 
 function mostrarView(view, atualizarHash = true) {
-  const processos = view === 'processos';
-  $('#viewDefesa').hidden = processos;
-  $('#viewProcessos').hidden = !processos;
+  if (!ALL_VIEWS.includes(view)) view = 'defesa';
+  ALL_VIEWS.forEach(v => {
+    const elId = 'view' + v.charAt(0).toUpperCase() + v.slice(1);
+    const el = $('#' + elId);
+    if (el) el.hidden = (v !== view);
+  });
   document.querySelectorAll('.main-tab').forEach(btn => {
     const ativo = btn.dataset.view === view;
     btn.classList.toggle('active', ativo);
     btn.setAttribute('aria-selected', String(ativo));
   });
-  if (atualizarHash) history.replaceState(null, '', processos ? '#processos' : location.pathname + location.search);
-  if (processos) {
+  if (atualizarHash) history.replaceState(null, '', view === 'defesa' ? location.pathname + location.search : '#' + view);
+  if (view === 'processos') {
     if (procSelecionado) procNovos.delete(procSelecionado);
     atualizarBadgeNovos();
     carregarProcessos();
-  } else if (typeof state !== 'undefined' && state) {
-    // O grafo e os gráficos medem o contentor: redesenhar depois de voltar a
-    // estar visível, senão ficam com a geometria de um elemento escondido.
-    renderGraph(state);
-    renderIncidentCharts();
+  } else if (view === 'incidente' && typeof refreshIncidente360 === 'function') {
+    refreshIncidente360();
+  } else if (view === 'auditoria' && typeof refreshAuditoria === 'function') {
+    refreshAuditoria();
+  } else if (view === 'resiliencia' && typeof refreshResiliencia === 'function') {
+    refreshResiliencia();
+  } else if (view === 'interoperabilidade' && typeof refreshInteroperabilidade === 'function') {
+    refreshInteroperabilidade();
+  } else if (view === 'defesa' && typeof state !== 'undefined' && state) {
+    if (typeof renderGraph === 'function') renderGraph(state);
+    if (typeof renderIncidentCharts === 'function') renderIncidentCharts();
   }
   agendarPoll();
 }
@@ -212,6 +229,66 @@ async function carregarDetalhe() {
   }
 }
 
+function renderProcessHeatmap(eventos) {
+  if (!eventos || !eventos.length) return '';
+  const porDia = new Map();
+  const agora = new Date();
+  const inicio = new Date(agora.getTime() - 27 * 86400000);
+  for (let i = 0; i < 28; i++) {
+    const d = new Date(inicio.getTime() + i * 86400000);
+    const chave = d.toISOString().slice(0, 10);
+    porDia.set(chave, { data: d, chave, count: 0, andamentos: 0, outros: 0 });
+  }
+  eventos.forEach(ev => {
+    const dataIso = ev.conteudo?.dataHora || (ev.ts_ms ? new Date(ev.ts_ms).toISOString() : null);
+    if (!dataIso) return;
+    const chave = String(dataIso).slice(0, 10);
+    if (!porDia.has(chave)) {
+      porDia.set(chave, { data: new Date(dataIso), chave, count: 0, andamentos: 0, outros: 0 });
+    }
+    const item = porDia.get(chave);
+    item.count++;
+    if (ev.tipo === 'andamento') item.andamentos++;
+    else item.outros++;
+  });
+
+  const slots = Array.from(porDia.values()).sort((a, b) => a.data - b.data);
+  const maxCont = Math.max(1, ...slots.map(s => s.count));
+  const nivel = n => (n === 0 ? 0 : Math.min(4, Math.max(1, Math.ceil((n / maxCont) * 4))));
+
+  const cell = 12, gap = 4, pitch = cell + gap;
+  const cols = Math.ceil(slots.length / 4);
+  const W = cols * pitch + 30;
+  const H = 4 * pitch + 18;
+
+  const squares = slots.map((s, i) => {
+    const col = Math.floor(i / 4);
+    const row = i % 4;
+    const x = 20 + col * pitch;
+    const y = 4 + row * pitch;
+    const lvl = nivel(s.count);
+    const diaFmt = procData(s.data);
+    const tip = `<strong>${diaFmt}</strong><div class="tt-row">Total de atos<b>${s.count}</b></div>${s.andamentos ? `<div class="tt-row">Andamentos<b>${s.andamentos}</b></div>` : ''}${s.outros ? `<div class="tt-row">Petições/Deslocamentos<b>${s.outros}</b></div>` : ''}`;
+    return `<rect class="heat-cell heat-${lvl}" x="${x}" y="${y}" width="${cell}" height="${cell}" rx="2.5" data-tip="${esc(tip)}"/>`;
+  }).join('');
+
+  return `
+    <div class="proc-heatmap-box">
+      <div class="proc-heatmap-head">
+        <span>📊 Atividade processual no tempo (estilo GitHub · azul STF)</span>
+        <small>${eventos.length} evento(s) imutáveis gravados no HeraclitusDB</small>
+      </div>
+      <svg class="proc-heatmap-svg" viewBox="0 0 ${W} ${H}">
+        ${squares}
+      </svg>
+      <div class="heat-foot">
+        <span>Cada quadrado = 1 dia de tramitação · Passe o mouse para ver os atos</span>
+        <span class="heat-scale">Menos ${[0, 1, 2, 3, 4].map(l => `<i class="heat-cell heat-${l}"></i>`).join('')} Mais</span>
+      </div>
+    </div>
+  `;
+}
+
 // ----------------------------------------------------------------- detalhe
 function renderDetalhe() {
   const d = procDetalhe;
@@ -222,6 +299,7 @@ function renderDetalhe() {
   const porTipo = tipo => eventos.filter(e => e.tipo === tipo);
   const contagem = {
     andamentos: porTipo('andamento').length,
+    timeline: eventos.length,
     peticoes: porTipo('protocolo').length + porTipo('peticao').length,
     deslocamentos: porTipo('deslocamento').length,
     log: eventos.length
@@ -270,6 +348,8 @@ function renderDetalhe() {
       <button class="btn tiny ghost" id="procAsOfNow" ${historico ? '' : 'disabled'}>Voltar ao atual</button>
     </div>
 
+    ${renderProcessHeatmap(eventos)}
+
     <div class="proc-subtabs" role="tablist">
       ${PROC_SUBTABS.map(t => `
         <button class="tab-btn ${t.id === procSubtab ? 'active' : ''}" role="tab" aria-selected="${t.id === procSubtab}" data-subtab="${t.id}">
@@ -298,6 +378,83 @@ function renderSubtab(eventos, integ, novo) {
         <td class="mono proc-lsn">${e.lsn}</td>
       </tr>`;
     }, 'Nenhum andamento neste ponto do histórico.');
+  }
+  if (procSubtab === 'timeline') {
+    const linhas = [...eventos].reverse();
+    if (!linhas.length) return '<div class="proc-empty">Nenhum evento neste ponto do histórico.</div>';
+    return `<div class="proc-timeline">${linhas.map((e, idx) => {
+      const quebrado = !integ.integra && e.lsn === integ.lsn;
+      let titulo = '';
+      let badgeTipo = '';
+      let badgeClasse = 'info';
+      let detalheHtml = '';
+      let dataProc = '';
+
+      if (e.tipo === 'andamento') {
+        const m = e.conteudo?.movimento || {};
+        badgeTipo = `⚖️ Andamento · TPU ${m.codigo || '—'}`;
+        badgeClasse = 'tpu';
+        titulo = esc(m.nome || 'Andamento');
+        dataProc = e.conteudo?.dataHora;
+        detalheHtml = `
+          ${m.complemento ? `<div class="proc-tl-complemento"><strong>Complemento:</strong> ${esc(m.complemento)}</div>` : ''}
+          <div class="proc-tl-orgao"><strong>Órgão julgador:</strong> ${esc(m.orgaoJulgador?.nome || '—')}</div>
+          ${e.origem === 'avulso' ? `<div class="proc-tl-avulso">🛡️ <strong>Andamento Avulso Aprovado</strong> (Aprovação: <span class="mono">${esc(e.approval_id || 'HITL')}</span>)</div>` : ''}
+        `;
+      } else if (e.tipo === 'protocolo') {
+        const x = e.conteudo?.protocolo || {};
+        badgeTipo = '📋 Protocolo Inicial';
+        badgeClasse = 'protocolo';
+        titulo = `Protocolo ${esc(x.numero || '—')}`;
+        dataProc = x.peticionadoEm;
+        detalheHtml = `
+          <div class="proc-tl-desc">Peticionado por: <strong>${esc(x.meio || '—')}</strong> · Recebido por: ${esc(x.recebidoPor || '—')}</div>
+          <div class="proc-tl-meta">Recebimento oficial: ${procDataHora(x.recebidoEm)}</div>
+        `;
+      } else if (e.tipo === 'peticao') {
+        const x = e.conteudo?.peticao || {};
+        badgeTipo = '📑 Petição';
+        badgeClasse = 'peticao';
+        titulo = `${esc(x.tipo || 'Petição')} — ${esc(x.numero || '—')}`;
+        dataProc = x.peticionadoEm;
+        detalheHtml = `
+          <div class="proc-tl-desc">Peticionante: <strong>${esc(x.peticionante || '—')}</strong></div>
+          <div class="proc-tl-meta">Recebido em: ${procDataHora(x.recebidoEm)}</div>
+        `;
+      } else if (e.tipo === 'deslocamento') {
+        const x = e.conteudo?.deslocamento || {};
+        badgeTipo = '📦 Deslocamento';
+        badgeClasse = 'deslocamento';
+        titulo = `Remessa dos autos (Guia ${esc(x.guia || '—')})`;
+        dataProc = x.enviadoEm;
+        detalheHtml = `
+          <div class="proc-tl-desc">${esc(x.enviadoPor || '—')} ➔ <strong>${esc(x.recebidoPor || '—')}</strong></div>
+          <div class="proc-tl-meta">Recebido em: ${procDataHora(x.recebidoEm)}</div>
+        `;
+      }
+
+      return `
+        <div class="proc-tl-item ${novo(e.lsn)}${quebrado ? ' broken' : ''}${idx === 0 ? ' latest' : ''}">
+          <div class="proc-tl-marker"><div class="proc-tl-dot"></div></div>
+          <div class="proc-tl-card">
+            <div class="proc-tl-top">
+              <span class="proc-tl-badge ${badgeClasse}">${badgeTipo}</span>
+              <span class="proc-tl-datetime" title="Data e hora processual do andamento">📅 <strong>${procDataHora(dataProc)}</strong></span>
+              <span class="proc-tl-hlc mono" title="Timestamp de registro imutável no HeraclitusDB">⏱️ Registrado: ${procHora(e.ts_ms)}</span>
+              <span class="proc-lsn mono" title="Número Sequencial Lógico no HeraclitusDB">LSN ${e.lsn}</span>
+            </div>
+            <div class="proc-tl-title"><h4>${titulo}</h4></div>
+            <div class="proc-tl-body">${detalheHtml}</div>
+            <div class="proc-tl-footer">
+              <span class="mono">Seq #${e.seq}</span>
+              <span class="mono" title="ID único imutável do evento">ID: ${esc(e.id)}</span>
+              <span class="mono" title="Elo pai anterior na cadeia imutável">Elo: ${esc((e.parents || [])[0] || 'raiz')}</span>
+              <span class="mono" title="Chave de idempotência">Chave: ${esc(e.idempotency_key || '—')}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('')}</div>`;
   }
   if (procSubtab === 'peticoes') {
     const linhas = eventos.filter(e => e.tipo === 'protocolo' || e.tipo === 'peticao').reverse();

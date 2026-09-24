@@ -87,6 +87,23 @@ class LedgerTests(unittest.TestCase):
         self.assertTrue(passado["integridade"]["integra"])
     def test_id_invalido_nao_chega_ao_gql(self):
         with self.assertRaises(ValueError): self.ledger._eventos('RE-000001" OR n.x = "y')
+    def test_acrescentar_avulso_com_aprovacao_humana(self):
+        self.ledger.protocolar()
+        antes = self.ledger.detalhe("RE-000001")["eventos"]
+        aprovacao = {"approval_id": "APRV-9999", "aprovador": "operador-stf"}
+        res = self.ledger.acrescentar_avulso("RE-000001", 11383, "Certidão de retificação expedida", aprovacao)
+        self.assertEqual(res["seq"], len(antes) + 1)
+        self.assertEqual(res["conteudo"]["origem"], "avulso")
+        self.assertEqual(res["conteudo"]["movimento"]["codigo"], 11383)
+        self.assertEqual(res["conteudo"]["movimento"]["nome"], "Praticado ato ordinatório")
+        depois = self.ledger.detalhe("RE-000001")
+        self.assertEqual(depois["eventos"][-1]["parents"], [antes[-1]["id"]])
+        self.assertTrue(depois["integridade"]["integra"])
+        self.assertEqual(depois["eventos"][-1]["origem"], "avulso")
+        # Idempotência por approval_id
+        res2 = self.ledger.acrescentar_avulso("RE-000001", 11383, "Certidão de retificação expedida", aprovacao)
+        self.assertTrue(res2["deduplicated"])
+        self.assertEqual(res2["lsn"], res["lsn"])
 
 class CadeiaTests(unittest.TestCase):
     def _cadeia(self):

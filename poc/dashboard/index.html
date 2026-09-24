@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>STF POC | HeraclitusDB — Governança e Defesa Cibernética</title>
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="incidente.css" />
+  <link rel="stylesheet" href="auditoria.css" />
+  <link rel="stylesheet" href="resiliencia.css" />
+  <link rel="stylesheet" href="interoperabilidade.css" />
 </head>
 <body>
 <div class="shell">
@@ -74,6 +78,10 @@
       ⚖️ Acompanhamento processual
       <span class="main-tab-badge" id="procNovosBadge" title="Andamentos novos desde a última visita" hidden>0</span>
     </button>
+    <button class="main-tab" id="tabIncidente" role="tab" aria-selected="false" aria-controls="viewIncidente" data-view="incidente">🔍 Incidente 360º</button>
+    <button class="main-tab" id="tabAuditoria" role="tab" aria-selected="false" aria-controls="viewAuditoria" data-view="auditoria">📜 Auditoria e Evidências</button>
+    <button class="main-tab" id="tabResiliencia" role="tab" aria-selected="false" aria-controls="viewResiliencia" data-view="resiliencia">🔄 Resiliência e Continuidade</button>
+    <button class="main-tab" id="tabInteroperabilidade" role="tab" aria-selected="false" aria-controls="viewInteroperabilidade" data-view="interoperabilidade">🌐 Interoperabilidade e Reconciliação</button>
   </nav>
 
   <div class="view" id="viewDefesa" role="tabpanel" aria-labelledby="tabDefesa">
@@ -420,6 +428,18 @@
     </section>
   </div>
 
+  <!-- INCIDENTE 360º -->
+  <div class="view" id="viewIncidente" role="tabpanel" aria-labelledby="tabIncidente" hidden></div>
+
+  <!-- AUDITORIA E EVIDÊNCIAS -->
+  <div class="view" id="viewAuditoria" role="tabpanel" aria-labelledby="tabAuditoria" hidden></div>
+
+  <!-- RESILIÊNCIA E CONTINUIDADE -->
+  <div class="view" id="viewResiliencia" role="tabpanel" aria-labelledby="tabResiliencia" hidden></div>
+
+  <!-- INTEROPERABILIDADE E RECONCILIAÇÃO -->
+  <div class="view" id="viewInteroperabilidade" role="tabpanel" aria-labelledby="tabInteroperabilidade" hidden></div>
+
 </div>
 
 <!-- TOOLTIP DOS GRÁFICOS -->
@@ -428,5 +448,9 @@
 <div id="toast" class="toast"></div>
 <script src="app.js"></script>
 <script src="processos.js"></script>
+<script src="incidente.js"></script>
+<script src="auditoria.js"></script>
+<script src="resiliencia.js"></script>
+<script src="interoperabilidade.js"></script>
 </body>
 </html>
