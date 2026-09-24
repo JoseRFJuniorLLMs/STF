@@ -121,13 +121,18 @@
     </section>
 
     <!-- PAINEL DIREITO: GRAFO TEMPORAL COM INFRAESTRUTURA E ATAQUE EM TEMPO REAL -->
-    <section class="panel panel-right graph-panel">
+    <section class="panel panel-right graph-panel" id="graphPanel">
       <div class="panel-head">
         <div>
           <span class="section-kicker">PAINEL DIREITO</span>
           <h2>CORRELAÇÃO — Grafo temporal</h2>
         </div>
-        <span id="graphStats" class="mono">0 nós / 0 arestas</span>
+        <div class="head-right-actions">
+          <span id="graphStats" class="mono">0 nós / 0 arestas</span>
+          <button class="btn small" id="fullscreenGraphBtn" title="Maximizar Grafo em Tela Cheia">
+            <span id="fsBtnIcon">⛶</span> <span id="fsBtnText">Tela Cheia</span>
+          </button>
+        </div>
       </div>
 
       <!-- BANNER DO ATAQUE QUE ESTÁ ACONTECENDO NA INFRAESTRUTURA -->

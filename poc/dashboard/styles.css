@@ -442,12 +442,85 @@ body::before {
   color: #ffffff;
 }
 
+/* Ações do Topo do Painel */
+.head-right-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+#fullscreenGraphBtn {
+  font-weight: 700;
+  font-size: 11px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ffffff;
+  border: 1px solid var(--gov-border);
+  color: var(--gov-blue-primary);
+  transition: all 0.2s ease;
+  padding: 5px 10px;
+  border-radius: 5px;
+}
+#fullscreenGraphBtn:hover {
+  background: #edf4fc;
+  border-color: var(--gov-blue-light);
+  transform: translateY(-1px);
+}
+#fullscreenGraphBtn.active {
+  background: var(--gov-blue-primary);
+  color: #ffffff;
+  border-color: #082452;
+}
+
+body.panel-fullscreen-active {
+  overflow: hidden !important;
+}
+
 /* ========================================================
    PAINEL DIREITO: GRAFO TEMPORAL (CANVAS CLARO)
    ======================================================== */
 .graph-panel {
   display: flex;
   flex-direction: column;
+  transition: all 0.25s ease;
+}
+
+.graph-panel.fullscreen {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 99999 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-height: 100vh !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  border: none !important;
+  background: #ffffff !important;
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+}
+.graph-panel.fullscreen .panel-head {
+  padding: 12px 24px;
+  border-bottom: 2px solid var(--gov-border);
+  background: #f8fafc;
+}
+.graph-panel.fullscreen .live-attack-banner {
+  margin: 10px 24px 8px;
+}
+.graph-panel.fullscreen .graph-canvas {
+  margin: 0 24px 10px;
+  flex: 1 1 0;
+  height: auto !important;
+  min-height: 0;
+  border: 1px solid var(--gov-border);
+  border-radius: 8px;
+}
+.graph-panel.fullscreen .target-focus-card {
+  margin: 0 24px 14px;
+  flex: none;
 }
 
 /* Banner de Ataque em Tempo Real */
@@ -612,10 +685,19 @@ body::before {
   user-select: none;
 }
 
+.graph-node {
+  cursor: grab;
+}
+.graph-node:active, .graph-node.dragging {
+  cursor: grabbing;
+}
 .graph-node circle {
-  cursor: pointer;
+  cursor: grab;
   filter: drop-shadow(0 2px 4px rgba(12, 50, 111, 0.12));
-  transition: all 0.2s ease;
+  transition: filter 0.2s ease, stroke 0.2s ease;
+}
+.graph-node:active circle, .graph-node.dragging circle {
+  cursor: grabbing;
 }
 .graph-node:hover circle {
   filter: drop-shadow(0 4px 10px rgba(12, 50, 111, 0.28));

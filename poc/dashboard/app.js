@@ -2,8 +2,11 @@ const $ = s => document.querySelector(s);
 let state = null;
 let running = false;
 let selectedNode = null;
+let isFullscreen = false;
 
-// Catálogo dos 17 ataques mapeados diretamente à Infraestrutura do STF
+// ========================================================
+// CATÁLOGO DOS 17 ATAQUES MAPEADOS À INFRAESTRUTURA DO STF
+// ========================================================
 const ATTACKS = [
   { step: 1, title: '01. Calibração e Tráfego Benigno', infra: 'Firewall / WAF', target: 'public-edge', type: 'network.connection', phase: 'FASE 1', desc: 'Tráfego legítimo de calibração para estabelecer a linha de base no perímetro do STF.' },
   { step: 2, title: '02. Sondagem no Perímetro (WAF)', infra: 'Firewall / WAF', target: 'public-edge', type: 'edge.suspicious', phase: 'FASE 1', desc: 'Padrão incomum de requisições no perímetro de borda do Portal do STF.' },
@@ -24,6 +27,37 @@ const ATTACKS = [
   { step: 17, title: '17. Verificação Offline da Integridade', infra: 'Auditoria Externa', target: 'evidence://STF-POC-001', type: 'evidence.verified', phase: 'FASE 2', desc: 'Perícia independente valida as provas matemáticas localmente e sem conexão à rede.' }
 ];
 
+// ========================================================
+// TOPOLOGIA FIXA DA INFRAESTRUTURA DO STF (SEMPRE VISÍVEL)
+// ========================================================
+// Posições normalizadas (nx, ny de 0 a 1) para espaçamento amplo
+const FIXED_INFRA_NODES = [
+  { id: 'asset:public-edge', label: 'public-edge', kind: 'asset', friendlyName: 'Firewall / WAF Borda', icon: '🛡️', nx: 0.12, ny: 0.50, r: 20 },
+  { id: 'asset:identity-provider', label: 'identity-provider', kind: 'asset', friendlyName: 'VDI Ministros (IAM)', icon: '⚖️', nx: 0.30, ny: 0.22, r: 20 },
+  { id: 'asset:srv-app-07', label: 'srv-app-07', kind: 'asset', friendlyName: 'Servidor Linux STF', icon: '🐧', nx: 0.32, ny: 0.72, r: 20 },
+  { id: 'actor:human:approver-01', label: 'human:approver-01', kind: 'actor', friendlyName: 'Aprovador de Gabinete', icon: '👨‍⚖️', nx: 0.52, ny: 0.16, r: 20 },
+  { id: 'asset:case://SYNTHETIC/RE-000001', label: 'case://SYNTHETIC/RE-000001', kind: 'asset', friendlyName: 'PJe Autos RE-000001', icon: '🏛️', nx: 0.55, ny: 0.50, r: 22 },
+  { id: 'asset:document://SYNTHETIC/DOC-001', label: 'document://SYNTHETIC/DOC-001', kind: 'asset', friendlyName: 'Acórdão DOC-001 (Sigiloso)', icon: '📄', nx: 0.76, ny: 0.24, r: 20 },
+  { id: 'asset:srv-db-02', label: 'srv-db-02', kind: 'asset', friendlyName: 'Rede Banco Judicial', icon: '🗄️', nx: 0.50, ny: 0.82, r: 18 },
+  { id: 'asset:db-judicial-lab', label: 'db-judicial-lab', kind: 'asset', friendlyName: 'Banco Judicial Autos', icon: '🗄️', nx: 0.72, ny: 0.82, r: 20 },
+  { id: 'asset:evidence-log', label: 'evidence-log', kind: 'asset', friendlyName: 'Trilha HRKL Preservação', icon: '⛓️', nx: 0.88, ny: 0.52, r: 20 }
+];
+
+// Conexões permanentes da infraestrutura do STF
+const FIXED_INFRA_EDGES = [
+  { from: 'asset:public-edge', to: 'asset:identity-provider', type: 'INFRA_LINK', icon: '🌐', title: 'Tráfego Perímetro STF' },
+  { from: 'asset:identity-provider', to: 'asset:srv-app-07', type: 'INFRA_LINK', icon: '🔑', title: 'Sessão Gabinete → Backend' },
+  { from: 'asset:srv-app-07', to: 'asset:case://SYNTHETIC/RE-000001', type: 'INFRA_LINK', icon: '🏛️', title: 'Acesso PJe STF Digital' },
+  { from: 'asset:case://SYNTHETIC/RE-000001', to: 'asset:document://SYNTHETIC/DOC-001', type: 'INFRA_LINK', icon: '📄', title: 'Autos do Processo' },
+  { from: 'asset:srv-app-07', to: 'asset:srv-db-02', type: 'INFRA_LINK', icon: '🔀', title: 'Conexão Rede de Dados' },
+  { from: 'asset:srv-db-02', to: 'asset:db-judicial-lab', type: 'INFRA_LINK', icon: '🗄️', title: 'Cluster Banco de Dados' },
+  { from: 'asset:case://SYNTHETIC/RE-000001', to: 'asset:evidence-log', type: 'INFRA_LINK', icon: '⛓️', title: 'Elo de Auditoria Merkle' },
+  { from: 'actor:human:approver-01', to: 'asset:document://SYNTHETIC/DOC-001', type: 'INFRA_LINK', icon: '✍️', title: 'Canal de Aprovação HITL' }
+];
+
+// ========================================================
+// API E UTILITÁRIOS
+// ========================================================
 async function api(path, opts = {}) {
   const headers = { 'Content-Type': 'application/json', 'X-STF-POC': '1', ...(opts.headers || {}) };
   const r = await fetch(path, { ...opts, headers });
@@ -48,199 +82,6 @@ function toast(msg) {
   toast.t = setTimeout(() => t.classList.remove('show'), 2600);
 }
 
-// RENDERIZAÇÃO GERAL DO ESTADO
-function render(s) {
-  state = s;
-
-  // Header badges institucionais
-  $('#riskValue').textContent = s.risk;
-  const rl = $('#riskLabel');
-  if (s.risk >= 80) {
-    rl.textContent = 'CRÍTICO';
-    rl.className = 'tag-status critical';
-  } else if (s.risk >= 50) {
-    rl.textContent = 'ALTO';
-    rl.className = 'tag-status critical';
-  } else if (s.risk >= 20) {
-    rl.textContent = 'ELEVADO';
-    rl.className = 'tag-status';
-  } else {
-    rl.textContent = 'NORMAL';
-    rl.className = 'tag-status normal';
-  }
-
-  const incState = $('#incidentState');
-  if (s.incident) {
-    incState.textContent = `${s.incident.incident_id} (${s.incident.severity})`;
-    incState.style.color = 'var(--gov-gold-light)';
-  } else {
-    incState.textContent = 'NÃO ABERTO';
-    incState.style.color = 'var(--gov-muted)';
-  }
-
-  $('#upstreamHits').textContent = s.upstream_hits;
-  $('#attackProgress').textContent = `${s.step} / ${s.total_steps} executados`;
-
-  // Atualizar Barra de Infraestrutura do STF
-  updateInfraStatusBar(s);
-
-  // Renderizar os 3 componentes da tela
-  renderAttackList(s);
-  renderGraph(s);
-  renderTrail(s);
-  updateFocusCard(s);
-}
-
-// ATUALIZAÇÃO DA BARRA DE INFRAESTRUTURA DO STF NO TOPO
-function updateInfraStatusBar(s) {
-  const step = s.step || 0;
-
-  // 1. Firewall / WAF
-  const nodeFw = $('#node-fw');
-  const statusFw = $('#status-fw');
-  if (step >= 2) {
-    nodeFw.className = 'infra-node-item targeted';
-    statusFw.textContent = 'SONDAGEM OBSERVADA';
-    statusFw.style.color = 'var(--gov-gold-light)';
-  } else {
-    nodeFw.className = 'infra-node-item';
-    statusFw.textContent = 'PERÍMETRO NORMAL';
-    statusFw.style.color = 'var(--gov-green-light)';
-  }
-
-  // 2. Máquinas de Ministros (VDI)
-  const nodeMin = $('#node-ministro');
-  const statusMin = $('#status-ministro');
-  if (step >= 13) {
-    nodeMin.className = 'infra-node-item compromised';
-    statusMin.textContent = 'TROCA IDENTIDADE (DENY)';
-    statusMin.style.color = '#ff9ca6';
-  } else if (step >= 3) {
-    nodeMin.className = 'infra-node-item compromised';
-    statusMin.textContent = 'SESSÃO ANÔMALA (IAM)';
-    statusMin.style.color = '#ff9ca6';
-  } else {
-    nodeMin.className = 'infra-node-item';
-    statusMin.textContent = 'AUTENTICAÇÃO SEGURA';
-    statusMin.style.color = 'var(--gov-green-light)';
-  }
-
-  // 3. Servidores Linux
-  const nodeLinux = $('#node-linux');
-  const statusLinux = $('#status-linux');
-  if (step >= 4) {
-    nodeLinux.className = 'infra-node-item compromised';
-    statusLinux.textContent = 'PROCESSO ATÍPICO';
-    statusLinux.style.color = '#ff9ca6';
-  } else {
-    nodeLinux.className = 'infra-node-item';
-    statusLinux.textContent = 'BACKEND REGULAR';
-    statusLinux.style.color = 'var(--gov-green-light)';
-  }
-
-  // 4. PJe / STF Digital
-  const nodePje = $('#node-pje');
-  const statusPje = $('#status-pje');
-  if (step >= 8) {
-    nodePje.className = 'infra-node-item compromised';
-    statusPje.textContent = 'ESCRITA BARRADA (DENY)';
-    statusPje.style.color = 'var(--gov-gold-light)';
-  } else if (step >= 7) {
-    nodePje.className = 'infra-node-item targeted';
-    statusPje.textContent = 'AUTOS SOB INCIDENTE';
-    statusPje.style.color = '#ff9ca6';
-  } else {
-    nodePje.className = 'infra-node-item';
-    statusPje.textContent = 'AUTOS ÍNTEGROS';
-    statusPje.style.color = 'var(--gov-green-light)';
-  }
-
-  // 5. Banco Judicial
-  const nodeDb = $('#node-db');
-  const statusDb = $('#status-db');
-  if (step >= 6) {
-    nodeDb.className = 'infra-node-item targeted';
-    statusDb.textContent = 'QUERY ANÔMALA';
-    statusDb.style.color = 'var(--gov-gold-light)';
-  } else {
-    nodeDb.className = 'infra-node-item';
-    statusDb.textContent = 'TRANSACIONAL ÍNTEGRO';
-    statusDb.style.color = 'var(--gov-green-light)';
-  }
-
-  // 6. Agentes IA (VitórIA/Rafa)
-  const nodeIa = $('#node-ia');
-  const statusIa = $('#status-ia');
-  if (step >= 12) {
-    nodeIa.className = 'infra-node-item compromised';
-    statusIa.textContent = 'REPLAY BARRADO (DENY)';
-    statusIa.style.color = '#ff9ca6';
-  } else if (step >= 11) {
-    nodeIa.className = 'infra-node-item';
-    statusIa.textContent = 'EXPORTAÇÃO 1X (OK)';
-    statusIa.style.color = 'var(--gov-green-light)';
-  } else if (step >= 9) {
-    nodeIa.className = 'infra-node-item targeted';
-    statusIa.textContent = 'HITL EXIGIDO';
-    statusIa.style.color = 'var(--gov-gold-light)';
-  } else {
-    nodeIa.className = 'infra-node-item';
-    statusIa.textContent = 'GOVERNANÇA HITL';
-    statusIa.style.color = 'var(--gov-green-light)';
-  }
-}
-
-// PAINEL ESQUERDO: LISTA DE ATAQUES
-function renderAttackList(s) {
-  const container = $('#attackList');
-  const currentStep = s.step || 0;
-
-  container.innerHTML = ATTACKS.map(att => {
-    const isExecuted = currentStep >= att.step;
-    const isCurrent = currentStep === att.step - 1;
-    const ev = isExecuted && s.events ? s.events[att.step - 1] : null;
-
-    let statusText = 'PENDENTE';
-    let cardClass = 'attack-card';
-    let btnText = 'Disparar Ataque';
-
-    if (isExecuted && ev) {
-      statusText = ev.outcome || 'EXECUTADO';
-      if (ev.outcome === 'DENY') {
-        cardClass += ' executed-deny';
-        btnText = '✓ Bloqueado (DENY)';
-      } else if (ev.outcome === 'REQUIRE_HITL') {
-        cardClass += ' active-step';
-        btnText = '✓ Aguardando HITL';
-      } else if (ev.outcome === 'DETECTED') {
-        cardClass += ' executed-deny';
-        btnText = '✓ Detectado (Tamper)';
-      } else {
-        cardClass += ' executed';
-        btnText = '✓ Concluído';
-      }
-    } else if (isCurrent) {
-      cardClass += ' active-step';
-      btnText = 'Disparar Agora ▶';
-    }
-
-    return `
-      <div class="${cardClass}" id="attack-step-${att.step}">
-        <div class="attack-card-main">
-          <div class="attack-meta">
-            <span class="attack-phase-tag">${esc(att.phase)}</span>
-            <span class="attack-source-tag">${esc(att.infra)}</span>
-            <span class="tag-status ${isExecuted ? (ev && ev.outcome === 'DENY' ? 'critical' : 'normal') : ''}">${esc(statusText)}</span>
-          </div>
-          <div class="attack-title">${esc(att.title)}</div>
-          <div class="attack-target">Infra: <code>${esc(att.infra)}</code> → Alvo: <code>${esc(att.target)}</code></div>
-        </div>
-        <button class="attack-btn" onclick="executeAttackTo(${att.step})">${esc(btnText)}</button>
-      </div>
-    `;
-  }).join('');
-}
-
 // FORMATADOR DE DATA E HORA INSTITUCIONAL
 function formatDateTime(ev) {
   if (!ev) return '—';
@@ -250,7 +91,7 @@ function formatDateTime(ev) {
   const lsn = ev.lsn || 1;
   const baseMs = new Date('2026-09-23T20:15:00-03:00').getTime();
   const d = new Date(baseMs + (lsn - 1) * 12000);
-  
+
   const pad = n => String(n).padStart(2, '0');
   const day = pad(d.getDate());
   const mon = pad(d.getMonth() + 1);
@@ -261,7 +102,9 @@ function formatDateTime(ev) {
   return `${day}/${mon}/${yr} ${hr}:${min}:${sec}`;
 }
 
-// HINT / NOTIFICAÇÃO DE ATAQUE NO CANTO INFERIOR DIREITO
+// ========================================================
+// HINT / NOTIFICAÇÃO NO CANTO INFERIOR DIREITO COM DATA/HORA
+// ========================================================
 let hintTimeout = null;
 
 window.closeAttackHint = function() {
@@ -322,8 +165,239 @@ function showAttackHint(attack, ev) {
   }, 5500);
 }
 
+// ========================================================
+// CONTROLE DE TELA CHEIA DO GRAFO TEMPORAL
+// ========================================================
+window.toggleFullscreenGraph = function() {
+  const panel = $('#graphPanel');
+  const btn = $('#fullscreenGraphBtn');
+  const btnIcon = $('#fsBtnIcon');
+  const btnText = $('#fsBtnText');
+
+  isFullscreen = !isFullscreen;
+  panel.classList.toggle('fullscreen', isFullscreen);
+  document.body.classList.toggle('panel-fullscreen-active', isFullscreen);
+  btn.classList.toggle('active', isFullscreen);
+
+  if (isFullscreen) {
+    if (btnIcon) btnIcon.textContent = '✕';
+    if (btnText) btnText.textContent = 'Restaurar';
+    btn.title = 'Sair da Tela Cheia (Esc)';
+    toast('Modo Tela Cheia ativado. Pressione ESC para restaurar.');
+  } else {
+    if (btnIcon) btnIcon.textContent = '⛶';
+    if (btnText) btnText.textContent = 'Tela Cheia';
+    btn.title = 'Maximizar Grafo em Tela Cheia';
+  }
+
+  // Despertar a simulação com expansão física
+  simAlpha = 1.0;
+  if (state) renderGraph(state);
+  startPhysicsLoop();
+};
+
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && isFullscreen) {
+    toggleFullscreenGraph();
+  }
+});
+
+// ========================================================
+// MOTOR DE FÍSICA DINÂMICA (FORCE-DIRECTED GRAPH)
+// ========================================================
+let simNodes = new Map();
+let simEdges = [];
+let simAlpha = 0;
+let simAnimFrame = null;
+let draggedNodeId = null;
+
+function getSvgCoords(svg, clientX, clientY) {
+  const pt = svg.createSVGPoint();
+  pt.x = clientX;
+  pt.y = clientY;
+  const ctm = svg.getScreenCTM();
+  return ctm ? pt.matrixTransform(ctm.inverse()) : { x: clientX, y: clientY };
+}
+
+function startPhysicsLoop() {
+  if (simAnimFrame) return;
+  simAnimFrame = requestAnimationFrame(physicsTick);
+}
+
+function physicsTick() {
+  const container = $('#graph');
+  if (!container) {
+    simAnimFrame = null;
+    return;
+  }
+  const rect = container.getBoundingClientRect();
+  const W = Math.max(Math.floor(rect.width) || 760, 680);
+  const H = Math.max(Math.floor(rect.height) || 460, 420);
+
+  const nodeList = Array.from(simNodes.values());
+  const nLen = nodeList.length;
+
+  // 1. REPULSÃO ENTRE TODOS OS NÓS (Garante que arestas e nós NUNCA fiquem amontoados)
+  for (let i = 0; i < nLen; i++) {
+    const n1 = nodeList[i];
+    for (let j = i + 1; j < nLen; j++) {
+      const n2 = nodeList[j];
+      let dx = n2.x - n1.x;
+      let dy = n2.y - n1.y;
+      let dist = Math.hypot(dx, dy);
+      if (dist < 1) {
+        dx = (Math.random() - 0.5) * 2;
+        dy = (Math.random() - 0.5) * 2;
+        dist = Math.hypot(dx, dy) || 1;
+      }
+
+      // Folga mínima generosa: 70px livre entre nós
+      const minDist = n1.r + n2.r + 70;
+      const repForce = (7000 / (dist * dist)) + (dist < minDist ? (minDist - dist) * 0.22 : 0);
+      const fx = (dx / dist) * repForce;
+      const fy = (dy / dist) * repForce;
+
+      if (!n1.isFixed) { n1.vx -= fx; n1.vy -= fy; }
+      else { n1.vx -= fx * 0.25; n1.vy -= fy * 0.25; }
+
+      if (!n2.isFixed) { n2.vx += fx; n2.vy += fy; }
+      else { n2.vx += fx * 0.25; n2.vy += fy * 0.25; }
+    }
+  }
+
+  // 2. FORÇA DE MOLA NAS ARESTAS
+  for (let i = 0; i < simEdges.length; i++) {
+    const edge = simEdges[i];
+    const n1 = simNodes.get(edge.from);
+    const n2 = simNodes.get(edge.to);
+    if (!n1 || !n2) continue;
+
+    const dx = n2.x - n1.x;
+    const dy = n2.y - n1.y;
+    const dist = Math.hypot(dx, dy) || 1;
+
+    // Arestas longas e espaçadas
+    const idealDist = edge.isInfra ? 150 : edge.type === 'PART_OF_INCIDENT' ? 105 : 135;
+    const springForce = (dist - idealDist) * 0.038;
+    const fx = (dx / dist) * springForce;
+    const fy = (dy / dist) * springForce;
+
+    if (!n1.isFixed) { n1.vx += fx; n1.vy += fy; }
+    if (!n2.isFixed) { n2.vx -= fx; n2.vy -= fy; }
+  }
+
+  // 3. ANCORAGEM ELÁSTICA DOS NÓS FIXOS DA REDE
+  for (let i = 0; i < nLen; i++) {
+    const n = nodeList[i];
+    if (n.isFixed) {
+      // Nós de rede retornam suavemente à sua posição arquitetural ideal
+      const targetX = W * n.nx;
+      const targetY = H * n.ny;
+      n.vx += (targetX - n.x) * 0.045;
+      n.vy += (targetY - n.y) * 0.045;
+    }
+  }
+
+  // 4. INTEGRAÇÃO DE VELOCIDADE E AMORTECIMENTO
+  const friction = 0.82;
+  for (let i = 0; i < nLen; i++) {
+    const n = nodeList[i];
+    if (n.id === draggedNodeId) continue;
+
+    n.vx *= friction;
+    n.vy *= friction;
+    n.x += n.vx * simAlpha;
+    n.y += n.vy * simAlpha;
+
+    const pad = n.r + 28;
+    n.x = Math.max(pad, Math.min(W - pad, n.x));
+    n.y = Math.max(pad, Math.min(H - pad, n.y));
+  }
+
+  // 5. ATUALIZAR ELEMENTOS SVG EM TEMPO REAL
+  for (let i = 0; i < nLen; i++) {
+    const n = nodeList[i];
+    const nodeEl = document.getElementById('gn-' + n.idx);
+    if (nodeEl) {
+      nodeEl.setAttribute('transform', `translate(${n.x.toFixed(1)}, ${n.y.toFixed(1)})`);
+    }
+  }
+
+  for (let i = 0; i < simEdges.length; i++) {
+    const edge = simEdges[i];
+    const n1 = simNodes.get(edge.from);
+    const n2 = simNodes.get(edge.to);
+    if (!n1 || !n2) continue;
+
+    const mx = (n1.x + n2.x) / 2;
+    const my = (n1.y + n2.y) / 2;
+
+    const lineEl = document.getElementById('ge-line-' + i);
+    if (lineEl) {
+      lineEl.setAttribute('x1', n1.x.toFixed(1));
+      lineEl.setAttribute('y1', n1.y.toFixed(1));
+      lineEl.setAttribute('x2', n2.x.toFixed(1));
+      lineEl.setAttribute('y2', n2.y.toFixed(1));
+    }
+
+    const badgeEl = document.getElementById('ge-badge-' + i);
+    if (badgeEl) {
+      badgeEl.setAttribute('transform', `translate(${mx.toFixed(1)}, ${my.toFixed(1)})`);
+    }
+
+    const hintEl = document.getElementById('ge-hint-' + i);
+    if (hintEl) {
+      const hintW = parseFloat(hintEl.getAttribute('data-hint-w')) || 180;
+      const hintX = Math.max(hintW / 2 + 10, Math.min(W - hintWidthForEdge(edge, hintW) / 2 - 10, mx));
+      const hintY = my < 55 ? my + 24 : my - 24;
+      const arrowY = my < 55 ? my + 12 : my - 12;
+      const tipY = my < 55 ? my + 7 : my - 7;
+
+      const arrowEl = hintEl.querySelector('polygon');
+      if (arrowEl) {
+        arrowEl.setAttribute('points', `${mx - 5},${arrowY} ${mx + 5},${arrowY} ${mx},${tipY}`);
+      }
+      const rectEl = hintEl.querySelector('rect');
+      if (rectEl) {
+        rectEl.setAttribute('x', (hintX - hintW / 2).toFixed(1));
+        rectEl.setAttribute('y', (hintY - 11).toFixed(1));
+      }
+      const textEl = hintEl.querySelector('text');
+      if (textEl) {
+        textEl.setAttribute('x', hintX.toFixed(1));
+        textEl.setAttribute('y', hintY.toFixed(1));
+      }
+    }
+  }
+
+  simAlpha *= 0.988;
+  if (simAlpha > 0.003 || draggedNodeId !== null) {
+    simAnimFrame = requestAnimationFrame(physicsTick);
+  } else {
+    simAnimFrame = null;
+  }
+}
+
+function hintWidthForEdge(edge, fallback) {
+  return fallback || 180;
+}
+
 // DETERMINAR METADADOS E ÍCONE DA ARESTA
 function getEdgeInfo(edge, s, currentStep) {
+  if (edge.isInfra) {
+    return {
+      lsn: null,
+      ev: null,
+      att: null,
+      isCurrentAttack: false,
+      icon: edge.icon || '🌐',
+      badgeColor: '#0c326f',
+      badgeBg: '#f0f5fc',
+      attackTitle: edge.title || 'Infraestrutura STF',
+      outcomeText: ''
+    };
+  }
+
   let lsn = null;
   if (edge.to && edge.to.startsWith('event:')) {
     lsn = parseInt(edge.to.replace('event:', ''), 10);
@@ -381,7 +455,7 @@ function getEdgeInfo(edge, s, currentStep) {
     }
   }
 
-  const attackTitle = att ? att.title : (ev ? `${ev.event_type}` : 'Conexão Monitorada');
+  const attackTitle = att ? att.title : (ev ? `${ev.event_type}` : 'Conexão');
   const outcomeText = ev ? ` [${ev.outcome}]` : '';
 
   return {
@@ -397,15 +471,20 @@ function getEdgeInfo(edge, s, currentStep) {
   };
 }
 
-// PAINEL DIREITO: GRAFO TEMPORAL COM INFRAESTRUTURA E ATAQUE EM TEMPO REAL
+// ========================================================
+// RENDERIZAÇÃO DO GRAFO (REDE FIXA + ATAQUES DINÂMICOS)
+// ========================================================
 function renderGraph(s) {
   const e = $('#graph');
-  const nodes = s.graph.nodes || [];
-  const edges = s.graph.edges || [];
-  $('#graphStats').textContent = `${nodes.length} nós / ${edges.length} arestas`;
+  const rawNodes = s?.graph?.nodes || [];
+  const rawEdges = s?.graph?.edges || [];
 
-  // Atualizar Banner de Ataque em Tempo Real
-  const currentStep = s.step || 0;
+  // Botão de tela cheia
+  const fsBtn = $('#fullscreenGraphBtn');
+  if (fsBtn) fsBtn.onclick = () => toggleFullscreenGraph();
+
+  // Banner do ataque ativo
+  const currentStep = s?.step || 0;
   const currentAttack = currentStep > 0 ? ATTACKS[currentStep - 1] : null;
   const nextAttack = currentStep < ATTACKS.length ? ATTACKS[currentStep] : null;
 
@@ -413,93 +492,138 @@ function renderGraph(s) {
     $('#bannerInfraTarget').textContent = `${currentAttack.infra} (${currentAttack.target})`;
     $('#bannerAttackName').textContent = currentAttack.title;
   } else {
-    $('#bannerInfraTarget').textContent = 'Infraestrutura Pronta • Perímetro Monitorado';
+    $('#bannerInfraTarget').textContent = 'Infraestrutura Ativa • Topologia do STF';
     $('#bannerAttackName').textContent = `Próximo: ${nextAttack ? nextAttack.title : 'Nenhum'}`;
   }
 
-  if (!nodes.length) {
-    e.innerHTML = '<div class="empty graph-empty">O grafo temporal surgirá conforme os ataques forem executados contra a infraestrutura do STF.</div>';
-    return;
-  }
+  const rect = e.getBoundingClientRect();
+  const W = Math.max(Math.floor(rect.width) || 760, 680);
+  const H = Math.max(Math.floor(rect.height) || 460, 420);
 
-  const W = 760;
-  const H = 460;
-  const v = nodes.slice(-28);
-  const ids = new Set(v.map(n => n.id));
-  const pos = new Map();
-
-  // Mapeamento institucional de nomes no Grafo
-  const labelMap = {
-    'public-edge': 'Firewall/WAF Borda',
-    'edge': 'Rede Perímetro',
-    'identity-provider': 'VDI Ministro (IAM)',
-    'srv-app-07': 'Servidor Linux STF',
-    'srv-db-02': 'Rede Banco Judicial',
-    'db-judicial-lab': 'Banco Judicial Autos',
-    'case://SYNTHETIC/RE-000001': 'PJe Autos RE-000001',
-    'document://SYNTHETIC/DOC-001': 'Acórdão DOC-001 (Sigiloso)',
-    'document://SYNTHETIC/DOC-999': 'Documento Alvo DOC-999',
-    'evidence-log': 'Preservação HRKL',
-    'evidence://STF-POC-001': 'Evidence Bundle',
-    'ai-attacker-synthetic': 'Agente Atacante',
-    'service-account-17': 'Identidade Invasora (Conta 17)',
-    'human:approver-01': 'Aprovador de Gabinete'
-  };
-
-  const nodeIconMap = {
-    'public-edge': '🛡️',
-    'edge': '🛡️',
-    'identity-provider': '⚖️',
-    'srv-app-07': '🐧',
-    'srv-db-02': '🗄️',
-    'db-judicial-lab': '🗄️',
-    'case://SYNTHETIC/RE-000001': '🏛️',
-    'document://SYNTHETIC/DOC-001': '📄',
-    'document://SYNTHETIC/DOC-999': '📄',
-    'evidence-log': '⛓️',
-    'evidence://STF-POC-001': '📦',
-    'ai-attacker-synthetic': '🤖',
-    'service-account-17': '👤',
-    'human:approver-01': '👨‍⚖️'
-  };
-
-  // Posicionamento concêntrico dos nós
-  v.forEach(n => {
-    const ring = n.kind === 'incident' ? 0 : n.kind === 'event' ? 1 : 2;
-    const a = v.filter(x => (x.kind === 'incident' ? 0 : x.kind === 'event' ? 1 : 2) === ring);
-    const k = a.indexOf(n);
-    const r = ring === 0 ? 0 : ring === 1 ? 110 : 175;
-    const ang = Math.PI * 2 * (k / Math.max(a.length, 1)) - Math.PI / 2;
-    pos.set(n.id, { x: W / 2 + Math.cos(ang) * r, y: H / 2 + Math.sin(ang) * r });
+  // 1. CARREGAR NÓS FIXOS DA REDE DO STF (SEMPRE VISÍVEIS)
+  FIXED_INFRA_NODES.forEach((fn, idx) => {
+    if (!simNodes.has(fn.id)) {
+      simNodes.set(fn.id, {
+        id: fn.id,
+        kind: fn.kind,
+        label: fn.label,
+        friendlyName: fn.friendlyName,
+        icon: fn.icon,
+        isFixed: true,
+        nx: fn.nx,
+        ny: fn.ny,
+        r: fn.r,
+        idx: idx,
+        x: W * fn.nx,
+        y: H * fn.ny,
+        vx: 0,
+        vy: 0,
+        style: { r: fn.r, fill: '#f0f5fc', stroke: '#0c326f', iconSize: 15 }
+      });
+    } else {
+      const existing = simNodes.get(fn.id);
+      existing.isFixed = true;
+      existing.nx = fn.nx;
+      existing.ny = fn.ny;
+      existing.idx = idx;
+    }
   });
 
+  // 2. SINCRONIZAR NÓS DINÂMICOS DE ATAQUE (Invasor, Eventos, Incidente)
+  let nextIdx = FIXED_INFRA_NODES.length;
+  const activeIds = new Set(FIXED_INFRA_NODES.map(n => n.id));
+
+  const dynamicSlice = rawNodes.slice(-24);
+  dynamicSlice.forEach(n => {
+    activeIds.add(n.id);
+    if (simNodes.has(n.id)) return;
+
+    let friendlyName = n.label;
+    let icon = '⚡';
+    let r = 14;
+    let fill = '#ffffff';
+    let stroke = '#1351b4';
+    let iconSize = 10;
+
+    if (n.kind === 'incident') {
+      friendlyName = `INCIDENTE ${n.label}`;
+      icon = '🚨';
+      r = 25;
+      fill = '#fff0f2';
+      stroke = '#c9182b';
+      iconSize = 17;
+    } else if (n.kind === 'actor') {
+      friendlyName = n.label.includes('ai') ? 'Agente Atacante' : 'Identidade Invasora (Conta 17)';
+      icon = n.label.includes('ai') ? '🤖' : '👤';
+      r = 18;
+      fill = '#fff8e8';
+      stroke = '#b87704';
+      iconSize = 13;
+    }
+
+    // Posição de entrada dinâmica perto da área do invasor ou centro
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 30 + Math.random() * 80;
+    const startX = n.kind === 'incident' ? W * 0.55 : (W * 0.18 + Math.cos(angle) * dist);
+    const startY = n.kind === 'incident' ? H * 0.35 : (H * 0.25 + Math.sin(angle) * dist);
+
+    simNodes.set(n.id, {
+      id: n.id,
+      kind: n.kind,
+      label: n.label,
+      friendlyName,
+      icon,
+      isFixed: false,
+      r,
+      idx: nextIdx++,
+      x: startX,
+      y: startY,
+      vx: (Math.random() - 0.5) * 5,
+      vy: (Math.random() - 0.5) * 5,
+      style: { r, fill, stroke, iconSize }
+    });
+  });
+
+  // Remover nós dinâmicos antigos não mais em cena
+  for (const [id, node] of simNodes.entries()) {
+    if (!node.isFixed && !activeIds.has(id)) {
+      simNodes.delete(id);
+    }
+  }
+
+  // 3. COMBINAR ARESTAS FIXAS DA REDE + ARESTAS DINÂMICAS DE ATAQUE
+  const infraEdgesWithFlag = FIXED_INFRA_EDGES.map(e => ({ ...e, isInfra: true }));
+  const dynamicEdgesWithFlag = rawEdges
+    .filter(e => simNodes.has(e.from) && simNodes.has(e.to))
+    .map(e => ({ ...e, isInfra: false }));
+
+  simEdges = [...infraEdgesWithFlag, ...dynamicEdgesWithFlag];
+  $('#graphStats').textContent = `${simNodes.size} nós / ${simEdges.length} arestas`;
+
+  // 4. RENDERIZAR ARESTAS COM ÍCONES E HINTS DINÂMICOS
   const activeHints = [];
+  const linesAndBadges = simEdges.map((x, i) => {
+    const n1 = simNodes.get(x.from);
+    const n2 = simNodes.get(x.to);
+    if (!n1 || !n2) return '';
 
-  // Renderização das Arestas com Ícones nas arestas e Hints no local do ataque
-  const linesAndBadges = edges.filter(x => ids.has(x.from) && ids.has(x.to)).map(x => {
-    const a = pos.get(x.from);
-    const b = pos.get(x.to);
-    const mx = (a.x + b.x) / 2;
-    const my = (a.y + b.y) / 2;
-
+    const mx = (n1.x + n2.x) / 2;
+    const my = (n1.y + n2.y) / 2;
     const edgeInfo = getEdgeInfo(x, s, currentStep);
     const isAttack = edgeInfo.isCurrentAttack;
 
-    // Calculo do Hint na Aresta com o nome do ataque
     const hintText = `${edgeInfo.icon} ${edgeInfo.attackTitle}${edgeInfo.outcomeText}`;
     const hintWidth = Math.min(Math.max(hintText.length * 6.5 + 24, 120), 280);
-    let hintX = Math.max(hintWidth / 2 + 10, Math.min(W - hintWidth / 2 - 10, mx));
-    let hintY = my - 24;
-    let arrowPoints = `${mx - 5},${my - 12} ${mx + 5},${my - 12} ${mx},${my - 7}`;
+    const hintX = Math.max(hintWidth / 2 + 10, Math.min(W - hintWidth / 2 - 10, mx));
+    const hintY = my < 55 ? my + 24 : my - 24;
+    const arrowY = my < 55 ? my + 12 : my - 12;
+    const tipY = my < 55 ? my + 7 : my - 7;
+    const arrowPoints = `${mx - 5},${arrowY} ${mx + 5},${arrowY} ${mx},${tipY}`;
 
-    if (my < 50) {
-      hintY = my + 24;
-      arrowPoints = `${mx - 5},${my + 12} ${mx + 5},${my + 12} ${mx},${my + 7}`;
-    }
-
+    // Hint dinâmico destacado quando o local sofrer ataque
     if (isAttack) {
       activeHints.push(`
-        <g class="edge-attack-hint-callout">
+        <g class="edge-attack-hint-callout" id="ge-hint-${i}" data-hint-w="${hintWidth}">
           <polygon points="${arrowPoints}" fill="#c9182b" />
           <rect x="${hintX - hintWidth / 2}" y="${hintY - 11}" width="${hintWidth}" height="22" rx="4" class="edge-hint-rect" />
           <text x="${hintX}" y="${hintY}" text-anchor="middle" dominant-baseline="central" class="edge-hint-label">
@@ -510,26 +634,25 @@ function renderGraph(s) {
     }
 
     return `
-      <g class="graph-edge-group ${isAttack ? 'active-attack-edge' : ''}">
-        <!-- Linha da aresta -->
-        <line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" 
-              class="graph-line ${isAttack ? 'attack-pulse-line' : ''}" 
-              stroke="${isAttack ? '#c9182b' : edgeInfo.badgeColor}" 
-              stroke-width="${isAttack ? 3 : 1.5}" />
+      <g class="graph-edge-group ${isAttack ? 'active-attack-edge' : ''} ${x.isInfra ? 'infra-edge' : 'attack-edge'}">
+        <line id="ge-line-${i}" x1="${n1.x}" y1="${n1.y}" x2="${n2.x}" y2="${n2.y}" 
+              class="graph-line ${isAttack ? 'attack-pulse-line' : x.isInfra ? 'infra-line' : ''}" 
+              stroke="${isAttack ? '#c9182b' : x.isInfra ? '#cbd7e4' : edgeInfo.badgeColor}" 
+              stroke-width="${isAttack ? 3.2 : x.isInfra ? 1.5 : 2}" />
 
-        <!-- ÍCONE NO LUGAR / CENTRO DA ARESTA -->
-        <g class="edge-icon-badge" transform="translate(${mx}, ${my})">
-          <circle cx="0" cy="0" r="${isAttack ? 13 : 10}" 
+        <!-- ÍCONE NO LUGAR DA ARESTA -->
+        <g id="ge-badge-${i}" class="edge-icon-badge" transform="translate(${mx}, ${my})">
+          <circle cx="0" cy="0" r="${isAttack ? 13 : x.isInfra ? 9 : 10}" 
                   fill="${edgeInfo.badgeBg}" 
-                  stroke="${isAttack ? '#c9182b' : edgeInfo.badgeColor}" 
+                  stroke="${isAttack ? '#c9182b' : x.isInfra ? '#9bb3cc' : edgeInfo.badgeColor}" 
                   stroke-width="${isAttack ? 2.5 : 1.5}" />
           <text x="0" y="0" text-anchor="middle" dominant-baseline="central" 
-                font-size="${isAttack ? 12 : 9.5}" class="edge-glyph">${edgeInfo.icon}</text>
+                font-size="${isAttack ? 12 : x.isInfra ? 9 : 9.5}" class="edge-glyph">${edgeInfo.icon}</text>
         </g>
 
-        <!-- Tooltip no hover da aresta -->
+        <!-- Hover Hint -->
         ${!isAttack ? `
-          <g class="edge-hover-hint">
+          <g id="ge-hint-${i}" class="edge-hover-hint" data-hint-w="${hintWidth}">
             <polygon points="${arrowPoints}" fill="#0c326f" />
             <rect x="${hintX - hintWidth / 2}" y="${hintY - 10}" width="${hintWidth}" height="20" rx="4" class="edge-hover-rect" />
             <text x="${hintX}" y="${hintY}" text-anchor="middle" dominant-baseline="central" class="edge-hover-label">
@@ -541,41 +664,83 @@ function renderGraph(s) {
     `;
   }).join('');
 
-  // Estilização institucional dos nós
-  const nodeStyles = {
-    incident: { r: 24, fill: '#fff0f2', stroke: '#c9182b', defaultIcon: '🚨', iconSize: 16 },
-    actor:    { r: 18, fill: '#fff8e8', stroke: '#b87704', defaultIcon: '👤', iconSize: 13 },
-    asset:    { r: 18, fill: '#f0f5fc', stroke: '#0c326f', defaultIcon: '🏛️', iconSize: 13 },
-    event:    { r: 13, fill: '#ffffff', stroke: '#1351b4', defaultIcon: '⚡', iconSize: 10 }
-  };
-
-  const circles = v.map(n => {
-    const p = pos.get(n.id);
-    const style = nodeStyles[n.kind] || nodeStyles.asset;
+  // 5. RENDERIZAR NÓS ARRASTÁVEIS
+  const circles = Array.from(simNodes.values()).map(n => {
     const isIncident = n.kind === 'incident';
     const isSelected = selectedNode && selectedNode.id === n.id;
-    const friendlyName = labelMap[n.label] || n.label;
-    const icon = nodeIconMap[n.label] || (n.kind === 'actor' && n.label.includes('ai') ? '🤖' : style.defaultIcon);
+    const isTargeted = currentAttack && (n.label === currentAttack.target || n.id.includes(currentAttack.target));
 
     return `
-      <g class="graph-node" onclick="selectGraphNode('${esc(n.id)}', '${esc(n.kind)}', '${esc(friendlyName)}')">
-        ${isIncident ? `<circle cx="${p.x}" cy="${p.y}" r="${style.r + 7}" fill="none" stroke="#c9182b" stroke-width="2" stroke-dasharray="4 3" class="pulse-ring"/>` : ''}
-        ${isSelected ? `<circle cx="${p.x}" cy="${p.y}" r="${style.r + 5}" fill="none" stroke="#df9b15" stroke-width="3" />` : ''}
-        <circle cx="${p.x}" cy="${p.y}" r="${style.r}" fill="${style.fill}" stroke="${isSelected ? '#df9b15' : style.stroke}" stroke-width="${isSelected ? 3 : 2}" />
-        <text x="${p.x}" y="${p.y}" text-anchor="middle" dominant-baseline="central" font-size="${style.iconSize}" class="node-icon">${icon}</text>
-        <text x="${p.x}" y="${p.y + style.r + 13}" text-anchor="middle" class="node-label">${esc(short(friendlyName, 20))}</text>
+      <g class="graph-node ${n.isFixed ? 'fixed-network-node' : 'dynamic-attack-node'} ${isTargeted ? 'targeted-node' : ''}" 
+         id="gn-${n.idx}" data-node-id="${esc(n.id)}" 
+         transform="translate(${n.x}, ${n.y})" 
+         onclick="selectGraphNode('${esc(n.id)}', '${esc(n.kind)}', '${esc(n.friendlyName)}')">
+        ${isIncident ? `<circle cx="0" cy="0" r="${n.r + 7}" fill="none" stroke="#c9182b" stroke-width="2" stroke-dasharray="4 3" class="pulse-ring"/>` : ''}
+        ${isTargeted ? `<circle cx="0" cy="0" r="${n.r + 6}" fill="none" stroke="#c9182b" stroke-width="2.5" class="pulse-ring"/>` : ''}
+        ${isSelected ? `<circle cx="0" cy="0" r="${n.r + 5}" fill="none" stroke="#df9b15" stroke-width="3" />` : ''}
+        <circle cx="0" cy="0" r="${n.r}" fill="${n.style.fill}" stroke="${isSelected ? '#df9b15' : isTargeted ? '#c9182b' : n.style.stroke}" stroke-width="${isSelected || isTargeted ? 3 : 2}" />
+        <text x="0" y="0" text-anchor="middle" dominant-baseline="central" font-size="${n.style.iconSize}" class="node-icon">${n.icon}</text>
+        <text x="0" y="${n.r + 14}" text-anchor="middle" class="node-label">${esc(short(n.friendlyName, 22))}</text>
       </g>
     `;
   }).join('');
 
   e.innerHTML = `
-    <svg viewBox="0 0 ${W} ${H}">
+    <svg id="graphSvg" viewBox="0 0 ${W} ${H}" width="100%" height="100%">
       <g class="graph-edges-layer">${linesAndBadges}</g>
       <g class="graph-nodes-layer">${circles}</g>
       <g class="graph-hints-layer">${activeHints.join('')}</g>
     </svg>
   `;
+
+  // Configurar eventos de arrastar nós
+  const svg = document.getElementById('graphSvg');
+  if (svg) {
+    svg.onmousedown = (evt) => {
+      const nodeG = evt.target.closest('.graph-node');
+      if (!nodeG) return;
+      const nodeId = nodeG.getAttribute('data-node-id');
+      if (!nodeId) return;
+
+      draggedNodeId = nodeId;
+      nodeG.classList.add('dragging');
+      simAlpha = 0.85;
+      startPhysicsLoop();
+    };
+  }
+
+  // Despertar relaxamento físico
+  simAlpha = Math.max(simAlpha, 0.7);
+  startPhysicsLoop();
 }
+
+// ARRASTAR NÓS COM O MOUSE
+window.addEventListener('mousemove', evt => {
+  if (!draggedNodeId) return;
+  const svg = document.getElementById('graphSvg');
+  if (!svg) return;
+
+  const p = getSvgCoords(svg, evt.clientX, evt.clientY);
+  const n = simNodes.get(draggedNodeId);
+  if (n) {
+    n.x = p.x;
+    n.y = p.y;
+    n.vx = 0;
+    n.vy = 0;
+    simAlpha = Math.max(simAlpha, 0.4);
+    startPhysicsLoop();
+  }
+});
+
+window.addEventListener('mouseup', () => {
+  if (draggedNodeId) {
+    const nodeG = document.querySelector(`.graph-node[data-node-id="${draggedNodeId}"]`);
+    if (nodeG) nodeG.classList.remove('dragging');
+    draggedNodeId = null;
+    simAlpha = 0.5;
+    startPhysicsLoop();
+  }
+});
 
 // SELEÇÃO DE NÓ NO GRAFO
 window.selectGraphNode = function(id, kind, label) {
@@ -585,9 +750,11 @@ window.selectGraphNode = function(id, kind, label) {
   if (state) renderGraph(state);
 };
 
+// ========================================================
 // ATUALIZAÇÃO DO CARD DE FOCO DO DIAGNÓSTICO
+// ========================================================
 function updateFocusCard(s) {
-  const ev = s.events && s.events.length ? s.events[s.events.length - 1] : null;
+  const ev = s?.events && s.events.length ? s.events[s.events.length - 1] : null;
   const badge = $('#lastActionBadge');
 
   if (!ev) {
@@ -595,7 +762,7 @@ function updateFocusCard(s) {
     $('#focusActor').textContent = '—';
     $('#focusDecision').textContent = '—';
     $('#focusUpstream').textContent = '0';
-    $('#focusNarrative').textContent = 'Aguardando o início da simulação. Dispare um ataque à esquerda para visualizar o impacto no grafo.';
+    $('#focusNarrative').textContent = 'Topologia da infraestrutura do STF pronta. Dispare um ataque à esquerda para visualizar o impacto no grafo.';
     badge.textContent = 'PRONTO';
     badge.className = 'status-pill ready';
     return;
@@ -619,10 +786,12 @@ function updateFocusCard(s) {
   $('#focusNarrative').textContent = `[${formatDateTime(ev)}] LSN ${ev.lsn} (${ev.source}): ${ev.summary}`;
 }
 
+// ========================================================
 // PAINEL INFERIOR: TRILHA (Eventos e Rastros)
+// ========================================================
 function renderTrail(s) {
   const b = $('#eventRows');
-  if (!s.events || !s.events.length) {
+  if (!s?.events || !s.events.length) {
     b.innerHTML = '<tr><td colspan="8" class="empty">Nenhum evento registrado ainda. Dispare um ataque acima.</td></tr>';
     return;
   }
@@ -641,7 +810,9 @@ function renderTrail(s) {
   `).join('');
 }
 
+// ========================================================
 // EXECUÇÃO DE ATAQUE ATÉ UM PASSO ESPECÍFICO
+// ========================================================
 window.executeAttackTo = async function(targetStep) {
   if (running) return;
   if (!state) state = await api('/api/state');
@@ -676,7 +847,9 @@ window.executeAttackTo = async function(targetStep) {
   }
 };
 
+// ========================================================
 // CONSULTA E RENDERIZAÇÃO DO HERACLITUSDB (WSL LINUX)
+// ========================================================
 async function loadHeraclitusWslData() {
   const badge = $('#integrationBadge');
   const summaryBadge = $('#heraclitusSummaryBadge');
@@ -805,6 +978,195 @@ $('#exportBtn').onclick = async () => {
 $('#downloadBtn').onclick = () => {
   location.href = '/api/evidence/download';
 };
+
+// ATUALIZAÇÃO DA BARRA DE INFRAESTRUTURA DO STF NO TOPO
+function updateInfraStatusBar(s) {
+  const step = s?.step || 0;
+
+  // 1. Firewall / WAF
+  const nodeFw = $('#node-fw');
+  const statusFw = $('#status-fw');
+  if (step >= 2) {
+    nodeFw.className = 'infra-node-item targeted';
+    statusFw.textContent = 'SONDAGEM OBSERVADA';
+    statusFw.style.color = 'var(--gov-gold)';
+  } else {
+    nodeFw.className = 'infra-node-item';
+    statusFw.textContent = 'PERÍMETRO NORMAL';
+    statusFw.style.color = 'var(--gov-green)';
+  }
+
+  // 2. Máquinas de Ministros (VDI)
+  const nodeMin = $('#node-ministro');
+  const statusMin = $('#status-ministro');
+  if (step >= 13) {
+    nodeMin.className = 'infra-node-item compromised';
+    statusMin.textContent = 'TROCA IDENTIDADE (DENY)';
+    statusMin.style.color = 'var(--gov-red)';
+  } else if (step >= 3) {
+    nodeMin.className = 'infra-node-item compromised';
+    statusMin.textContent = 'SESSÃO ANÔMALA (IAM)';
+    statusMin.style.color = 'var(--gov-red)';
+  } else {
+    nodeMin.className = 'infra-node-item';
+    statusMin.textContent = 'AUTENTICAÇÃO SEGURA';
+    statusMin.style.color = 'var(--gov-green)';
+  }
+
+  // 3. Servidores Linux
+  const nodeLinux = $('#node-linux');
+  const statusLinux = $('#status-linux');
+  if (step >= 4) {
+    nodeLinux.className = 'infra-node-item compromised';
+    statusLinux.textContent = 'PROCESSO ATÍPICO';
+    statusLinux.style.color = 'var(--gov-red)';
+  } else {
+    nodeLinux.className = 'infra-node-item';
+    statusLinux.textContent = 'BACKEND REGULAR';
+    statusLinux.style.color = 'var(--gov-green)';
+  }
+
+  // 4. PJe / STF Digital
+  const nodePje = $('#node-pje');
+  const statusPje = $('#status-pje');
+  if (step >= 8) {
+    nodePje.className = 'infra-node-item compromised';
+    statusPje.textContent = 'ESCRITA BARRADA (DENY)';
+    statusPje.style.color = 'var(--gov-gold)';
+  } else if (step >= 7) {
+    nodePje.className = 'infra-node-item targeted';
+    statusPje.textContent = 'AUTOS SOB INCIDENTE';
+    statusPje.style.color = 'var(--gov-red)';
+  } else {
+    nodePje.className = 'infra-node-item';
+    statusPje.textContent = 'AUTOS ÍNTEGROS';
+    statusPje.style.color = 'var(--gov-green)';
+  }
+
+  // 5. Banco Judicial
+  const nodeDb = $('#node-db');
+  const statusDb = $('#status-db');
+  if (step >= 6) {
+    nodeDb.className = 'infra-node-item targeted';
+    statusDb.textContent = 'QUERY ANÔMALA';
+    statusDb.style.color = 'var(--gov-gold)';
+  } else {
+    nodeDb.className = 'infra-node-item';
+    statusDb.textContent = 'TRANSACIONAL ÍNTEGRO';
+    statusDb.style.color = 'var(--gov-green)';
+  }
+
+  // 6. Agentes IA (VitórIA/Rafa)
+  const nodeIa = $('#node-ia');
+  const statusIa = $('#status-ia');
+  if (step >= 12) {
+    nodeIa.className = 'infra-node-item compromised';
+    statusIa.textContent = 'REPLAY BARRADO (DENY)';
+    statusIa.style.color = 'var(--gov-red)';
+  } else if (step >= 11) {
+    nodeIa.className = 'infra-node-item';
+    statusIa.textContent = 'EXPORTAÇÃO 1X (OK)';
+    statusIa.style.color = 'var(--gov-green)';
+  } else if (step >= 9) {
+    nodeIa.className = 'infra-node-item targeted';
+    statusIa.textContent = 'HITL EXIGIDO';
+    statusIa.style.color = 'var(--gov-gold)';
+  } else {
+    nodeIa.className = 'infra-node-item';
+    statusIa.textContent = 'GOVERNANÇA HITL';
+    statusIa.style.color = 'var(--gov-green)';
+  }
+}
+
+// PAINEL ESQUERDO: LISTA DE ATAQUES
+function renderAttackList(s) {
+  const container = $('#attackList');
+  const currentStep = s?.step || 0;
+
+  container.innerHTML = ATTACKS.map(att => {
+    const isExecuted = currentStep >= att.step;
+    const isCurrent = currentStep === att.step - 1;
+    const ev = isExecuted && s.events ? s.events[att.step - 1] : null;
+
+    let statusText = 'PENDENTE';
+    let cardClass = 'attack-card';
+    let btnText = 'Disparar Ataque';
+
+    if (isExecuted && ev) {
+      statusText = ev.outcome || 'EXECUTADO';
+      if (ev.outcome === 'DENY') {
+        cardClass += ' executed-deny';
+        btnText = '✓ Bloqueado (DENY)';
+      } else if (ev.outcome === 'REQUIRE_HITL') {
+        cardClass += ' active-step';
+        btnText = '✓ Aguardando HITL';
+      } else if (ev.outcome === 'DETECTED') {
+        cardClass += ' executed-deny';
+        btnText = '✓ Detectado (Tamper)';
+      } else {
+        cardClass += ' executed';
+        btnText = '✓ Concluído';
+      }
+    } else if (isCurrent) {
+      cardClass += ' active-step';
+      btnText = 'Disparar Agora ▶';
+    }
+
+    return `
+      <div class="${cardClass}" id="attack-step-${att.step}">
+        <div class="attack-card-main">
+          <div class="attack-meta">
+            <span class="attack-phase-tag">${esc(att.phase)}</span>
+            <span class="attack-source-tag">${esc(att.infra)}</span>
+            <span class="tag-status ${isExecuted ? (ev && ev.outcome === 'DENY' ? 'critical' : 'normal') : ''}">${esc(statusText)}</span>
+          </div>
+          <div class="attack-title">${esc(att.title)}</div>
+          <div class="attack-target">Infra: <code>${esc(att.infra)}</code> → Alvo: <code>${esc(att.target)}</code></div>
+        </div>
+        <button class="attack-btn" onclick="executeAttackTo(${att.step})">${esc(btnText)}</button>
+      </div>
+    `;
+  }).join('');
+}
+
+// RENDERIZAÇÃO GERAL DO ESTADO
+function render(s) {
+  state = s;
+
+  $('#riskValue').textContent = s.risk;
+  const rl = $('#riskLabel');
+  if (s.risk >= 80) {
+    rl.textContent = 'CRÍTICO';
+    rl.className = 'tag-status critical';
+  } else if (s.risk >= 50) {
+    rl.textContent = 'ALTO';
+    rl.className = 'tag-status critical';
+  } else if (s.risk >= 20) {
+    rl.textContent = 'ELEVADO';
+    rl.className = 'tag-status';
+  } else {
+    rl.textContent = 'NORMAL';
+    rl.className = 'tag-status normal';
+  }
+
+  const incState = $('#incidentState');
+  if (s.incident) {
+    incState.textContent = `${s.incident.incident_id} (${s.incident.severity})`;
+    incState.style.color = 'var(--gov-gold)';
+  } else {
+    incState.textContent = 'NÃO ABERTO';
+    incState.style.color = 'var(--gov-muted)';
+  }
+
+  $('#upstreamHits').textContent = s.upstream_hits;
+  $('#attackProgress').textContent = `${s.step} / ${s.total_steps} executados`;
+
+  updateInfraStatusBar(s);
+  renderAttackList(s);
+  renderGraph(s);
+  renderTrail(s);
+  updateFocusCard(s);
+}
 
 // INICIALIZAÇÃO
 async function init() {
