@@ -483,22 +483,26 @@ function renderGraph(s) {
   const fsBtn = $('#fullscreenGraphBtn');
   if (fsBtn) fsBtn.onclick = () => toggleFullscreenGraph();
 
-  // Banner do ataque ativo
+  // Banner do ataque ativo (opcional)
   const currentStep = s?.step || 0;
   const currentAttack = currentStep > 0 ? ATTACKS[currentStep - 1] : null;
   const nextAttack = currentStep < ATTACKS.length ? ATTACKS[currentStep] : null;
 
-  if (currentAttack) {
-    $('#bannerInfraTarget').textContent = `${currentAttack.infra} (${currentAttack.target})`;
-    $('#bannerAttackName').textContent = currentAttack.title;
-  } else {
-    $('#bannerInfraTarget').textContent = 'Infraestrutura Ativa • Topologia do STF';
-    $('#bannerAttackName').textContent = `Próximo: ${nextAttack ? nextAttack.title : 'Nenhum'}`;
+  const bit = $('#bannerInfraTarget');
+  const ban = $('#bannerAttackName');
+  if (bit && ban) {
+    if (currentAttack) {
+      bit.textContent = `${currentAttack.infra} (${currentAttack.target})`;
+      ban.textContent = currentAttack.title;
+    } else {
+      bit.textContent = 'Infraestrutura Ativa • Topologia do STF';
+      ban.textContent = `Próximo: ${nextAttack ? nextAttack.title : 'Nenhum'}`;
+    }
   }
 
   const rect = e.getBoundingClientRect();
   const W = Math.max(Math.floor(rect.width) || 760, 680);
-  const H = Math.max(Math.floor(rect.height) || 460, 420);
+  const H = Math.max(Math.floor(rect.height) || 520, 460);
 
   // 1. CARREGAR NÓS FIXOS DA REDE DO STF (SEMPRE VISÍVEIS)
   FIXED_INFRA_NODES.forEach((fn, idx) => {

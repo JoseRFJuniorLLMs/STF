@@ -525,11 +525,8 @@ body.panel-fullscreen-active {
   border-bottom: 2px solid var(--gov-border);
   background: #f8fafc;
 }
-.graph-panel.fullscreen .live-attack-banner {
-  margin: 10px 24px 8px;
-}
 .graph-panel.fullscreen .graph-canvas {
-  margin: 0 24px 10px;
+  margin: 14px 24px 10px;
   flex: 1 1 0;
   height: auto !important;
   min-height: 0;
@@ -599,8 +596,8 @@ body.panel-fullscreen-active {
 
 /* Canvas do Grafo em Modo Claro */
 .graph-canvas {
-  height: 460px;
-  margin: 0 16px 12px;
+  height: 520px;
+  margin: 14px 16px 12px;
   border-radius: 6px;
   background: #fbfdff;
   border: 1px solid var(--gov-border);
