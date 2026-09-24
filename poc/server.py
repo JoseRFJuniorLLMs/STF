@@ -21,6 +21,7 @@ from telemetry import sample_campaign, normalize
 from correlation import correlate
 from detector import evaluate as detect_event
 from policy import decide as policy_decide
+from faults import simulate as simulate_fault
 
 ROOT = Path(__file__).resolve().parent
 DASHBOARD = ROOT / "dashboard"
@@ -570,6 +571,9 @@ class Handler(BaseHTTPRequestHandler):
         if path=="/api/tamper-demo":
             kind=query.get("kind",["modify"])[0]
             return self._json(ENGINE.tamper_variant(kind))
+        if path=="/api/fault-demo":
+            kind=query.get("kind",["policy_store_down"])[0]
+            return self._json(simulate_fault(kind))
         if path=="/api/export":
             bundle=ENGINE.evidence_bundle(); target=OUT/"evidence-stf-poc-001.json"
             target.write_text(json.dumps(bundle,ensure_ascii=False,indent=2),encoding="utf-8")
