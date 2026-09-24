@@ -5,6 +5,7 @@ import unittest
 import sys
 
 HERE = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(HERE))
 spec = importlib.util.spec_from_file_location("stf_poc_server", HERE / "server.py")
 mod = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = mod
