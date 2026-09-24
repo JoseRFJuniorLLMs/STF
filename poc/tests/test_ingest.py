@@ -25,4 +25,45 @@ class IngestTests(unittest.TestCase):
         e=mod.PocEngine()
         with self.assertRaises(ValueError): e.ingest_telemetry("telepathy",{"event_id":"X"})
 
+
+    def test_external_pipeline_phase1_to_phase2_hitl_and_replay(self):
+        e=mod.PocEngine()
+        for kind,raw in telemetry.sample_campaign():
+            e.ingest_telemetry(kind,raw)
+        self.assertIsNotNone(e.incident)
+
+        denied=e.submit_action("case_write","service-account-17",mod.SYNTHETIC_CASE,{"field":"metadata"})
+        self.assertEqual(denied["decision"]["outcome"],"DENY")
+        self.assertEqual(denied["event"]["upstream_delta"],0)
+        self.assertEqual(e.upstream_hits,0)
+
+        params={"document":"DOC-001","format":"pdf"}
+        requested=e.submit_action("export_restricted","service-account-17","document://SYNTHETIC/DOC-001",params)
+        self.assertEqual(requested["decision"]["outcome"],"REQUIRE_HITL")
+        approval_id=requested["pending_approval"]["approval_id"]
+
+        granted=e.grant_approval(approval_id,"human:approver-api")
+        self.assertEqual(granted["status"],"APPROVED")
+
+        executed=e.submit_action("export_restricted","service-account-17","document://SYNTHETIC/DOC-001",params)
+        self.assertTrue(executed["decision"]["effect_allowed"])
+        self.assertEqual(executed["event"]["outcome"],"PASS")
+        self.assertEqual(e.upstream_hits,1)
+
+        replay=e.submit_action("export_restricted","service-account-17","document://SYNTHETIC/DOC-001",params)
+        self.assertEqual(replay["decision"]["reason_code"],"REPLAY_DETECTED")
+        self.assertEqual(replay["event"]["upstream_delta"],0)
+        self.assertEqual(e.upstream_hits,1)
+
+    def test_external_identity_and_parameter_binding(self):
+        e=mod.PocEngine()
+        for kind,raw in telemetry.sample_campaign(): e.ingest_telemetry(kind,raw)
+        params={"document":"DOC-001","format":"pdf"}
+        req=e.submit_action("export_restricted","service-account-17","document://SYNTHETIC/DOC-001",params)
+        e.grant_approval(req["pending_approval"]["approval_id"],"human:approver-api")
+        identity=e.submit_action("export_restricted","agent:other","document://SYNTHETIC/DOC-001",params)
+        self.assertEqual(identity["decision"]["reason_code"],"IDENTITY_BINDING_MISMATCH")
+        changed=e.submit_action("export_restricted","service-account-17","document://SYNTHETIC/DOC-999",{"document":"DOC-999","format":"pdf"})
+        self.assertEqual(changed["decision"]["reason_code"],"PARAMETERS_DIGEST_MISMATCH")
+
 if __name__=="__main__": unittest.main()
