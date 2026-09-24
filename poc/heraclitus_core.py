@@ -13,11 +13,33 @@ de rebentar.
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 
 ALLOWED_HOSTS = {"127.0.0.1", "localhost", "::1"}
 SERVICE = "/heraclitus.v1.Heraclitus/"
 MAX_MESSAGE_BYTES = 16 * 1024 * 1024
+# Variáveis PRÓPRIAS do STF. De propósito não se lê HERACLITUS_TOKEN(_FILE):
+# nesta máquina essa é a credencial de outra instância, e o log processual não
+# a deve levar para o laboratório.
+TOKEN_ENV = "STF_HERACLITUS_CORE_TOKEN"
+TOKEN_FILE_ENV = "STF_HERACLITUS_CORE_TOKEN_FILE"
+
+
+def resolve_token() -> str | None:
+    token = (os.environ.get(TOKEN_ENV) or "").strip()
+    if token:
+        return token
+    path = os.environ.get(TOKEN_FILE_ENV)
+    if not path:
+        return None
+    try:
+        with open(path, encoding="ascii") as fh:
+            return fh.read().strip() or None
+    except OSError as exc:
+        # Ficheiro configurado mas ilegível é erro de configuração, não motivo
+        # para cair em silêncio no modo sem autenticação.
+        raise ValueError(f"{TOKEN_FILE_ENV}={path} ilegível: {exc}") from exc
 
 
 class CoreUnavailable(RuntimeError):
@@ -128,9 +150,16 @@ class HeraclitusCore:
             raise ValueError("Safety gate: o núcleo HeraclitusDB só é aceito em loopback")
         self.addr = addr
         self.timeout = timeout
+        # Token mal configurado aparece na aba como estado, não derruba o painel.
+        try:
+            self._token, self._token_error = resolve_token(), None
+        except ValueError as exc:
+            self._token, self._token_error = None, str(exc)
         self._channel = None
 
     def _call(self, method: str, request: bytes) -> bytes:
+        if self._token_error:
+            raise CoreUnavailable(self._token_error)
         try:
             import grpc
         except ImportError as exc:
@@ -146,12 +175,17 @@ class HeraclitusCore:
                 raise CoreUnavailable(f"núcleo HeraclitusDB inacessível em {self.addr}") from exc
             self._channel = channel
         stub = self._channel.unary_unary(SERVICE + method)
+        metadata = [("authorization", f"Bearer {self._token}")] if self._token else None
         try:
-            return stub(request, timeout=self.timeout)
+            return stub(request, timeout=self.timeout, metadata=metadata)
         except grpc.RpcError as exc:
             if exc.code() in (grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.DEADLINE_EXCEEDED):
                 self.close()
                 raise CoreUnavailable(f"núcleo HeraclitusDB inacessível em {self.addr}") from exc
+            if exc.code() in (grpc.StatusCode.UNAUTHENTICATED, grpc.StatusCode.PERMISSION_DENIED):
+                raise CoreUnavailable(
+                    f"HeraclitusDB em {self.addr} recusou a credencial ({exc.code().name}); "
+                    f"defina {TOKEN_FILE_ENV} com um token de papel writer") from exc
             raise
 
     def append(self, *, agent_id: str, session_id: str, kind: str, content: dict[str, Any],

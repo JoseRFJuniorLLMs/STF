@@ -1,7 +1,7 @@
-import json,pathlib,re,sys,unittest
+import json,os,pathlib,re,sys,tempfile,unittest
 from datetime import datetime
 HERE=pathlib.Path(__file__).resolve().parents[1];sys.path.insert(0,str(HERE))
-from heraclitus_core import HeraclitusCore,_fields,decode_append_response,decode_query_response,encode_append_request,encode_query_request
+from heraclitus_core import CoreUnavailable,HeraclitusCore,_fields,decode_append_response,decode_query_response,encode_append_request,encode_query_request,resolve_token
 from processos import BRT,CATALOGO,TPU,ProcessLedger,_passos,numero_unico,numero_unico_valido,verificar_cadeia
 
 class FakeCore:
@@ -115,5 +115,29 @@ class CoreCodecTests(unittest.TestCase):
     def test_nucleo_so_aceita_loopback(self):
         HeraclitusCore("127.0.0.1:17474")
         with self.assertRaises(ValueError): HeraclitusCore("10.0.0.5:17474")
+
+class TokenTests(unittest.TestCase):
+    def setUp(self):
+        self.saved={k:os.environ.pop(k,None) for k in ("STF_HERACLITUS_CORE_TOKEN","STF_HERACLITUS_CORE_TOKEN_FILE","HERACLITUS_TOKEN","HERACLITUS_TOKEN_FILE")}
+    def tearDown(self):
+        for k,v in self.saved.items():
+            os.environ.pop(k,None)
+            if v is not None: os.environ[k]=v
+    def test_credencial_de_outra_instancia_nao_e_usada(self):
+        os.environ["HERACLITUS_TOKEN"]="token-da-memoria"
+        self.assertIsNone(resolve_token())
+    def test_token_do_stf_por_variavel_e_por_ficheiro(self):
+        os.environ["STF_HERACLITUS_CORE_TOKEN"]=" abc "
+        self.assertEqual(resolve_token(),"abc")
+        del os.environ["STF_HERACLITUS_CORE_TOKEN"]
+        with tempfile.NamedTemporaryFile("w",suffix=".token",delete=False) as fh: fh.write("xyz\n")
+        try:
+            os.environ["STF_HERACLITUS_CORE_TOKEN_FILE"]=fh.name
+            self.assertEqual(resolve_token(),"xyz")
+        finally: os.unlink(fh.name)
+    def test_ficheiro_ilegivel_vira_estado_e_nao_derruba_o_painel(self):
+        os.environ["STF_HERACLITUS_CORE_TOKEN_FILE"]=str(HERE/"nao-existe.token")
+        core=HeraclitusCore("127.0.0.1:17474")
+        with self.assertRaises(CoreUnavailable): core.query("MATCH (n) RETURN n")
 
 if __name__=="__main__": unittest.main()
