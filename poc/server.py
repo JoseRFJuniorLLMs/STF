@@ -20,6 +20,7 @@ from urllib.parse import urlparse, parse_qs
 from telemetry import sample_campaign, normalize
 from correlation import correlate
 from detector import evaluate as detect_event
+from policy import decide as policy_decide
 
 ROOT = Path(__file__).resolve().parent
 DASHBOARD = ROOT / "dashboard"
@@ -110,13 +111,13 @@ class PocEngine:
             {"phase":"FASE 1","source":"Network","type":"network.lateral","severity":"HIGH","actor":COMPROMISED_PRINCIPAL,"asset":"srv-db-02","summary":"Conexão lateral sintética correlacionada ao mesmo principal","outcome":"OBSERVED","risk":14,"signal":True,"reason":"LATERAL_MOVEMENT"},
             {"phase":"FASE 1","source":"DB Audit","type":"db.query","severity":"HIGH","actor":COMPROMISED_PRINCIPAL,"asset":"db-judicial-lab","summary":"Consulta incomum fora do perfil sintético da identidade","outcome":"OBSERVED","risk":15,"signal":True,"reason":"DB_BEHAVIOR_ANOMALY"},
             {"phase":"FASE 1","source":"STF-Digital-like App","type":"app.resource_access","severity":"CRITICAL","actor":COMPROMISED_PRINCIPAL,"asset":SYNTHETIC_CASE,"summary":"Acesso a recurso restrito correlacionado à campanha","outcome":"OBSERVED","risk":20,"signal":True,"reason":"RESTRICTED_RESOURCE_ACCESS"},
-            {"phase":"FASE 2","source":"Policy Gateway","type":"app.case_update_requested","severity":"CRITICAL","actor":COMPROMISED_PRINCIPAL,"asset":SYNTHETIC_CASE,"summary":"Tentativa de alterar metadados do processo fictício","outcome":"DENY","reason":"OPEN_HIGH_RISK_INCIDENT","policy":True,"upstream":0},
-            {"phase":"FASE 2","source":"Agent Gateway","type":"agent.tool_requested","severity":"HIGH","actor":COMPROMISED_PRINCIPAL,"asset":"document://SYNTHETIC/DOC-001","summary":"Agente solicita exportação de documento restrito","outcome":"REQUIRE_HITL","reason":"HUMAN_APPROVAL_REQUIRED","approval":True},
+            {"phase":"FASE 2","source":"Policy Gateway","type":"app.case_update_requested","severity":"CRITICAL","actor":COMPROMISED_PRINCIPAL,"asset":SYNTHETIC_CASE,"summary":"Tentativa de alterar metadados do processo fictício","outcome":"PENDING_POLICY","policy_action":"case_write","policy":True},
+            {"phase":"FASE 2","source":"Agent Gateway","type":"agent.tool_requested","severity":"HIGH","actor":COMPROMISED_PRINCIPAL,"asset":"document://SYNTHETIC/DOC-001","summary":"Agente solicita exportação de documento restrito","outcome":"PENDING_POLICY","policy_action":"export_restricted","policy_params":{"document":"DOC-001","format":"pdf"},"approval":True},
             {"phase":"FASE 2","source":"HITL","type":"approval.granted","severity":"INFO","actor":"human:approver-01","asset":"document://SYNTHETIC/DOC-001","summary":"Aprovação humana vinculada à identidade, ação e parâmetros","outcome":"APPROVED","approve":True},
-            {"phase":"FASE 2","source":"Agent Gateway","type":"tool.executed","severity":"MEDIUM","actor":COMPROMISED_PRINCIPAL,"asset":"document://SYNTHETIC/DOC-001","summary":"Operação aprovada executada exatamente uma vez","outcome":"PASS","reason":"APPROVAL_CONSUMED","execute":True,"upstream":1},
-            {"phase":"FASE 2","source":"Agent Gateway","type":"approval.replay","severity":"CRITICAL","actor":COMPROMISED_PRINCIPAL,"asset":"document://SYNTHETIC/DOC-001","summary":"Tentativa de reutilizar aprovação já consumida","outcome":"DENY","reason":"REPLAY_DETECTED","replay":True,"upstream":0},
-            {"phase":"FASE 2","source":"Agent Gateway","type":"identity.swap","severity":"CRITICAL","actor":"agent:other-identity","asset":"document://SYNTHETIC/DOC-001","summary":"Outra identidade tenta usar autorização da campanha","outcome":"DENY","reason":"IDENTITY_BINDING_MISMATCH","upstream":0},
-            {"phase":"FASE 2","source":"Agent Gateway","type":"parameters.swap","severity":"CRITICAL","actor":COMPROMISED_PRINCIPAL,"asset":"document://SYNTHETIC/DOC-999","summary":"Parâmetros são alterados depois da aprovação","outcome":"DENY","reason":"PARAMETERS_DIGEST_MISMATCH","upstream":0},
+            {"phase":"FASE 2","source":"Agent Gateway","type":"tool.executed","severity":"MEDIUM","actor":COMPROMISED_PRINCIPAL,"asset":"document://SYNTHETIC/DOC-001","summary":"Operação aprovada executada exatamente uma vez","outcome":"PENDING_POLICY","policy_action":"export_restricted","policy_params":{"document":"DOC-001","format":"pdf"},"execute":True},
+            {"phase":"FASE 2","source":"Agent Gateway","type":"approval.replay","severity":"CRITICAL","actor":COMPROMISED_PRINCIPAL,"asset":"document://SYNTHETIC/DOC-001","summary":"Tentativa de reutilizar aprovação já consumida","outcome":"PENDING_POLICY","policy_action":"export_restricted","policy_params":{"document":"DOC-001","format":"pdf"},"replay":True},
+            {"phase":"FASE 2","source":"Agent Gateway","type":"identity.swap","severity":"CRITICAL","actor":"agent:other-identity","asset":"document://SYNTHETIC/DOC-001","summary":"Outra identidade tenta usar autorização da campanha","outcome":"PENDING_POLICY","policy_action":"export_restricted","policy_params":{"document":"DOC-001","format":"pdf"}},
+            {"phase":"FASE 2","source":"Agent Gateway","type":"parameters.swap","severity":"CRITICAL","actor":COMPROMISED_PRINCIPAL,"asset":"document://SYNTHETIC/DOC-999","summary":"Parâmetros são alterados depois da aprovação","outcome":"PENDING_POLICY","policy_action":"export_restricted","policy_params":{"document":"DOC-999","format":"pdf"}},
             {"phase":"FASE 2","source":"HRKL","type":"tamper.attempt","severity":"CRITICAL","actor":"ai-attacker-synthetic","asset":"evidence-log","summary":"Tentativa de modificar e reordenar evidência histórica","outcome":"DETECTED","reason":"MERKLE_ROOT_MISMATCH","tamper":True},
             {"phase":"FASE 2","source":"Evidence","type":"evidence.exported","severity":"INFO","actor":"service:evidence-exporter","asset":"evidence://STF-POC-001","summary":"Pacote de evidências gerado para verificação independente","outcome":"PASS","evidence":True},
             {"phase":"FASE 2","source":"Offline Verifier","type":"evidence.verified","severity":"INFO","actor":"service:offline-verifier","asset":"evidence://STF-POC-001","summary":"Integridade local verificada sem depender do sistema de origem","outcome":"PASS","verify":True},
@@ -200,6 +201,22 @@ class PocEngine:
             if self.step_index >= len(self._scenario):
                 return self.snapshot(message="Campanha concluída")
             spec=dict(self._scenario[self.step_index]); self.step_index += 1
+            if spec.get("policy_action"):
+                params=spec.get("policy_params") or {}
+                params_digest=sha256_hex(params) if params else None
+                decision=policy_decide(
+                    action=spec["policy_action"],
+                    incident=self.incident,
+                    principal=spec.get("actor","unknown"),
+                    target=spec.get("asset","unknown"),
+                    parameters_digest=params_digest,
+                    approval=self.pending_approval,
+                    consumed=self.approvals_consumed,
+                )
+                spec["reason"]=decision.reason_code
+                spec["policy_decision"]=decision.to_dict()
+                spec["upstream"]=1 if decision.effect_allowed and spec.get("execute") else 0
+                spec["outcome"]="PASS" if decision.effect_allowed and spec.get("execute") else decision.outcome
             incident_id=INCIDENT_ID if self.incident else None
             ev=self._append(spec,incident_id)
             normalized=ev.details.get("normalized_telemetry") if isinstance(ev.details,dict) else None
@@ -221,7 +238,7 @@ class PocEngine:
                 }
             if spec.get("approve") and self.pending_approval:
                 self.pending_approval["state"]="APPROVED"; self.pending_approval["approved_by"]="human:approver-01"
-            if spec.get("execute"):
+            if spec.get("execute") and spec.get("upstream")==1:
                 self.upstream_hits += 1
                 if self.pending_approval:
                     self.pending_approval["state"]="CONSUMED"; self.approvals_consumed.add(self.pending_approval["approval_id"])
