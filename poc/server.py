@@ -16,7 +16,7 @@ from dataclasses import dataclass, field, asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 
 ROOT = Path(__file__).resolve().parent
 DASHBOARD = ROOT / "dashboard"
@@ -243,6 +243,175 @@ class PocEngine:
         root_ok=merkle_root(hashes)==bundle.get("merkle_root")
         return {"chain":"PASS" if chain_ok else "FAIL","merkle":"PASS" if root_ok else "FAIL","overall":"PASS" if chain_ok and root_ok else "FAIL"}
 
+
+    def source_health(self) -> list[dict[str, Any]]:
+        expected = [
+            ("Firewall/WAF", {"Firewall","Firewall/WAF"}),
+            ("IAM", {"IAM"}),
+            ("Host", {"Linux Host","Windows Host"}),
+            ("Network", {"Network"}),
+            ("DB Audit", {"DB Audit"}),
+            ("Application", {"STF-Digital-like App"}),
+            ("Agent Gateway", {"Agent Gateway","Policy Gateway","HITL"}),
+            ("Evidence", {"HRKL","Evidence","Offline Verifier"}),
+        ]
+        seen = {e.source for e in self.events}
+        out = []
+        for label, aliases in expected:
+            matched = sorted(seen.intersection(aliases))
+            out.append({
+                "source": label,
+                "status": "ACTIVE" if matched else "WAITING",
+                "events": sum(1 for e in self.events if e.source in aliases),
+                "matched": matched,
+            })
+        return out
+
+    def why_incident(self) -> dict[str, Any]:
+        if not self.incident:
+            return {
+                "status":"NOT_OPEN",
+                "summary":"Ainda não há evidência suficiente para abrir o incidente.",
+                "reasons":[],
+                "evidence_lsns":[],
+            }
+        reasons = []
+        for signal in self.signals:
+            ev = next((e for e in self.events if e.lsn == signal["lsn"]), None)
+            if not ev:
+                continue
+            reasons.append({
+                "lsn": ev.lsn,
+                "source": ev.source,
+                "reason_code": signal["reason_code"],
+                "severity": signal["severity"],
+                "actor": signal["actor"],
+                "asset": signal["asset"],
+                "summary": ev.summary,
+                "evidence_hash": ev.event_hash,
+            })
+        return {
+            "status":"OPEN",
+            "incident_id":INCIDENT_ID,
+            "principal":self.incident["principal"],
+            "risk_score":self.incident["risk_score"],
+            "threshold":60,
+            "summary":"O incidente foi aberto porque sinais independentes de múltiplas fontes apontaram para a mesma identidade/ativos dentro da mesma campanha sintética.",
+            "reasons":reasons,
+            "evidence_lsns":[x["lsn"] for x in reasons],
+        }
+
+    def evidence_object(self, lsn: int) -> dict[str, Any]:
+        ev = next((e for e in self.events if e.lsn == lsn), None)
+        if ev is None:
+            return {"status":"NOT_FOUND","lsn":lsn}
+        prev_ev = next((e for e in self.events if e.lsn == lsn - 1), None)
+        next_ev = next((e for e in self.events if e.lsn == lsn + 1), None)
+        return {
+            "status":"PASS",
+            "event":asdict(ev),
+            "provenance":{
+                "previous_lsn":prev_ev.lsn if prev_ev else None,
+                "previous_hash":prev_ev.event_hash if prev_ev else "0"*64,
+                "current_hash":ev.event_hash,
+                "next_lsn":next_ev.lsn if next_ev else None,
+                "next_prev_hash":next_ev.prev_hash if next_ev else None,
+                "chain_link_valid":ev.prev_hash == (prev_ev.event_hash if prev_ev else "0"*64),
+            },
+        }
+
+    def as_of(self, lsn: int) -> dict[str, Any]:
+        lsn = max(0, min(int(lsn), len(self.events)))
+        events = self.events[:lsn]
+        signals = [s for s in self.signals if s["lsn"] <= lsn]
+        risk = sum(int(e.details.get("risk",0)) for e in events)
+        incident = None
+        if risk >= 60:
+            incident = {
+                "incident_id":INCIDENT_ID,
+                "campaign_id":CAMPAIGN_ID,
+                "state":"OPEN",
+                "severity":"HIGH",
+                "risk_score":risk,
+                "principal":COMPROMISED_PRINCIPAL,
+                "summary":"Reconstrução AS-OF do incidente sintético",
+                "policy_tags":["COMPROMISE_SUSPECTED","REQUIRE_STRONGER_APPROVAL"],
+            }
+        hashes=[e.event_hash for e in events]
+        upstream=sum(e.upstream_delta or 0 for e in events if (e.upstream_delta or 0) > 0)
+        tamper="DETECTED" if any(e.event_type=="tamper.attempt" for e in events) else "NOT_TESTED"
+        approval_state="NONE"
+        for e in events:
+            if e.event_type=="agent.tool_requested": approval_state="PENDING"
+            elif e.event_type=="approval.granted": approval_state="APPROVED"
+            elif e.event_type=="tool.executed": approval_state="CONSUMED"
+        return {
+            "as_of_lsn":lsn,
+            "event_count":len(events),
+            "risk":risk,
+            "incident":incident,
+            "signals":signals,
+            "upstream_hits":upstream,
+            "tamper_status":tamper,
+            "approval_state":approval_state,
+            "case_state":{
+                "id":SYNTHETIC_CASE,
+                "classification":"RESTRICTED",
+                "last_effect":"DOCUMENT_EXPORT_SYNTHETIC" if upstream else "NONE",
+            },
+            "merkle_root":merkle_root(hashes),
+            "events":[asdict(e) for e in events],
+        }
+
+    def tamper_variant(self, kind: str) -> dict[str, Any]:
+        bundle=json.loads(json.dumps(self.evidence_bundle()))
+        events=bundle.get("events",[])
+        if not events:
+            return {"kind":kind,"status":"NOT_RUN","verification":{"overall":"NOT_RUN"}}
+        if kind=="modify":
+            events[0]["summary"]="EVENTO ADULTERADO"
+        elif kind=="delete" and len(events) > 2:
+            del events[len(events)//2]
+        elif kind=="reorder" and len(events) > 2:
+            events[1],events[2]=events[2],events[1]
+        elif kind=="truncate":
+            bundle["events"]=events[:-1]
+        else:
+            return {"kind":kind,"status":"REJECT","error":"kind must be modify, delete, reorder or truncate"}
+        verification=self.verify_bundle(bundle)
+        return {"kind":kind,"status":"DETECTED" if verification["overall"]=="FAIL" else "MISSED","verification":verification}
+
+    def incident_report(self) -> dict[str, Any]:
+        why=self.why_incident()
+        return {
+            "title":"Relatório Sintético de Incidente — STF POC",
+            "campaign_id":CAMPAIGN_ID,
+            "incident_id":INCIDENT_ID if self.incident else None,
+            "executive_summary":(
+                "Campanha sintética correlacionada a partir de telemetria multi-fonte. "
+                "A identidade fictícia comprometida tentou ações pós-compromisso; operações não autorizadas foram negadas, "
+                "uma operação com HITL foi executada uma única vez e a tentativa posterior de replay foi bloqueada."
+                if self.incident else
+                "Campanha ainda não atingiu o limiar de correlação."
+            ),
+            "risk":self.risk,
+            "sources":self.source_health(),
+            "why":why,
+            "controls":{
+                "policy_enforcement":"PASS" if any(e.outcome=="DENY" for e in self.events) else "PENDING",
+                "hitl":"PASS" if "APR-001" in self.approvals_consumed else "PENDING",
+                "anti_replay":"PASS" if any(e.event_type=="approval.replay" and e.outcome=="DENY" for e in self.events) else "PENDING",
+                "tamper_detection":self.tamper_status,
+                "offline_verification":self.offline_verify,
+            },
+            "limitations":[
+                "Ambiente integralmente sintético.",
+                "Nenhuma conexão com infraestrutura real do STF.",
+                "Detecção limitada à telemetria ingerida.",
+                "Bloqueio limitado a rotas que passam pelo ponto de enforcement.",
+            ],
+        }
+
     def snapshot(self,message:str|None=None)->dict[str,Any]:
         bundle=self.evidence_bundle()
         verify=self.verify_bundle(bundle) if self.events else {"chain":"NOT_RUN","merkle":"NOT_RUN","overall":"NOT_RUN"}
@@ -256,7 +425,7 @@ class PocEngine:
             "events":[asdict(e) for e in self.events],"graph":self.attack_graph,"pending_approval":self.pending_approval,
             "case_state":self.case_state,"upstream_hits":self.upstream_hits,"tamper_status":self.tamper_status,
             "offline_verify":self.offline_verify,"merkle_root":bundle["merkle_root"],"verification":verify,
-            "qualification":self.qualification(),"severity_counts":counts,"last_action":self.last_action,
+            "qualification":self.qualification(),"severity_counts":counts,"source_health":self.source_health(),"why_incident":self.why_incident(),"last_action":self.last_action,
             "message":message or "OK","mode":"SYNTHETIC / LOOPBACK ONLY"
         }
 
@@ -270,9 +439,31 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status); self.send_header("Content-Type","application/json; charset=utf-8")
         self.send_header("Content-Length",str(len(raw))); self.send_header("Cache-Control","no-store"); self.end_headers(); self.wfile.write(raw)
     def do_GET(self)->None:
-        path=urlparse(self.path).path
+        parsed=urlparse(self.path)
+        path=parsed.path
+        query=parse_qs(parsed.query)
         if path=="/api/state": return self._json(ENGINE.snapshot())
         if path=="/api/evidence": return self._json(ENGINE.evidence_bundle())
+        if path=="/api/source-health": return self._json({"sources":ENGINE.source_health()})
+        if path=="/api/why": return self._json(ENGINE.why_incident())
+        if path=="/api/report": return self._json(ENGINE.incident_report())
+        if path=="/api/asof":
+            try: lsn=int(query.get("lsn",["0"])[0])
+            except ValueError: return self._json({"error":"invalid_lsn"},400)
+            return self._json(ENGINE.as_of(lsn))
+        if path=="/api/evidence/object":
+            try: lsn=int(query.get("lsn",["0"])[0])
+            except ValueError: return self._json({"error":"invalid_lsn"},400)
+            obj=ENGINE.evidence_object(lsn)
+            return self._json(obj,200 if obj.get("status")=="PASS" else 404)
+        if path=="/api/evidence/download":
+            bundle=ENGINE.evidence_bundle()
+            raw=json.dumps(bundle,ensure_ascii=False,indent=2).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type","application/json; charset=utf-8")
+            self.send_header("Content-Disposition",'attachment; filename="evidence-stf-poc-001.json"')
+            self.send_header("Content-Length",str(len(raw)))
+            self.end_headers(); self.wfile.write(raw); return
         if path=="/api/health": return self._json({"status":"ok","mode":"loopback-only","campaign":CAMPAIGN_ID})
         if path=="/api/heraclitus-adapter":
             base=os.environ.get("HERACLITUS_URL")
@@ -284,14 +475,15 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e: return self._json({"status":"UNAVAILABLE","error":str(e)})
         return self._static(path)
     def do_POST(self)->None:
-        path=urlparse(self.path).path
+        parsed=urlparse(self.path)
+        path=parsed.path
+        query=parse_qs(parsed.query)
         if path=="/api/reset": ENGINE.reset(); return self._json(ENGINE.snapshot("Ambiente reiniciado"))
         if path=="/api/step": return self._json(ENGINE.step())
         if path=="/api/run": return self._json(ENGINE.run_all())
         if path=="/api/tamper-demo":
-            bundle=ENGINE.evidence_bundle()
-            if bundle["events"]: bundle["events"][0]["summary"]="EVENTO ADULTERADO"
-            return self._json({"tampered":True,"verification":ENGINE.verify_bundle(bundle)})
+            kind=query.get("kind",["modify"])[0]
+            return self._json(ENGINE.tamper_variant(kind))
         if path=="/api/export":
             bundle=ENGINE.evidence_bundle(); target=OUT/"evidence-stf-poc-001.json"
             target.write_text(json.dumps(bundle,ensure_ascii=False,indent=2),encoding="utf-8")
