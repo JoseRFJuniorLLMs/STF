@@ -16,6 +16,8 @@ A POC demonstra uma única campanha de ataque sintética do primeiro sinal obser
 
 > **Estado de implementação:** consulte [IMPLEMENTATION-STATUS.md](docs/IMPLEMENTATION-STATUS.md) para distinguir o que é calculado pelo código da POC, o que permanece sintético e o que depende de integração com o HeraclitusDB real.
 
+> **Auditoria de código:** a auditoria recursiva em três passadas e sua remediação estão registradas em [AUDIT-CODE-3-PASSES-2026-09-23.md](docs/AUDIT-CODE-3-PASSES-2026-09-23.md) e [AUDIT-REMEDIATION-2026-09-23.md](docs/AUDIT-REMEDIATION-2026-09-23.md).
+
 ## POC executável e dashboard
 
 A implementação funcional está em [`poc/`](poc/README.md). Ela usa somente a biblioteca padrão do Python e foi desenhada para rodar **apenas em loopback**, sem scanner, exploit real, credencial institucional ou conexão com infraestrutura do STF.
