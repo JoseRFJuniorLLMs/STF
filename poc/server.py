@@ -242,12 +242,16 @@ class PocEngine:
             self.last_action="Incidente correlacionado e aberto"
 
     def _matching_approval(self, action: str, principal: str, target: str, params_digest: str | None) -> dict[str, Any] | None:
-        candidates=[
+        same_action=[
             a for a in self.approvals.values()
-            if a.get("action")==action and a.get("principal")==principal
-            and a.get("target")==target and a.get("parameters_digest")==params_digest
-            and a.get("state") in {"PENDING","APPROVED","CONSUMED"}
+            if a.get("action")==action and a.get("state") in {"PENDING","APPROVED","CONSUMED"}
         ]
+        exact=[
+            a for a in same_action
+            if a.get("principal")==principal and a.get("target")==target
+            and a.get("parameters_digest")==params_digest
+        ]
+        candidates=exact or [a for a in same_action if a.get("state") in {"APPROVED","CONSUMED"}]
         if not candidates:
             return None
         candidates.sort(key=lambda a:a.get("created_at_epoch",0),reverse=True)
