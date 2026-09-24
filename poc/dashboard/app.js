@@ -512,6 +512,40 @@ window.hideNodeHintBottomRight = function() {
 // POPUP DO NÚMERO DO ATAQUE NO NÓ DO GRAFO (APARECE E SOME)
 // ========================================================
 const activeNodeAttacks = new Map(); // nodeId -> { attackNum, text, title, expireTime }
+const nodeAttackCounts = new Map(); // nodeId -> count of attacks suffered
+
+function syncNodeAttackCountsFromState(s) {
+  if (!s) return;
+  const counters = s.equipment_counters || {};
+  const equipToNode = {
+    waf: 'asset:public-edge',
+    identity: 'asset:identity-provider',
+    vdi: 'asset:vdi-ministros',
+    linux: 'asset:srv-app-07',
+    lan: 'asset:lan-wlan',
+    stf_digital: 'asset:case://SYNTHETIC/RE-000001',
+    sei: 'asset:sei-admin',
+    mni: 'asset:mni-interop',
+    db_oracle: 'asset:db-judicial-lab',
+    dw: 'asset:data-warehouse',
+    data_lake: 'asset:data-lake',
+    ia_agents: 'asset:ia-hpc',
+    backup: 'asset:backup-appliance',
+    hdb_api: 'asset:heraclitusdb',
+    hdb_otlp: 'asset:heraclitusdb',
+    hdb_mcp: 'asset:heraclitusdb',
+    hdb_grpc: 'asset:heraclitusdb',
+    hdb_rest: 'asset:heraclitusdb'
+  };
+
+  for (const [eqId, eqData] of Object.entries(counters)) {
+    const nodeId = equipToNode[eqId];
+    if (nodeId && eqData && typeof eqData.attempts === 'number') {
+      const current = nodeAttackCounts.get(nodeId) || 0;
+      nodeAttackCounts.set(nodeId, Math.max(current, eqData.attempts));
+    }
+  }
+}
 
 function findNodeIdForTarget(target) {
   if (!target) return null;
@@ -561,22 +595,26 @@ function triggerNodeAttackPopup(targetId, attackNum, title) {
     attackNum,
     text,
     title: title || '',
-    expireTime: now + 4000
+    expireTime: now + 3500
   });
 
-  // Re-renderiza e acorda simulação para animar o popup
+  // Incrementa contador do componente no grafo
+  const nextCount = (nodeAttackCounts.get(targetId) || 0) + 1;
+  nodeAttackCounts.set(targetId, nextCount);
+
+  // Re-renderiza e acorda simulação física para animar o popup e o pulso
   simAlpha = Math.max(simAlpha, 0.4);
   startPhysicsLoop();
   if (state) renderGraph(state);
 
-  // Remove automaticamente após o tempo
+  // Remove automaticamente o popup temporário após expiração
   setTimeout(() => {
     const item = activeNodeAttacks.get(targetId);
     if (item && item.expireTime <= Date.now() + 100) {
       activeNodeAttacks.delete(targetId);
       if (state) renderGraph(state);
     }
-  }, 4100);
+  }, 3600);
 }
 
 // ========================================================
@@ -994,6 +1032,9 @@ function renderGraph(s) {
   simEdges = [...infraEdgesWithFlag, ...dynamicEdgesWithFlag];
   $('#graphStats').textContent = `${simNodes.size} nós / ${simEdges.length} arestas`;
 
+  // Relógio único do frame: usado pelas arestas (passo 4) e pelos nós (passo 5)
+  const now = Date.now();
+
   // 4. RENDERIZAR ARESTAS COM ÍCONES NO CENTRO (SEM POPUPS EM CIMA DO GRAFO)
   const linesAndBadges = simEdges.map((x, i) => {
     const n1 = simNodes.get(x.from);
@@ -1028,47 +1069,94 @@ function renderGraph(s) {
   }).join('');
 
   // 5. RENDERIZAR NÓS ARRASTÁVEIS COM POPUP DE NÚMERO DO ATAQUE E HOVER NO CANTO INFERIOR DIREITO
-  const now = Date.now();
   const circles = Array.from(simNodes.values()).map(n => {
     const isIncident = n.kind === 'incident';
     const isSelected = selectedNode && selectedNode.id === n.id;
     const isTargeted = currentAttack && (n.label === currentAttack.target || n.id.includes(currentAttack.target));
     const attackPopup = activeNodeAttacks.get(n.id);
     const hasActiveAttack = attackPopup && attackPopup.expireTime > now;
+    const attackCount = nodeAttackCounts.get(n.id) || 0;
+
+    // Cores dinâmicas de ataque: componente fica vermelho e conta os ataques
+    const isUnderAttackNow = Boolean(isTargeted || hasActiveAttack);
+    const hasBeenAttacked = attackCount > 0;
+
+    let nodeFill = n.style.fill;
+    let nodeStroke = n.style.stroke;
+    let nodeStrokeWidth = 2;
+
+    if (isUnderAttackNow) {
+      nodeFill = '#c9182b'; // FICA VERMELHO VIBRANTE DURANTE O ATAQUE
+      nodeStroke = '#ffffff';
+      nodeStrokeWidth = 3.5;
+    } else if (hasBeenAttacked) {
+      nodeFill = '#ffebee'; // FUNDO ALERTA VERMELHO CONTÍNUO
+      nodeStroke = '#c9182b'; // BORDA VERMELHA
+      nodeStrokeWidth = 2.8;
+    } else if (isSelected) {
+      nodeStroke = '#df9b15';
+      nodeStrokeWidth = 3;
+    }
+
+    const countStr = String(attackCount);
+    const pillW = countStr.length > 2 ? countStr.length * 8 + 8 : 22;
 
     return `
-      <g class="graph-node ${n.isFixed ? 'fixed-network-node' : 'dynamic-attack-node'} ${isTargeted || hasActiveAttack ? 'targeted-node' : ''}" 
+      <g class="graph-node ${n.isFixed ? 'fixed-network-node' : 'dynamic-attack-node'} ${isUnderAttackNow ? 'targeted-node attack-active-now' : ''} ${hasBeenAttacked ? 'node-has-attacks' : ''}" 
          id="gn-${n.idx}" data-node-id="${esc(n.id)}" 
          transform="translate(${n.x}, ${n.y})" 
          onmouseenter="showNodeHintBottomRight('${esc(n.id)}', '${esc(n.friendlyName)}', '${esc(n.kind)}')"
          onmouseleave="hideNodeHintBottomRight()"
          onclick="selectGraphNode('${esc(n.id)}', '${esc(n.kind)}', '${esc(n.friendlyName)}')">
+        
+        <!-- ANÉIS DE PULSO DE ALARME QUANDO SOB ATAQUE -->
         ${isIncident ? `<circle cx="0" cy="0" r="${n.r + 7}" fill="none" stroke="#c9182b" stroke-width="2" stroke-dasharray="4 3" class="pulse-ring"/>` : ''}
-        ${isTargeted || hasActiveAttack ? `<circle cx="0" cy="0" r="${n.r + 6}" fill="none" stroke="#c9182b" stroke-width="2.5" class="pulse-ring attack-node-pulse-ring"/>` : ''}
+        ${isUnderAttackNow ? `
+          <circle cx="0" cy="0" r="${n.r + 8}" fill="none" stroke="#c9182b" stroke-width="3" class="pulse-ring attack-node-pulse-ring"/>
+          <circle cx="0" cy="0" r="${n.r + 16}" fill="rgba(201, 24, 43, 0.25)" stroke="#c9182b" stroke-width="1.5" class="pulse-ring attack-node-pulse-ring"/>
+        ` : ''}
         ${isSelected ? `<circle cx="0" cy="0" r="${n.r + 5}" fill="none" stroke="#df9b15" stroke-width="3" />` : ''}
-        <circle cx="0" cy="0" r="${n.r}" fill="${n.style.fill}" stroke="${isSelected ? '#df9b15' : (isTargeted || hasActiveAttack) ? '#c9182b' : n.style.stroke}" stroke-width="${isSelected || isTargeted || hasActiveAttack ? 3 : 2}" />
+        
+        <!-- CÍRCULO PRINCIPAL DO NÓ (FICA VERMELHO) -->
+        <circle cx="0" cy="0" r="${n.r}" fill="${nodeFill}" stroke="${nodeStroke}" stroke-width="${nodeStrokeWidth}" class="${isUnderAttackNow ? 'circle-under-attack' : ''}" />
+        
         ${n.id === 'asset:heraclitusdb' ? `
           <!-- ESCUDO VERDE E AMARELO (HERACLITUSDB) -->
           <g class="escudo-verde-amarelo" transform="scale(1.15)">
-            <!-- Sombra do Escudo -->
             <path d="M 0 -20 C 14 -20, 18 -12, 18 0 C 18 12, 8 20, 0 24 C -8 20, -18 12, -18 0 C -18 -12, -14 -20, 0 -20 Z" fill="#000000" opacity="0.35" transform="translate(0, 2)" />
-            <!-- Borda Externa Ouro/Amarela -->
-            <path d="M 0 -20 C 14 -20, 18 -12, 18 0 C 18 12, 8 20, 0 24 C -8 20, -18 12, -18 0 C -18 -12, -14 -20, 0 -20 Z" fill="#ffd000" />
-            <!-- Campo Principal Verde Bandeira -->
-            <path d="M 0 -18 C 12 -18, 15.5 -10.5, 15.5 0 C 15.5 10.5, 7 17.5, 0 21.5 C -7 17.5, -15.5 10.5, -15.5 0 C -15.5 -10.5, -12 -18, 0 -18 Z" fill="#009b3a" />
-            <!-- Losango Heráldico Amarelo Ouro -->
-            <polygon points="0,-13 12,0 0,13 -12,0" fill="#fedf00" stroke="#007a2a" stroke-width="0.8" />
-            <!-- Círculo Central Verde Escuro com Borda Branca -->
-            <circle cx="0" cy="0" r="5.8" fill="#006428" stroke="#ffffff" stroke-width="0.7" />
-            <!-- Estrela de 5 Pontas Branca -->
+            <path d="M 0 -20 C 14 -20, 18 -12, 18 0 C 18 12, 8 20, 0 24 C -8 20, -18 12, -18 0 C -18 -12, -14 -20, 0 -20 Z" fill="${isUnderAttackNow ? '#ff4d4f' : '#ffd000'}" />
+            <path d="M 0 -18 C 12 -18, 15.5 -10.5, 15.5 0 C 15.5 10.5, 7 17.5, 0 21.5 C -7 17.5, -15.5 10.5, -15.5 0 C -15.5 -10.5, -12 -18, 0 -18 Z" fill="${isUnderAttackNow ? '#b71c1c' : '#009b3a'}" />
+            <polygon points="0,-13 12,0 0,13 -12,0" fill="${isUnderAttackNow ? '#ffd54f' : '#fedf00'}" stroke="${isUnderAttackNow ? '#ffffff' : '#007a2a'}" stroke-width="0.8" />
+            <circle cx="0" cy="0" r="5.8" fill="${isUnderAttackNow ? '#7f0000' : '#006428'}" stroke="#ffffff" stroke-width="0.7" />
             <polygon points="0,-4.5 1.3,-1.2 4.8,-1.2 2.0,0.9 3.0,4.2 0,2.2 -3.0,4.2 -2.0,0.9 -4.8,-1.2 -1.3,-1.2" fill="#ffffff" />
           </g>
         ` : `
           <text x="0" y="0" text-anchor="middle" dominant-baseline="central" font-size="${n.style.iconSize}" class="node-icon">${n.icon}</text>
         `}
-        <text x="0" y="${n.r + 14}" text-anchor="middle" class="node-label">${esc(short(n.friendlyName, 22))}</text>
+        
+        <!-- RÓTULO DO COMPONENTE -->
+        <text x="0" y="${n.r + 14}" text-anchor="middle" class="node-label ${hasBeenAttacked ? 'label-attacked' : ''}">
+          ${esc(short(n.friendlyName, 22))}
+        </text>
 
-        <!-- POPUP DO NÚMERO DO ATAQUE: APARECE NO NÓ E SOME -->
+        <!-- SUBRÓTULO COM CONTAGEM DE ATAQUES -->
+        ${hasBeenAttacked ? `
+          <text x="0" y="${n.r + 26}" text-anchor="middle" font-size="9.5" font-weight="900" fill="#c9182b" class="attack-count-sublabel">
+            ${attackCount} ${attackCount === 1 ? 'ataque' : 'ataques'}
+          </text>
+        ` : ''}
+
+        <!-- CONTADOR DE ATAQUES NO COMPONENTE (FICA VERMELHO E CONTA) -->
+        ${hasBeenAttacked ? `
+          <g class="node-attack-counter-badge ${isUnderAttackNow ? 'counter-pulse-anim' : ''}" transform="translate(${n.r * 0.72}, ${-n.r * 0.72})">
+            <rect x="${-pillW / 2}" y="-10" width="${pillW}" height="20" rx="10" fill="#c9182b" stroke="#ffffff" stroke-width="2" class="popup-rect-shadow" />
+            <text x="0" y="0" text-anchor="middle" dominant-baseline="central" fill="#ffffff" font-size="11" font-weight="900" font-family="ui-monospace, Consolas, monospace">
+              ${attackCount}
+            </text>
+          </g>
+        ` : ''}
+
+        <!-- POPUP DO ATAQUE: APARECE NO NÓ SOB ATAQUE -->
         ${hasActiveAttack ? `
           <g class="node-attack-badge-popup">
             <polygon points="0,${-n.r - 4} -5,${-n.r - 10} 5,${-n.r - 10}" fill="#c9182b" />
@@ -2059,6 +2147,23 @@ async function runMassiveCycle() {
   }
 }
 
+// Hint do canto inferior direito durante o massivo: mesmo conteúdo dos ataques
+// individuais (tentativas/bloqueios do equipamento), re-disparado a cada tiro
+// para piscar enquanto o componente está sob ataque.
+function showMassiveAttackHint(res) {
+  const atk = res?.attack;
+  if (!atk) return;
+  const counters = res.counters || state?.equipment_counters;
+  const eqCounter = counters && atk.equipment_id ? counters[atk.equipment_id] : null;
+  showAttackHint(atk, res.event, eqCounter);
+  const h = $('#attackHint');
+  if (h) {
+    h.classList.remove('hint-flash');
+    void h.offsetWidth; // reinicia a animação
+    h.classList.add('hint-flash');
+  }
+}
+
 async function executeStfAttackSilent(attackId) {
   try {
     const res = await api('/api/stf-attacks/execute', {
@@ -2075,6 +2180,7 @@ async function executeStfAttackSilent(attackId) {
     const atk = res.attack;
     const targetNodeId = findNodeIdForTarget(atk?.target) || 'asset:heraclitusdb';
     if (targetNodeId && atk) triggerNodeAttackPopup(targetNodeId, atk.id, atk.title);
+    showMassiveAttackHint(res);
 
     if (massiveAttackCount % 2 === 0) {
       loadRealHeraclitusTrail();
@@ -2100,6 +2206,7 @@ async function executeHdbAttackSilent(attackId) {
     const atk = res.attack;
     const targetNodeId = findNodeIdForTarget(atk?.target) || 'asset:heraclitusdb';
     if (targetNodeId && atk) triggerNodeAttackPopup(targetNodeId, atk.id, atk.title);
+    showMassiveAttackHint(res);
 
     if (massiveAttackCount % 2 === 0) {
       loadRealHeraclitusTrail();

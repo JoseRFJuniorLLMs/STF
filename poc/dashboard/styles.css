@@ -982,6 +982,31 @@ body.panel-fullscreen-active {
 .attack-hint.pass {
   border-left-color: var(--gov-green);
 }
+/* Pisca a cada disparo do ataque massivo */
+.attack-hint.show.hint-flash {
+  animation: hintFlash 0.6s ease-out;
+}
+@keyframes hintFlash {
+  0%   { box-shadow: 0 0 0 4px rgba(201, 24, 43, 0.55), 0 12px 36px rgba(12, 50, 111, 0.22); background: #fff1f2; }
+  100% { box-shadow: 0 12px 36px rgba(12, 50, 111, 0.22); background: #ffffff; }
+}
+
+/* Nó do grafo sob ataque: círculo e contador pulsam */
+.circle-under-attack {
+  animation: nodeUnderAttackBlink 0.7s ease-in-out infinite alternate;
+}
+@keyframes nodeUnderAttackBlink {
+  from { opacity: 1; }
+  to   { opacity: 0.55; }
+}
+.counter-pulse-anim {
+  animation: counterPulse 0.7s ease-in-out infinite alternate;
+}
+@keyframes counterPulse {
+  from { opacity: 1; }
+  to   { opacity: 0.6; }
+}
+
 .attack-hint.info {
   border-left-color: var(--gov-blue-primary);
   box-shadow: 0 16px 42px rgba(12, 50, 111, 0.28);
