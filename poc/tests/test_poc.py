@@ -3,6 +3,8 @@ import json
 import pathlib
 import unittest
 import sys
+import threading
+import time
 
 HERE = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(HERE))
@@ -164,5 +166,49 @@ class PocEngineTests(unittest.TestCase):
         self.assertEqual(bool(live["incident"]),bool(historic["incident"]))
         self.assertEqual(live["risk"],historic["risk"])
         self.assertEqual(live["incident"]["principal"],historic["incident"]["principal"])
+
+
+    def test_concurrent_snapshot_never_emits_invalid_bundle(self):
+        import telemetry
+        e=mod.PocEngine()
+        errors=[]
+        def writer():
+            try:
+                for kind,raw in telemetry.sample_campaign():
+                    e.ingest_telemetry(kind,raw)
+                    time.sleep(0.002)
+            except Exception as exc:
+                errors.append(exc)
+        t=threading.Thread(target=writer)
+        t.start()
+        while t.is_alive():
+            try:
+                bundle=e.evidence_bundle()
+                result=e.verify_bundle(bundle)
+                if bundle["events"] and result["overall"]!="PASS":
+                    errors.append(AssertionError(result))
+            except Exception as exc:
+                errors.append(exc)
+            time.sleep(0.001)
+        t.join()
+        self.assertEqual(errors,[])
+
+    def test_offline_verifier_invalid_hex_returns_fail_not_exception(self):
+        self.e.run_all()
+        import verify
+        bundle=json.loads(json.dumps(self.e.evidence_bundle()))
+        bundle["events"][0]["event_hash"]="z"*64
+        result=verify.verify(bundle)
+        self.assertEqual(result["overall"],"FAIL")
+
+    def test_execution_modes_do_not_mix_without_reset(self):
+        import telemetry
+        e=mod.PocEngine()
+        kind,raw=telemetry.sample_campaign()[0]
+        e.ingest_telemetry(kind,raw)
+        before=len(e.events)
+        state=e.step()
+        self.assertEqual(len(e.events),before)
+        self.assertEqual(state["execution_mode"],"API_LAB")
 
 if __name__=="__main__": unittest.main()
