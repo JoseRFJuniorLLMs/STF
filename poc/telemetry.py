@@ -22,32 +22,80 @@ class CanonicalTelemetry:
     def to_dict(self): return asdict(self)
 
 def _need(raw:dict[str,Any], *keys:str):
+    if not isinstance(raw,dict): raise ValueError("raw telemetry must be an object")
     missing=[k for k in keys if k not in raw]
     if missing: raise ValueError("missing fields: "+",".join(missing))
 
+def _str(raw:dict[str,Any], key:str, *, default: str|None=None)->str:
+    if key not in raw:
+        if default is not None: return default
+        raise ValueError(f"missing field: {key}")
+    value=raw[key]
+    if not isinstance(value,str) or not value.strip():
+        raise ValueError(f"{key} must be a non-empty string")
+    return value.strip()
+
+def _num(raw:dict[str,Any], key:str, *, default:int|float=0)->int|float:
+    value=raw.get(key,default)
+    if isinstance(value,bool) or not isinstance(value,(int,float)):
+        raise ValueError(f"{key} must be numeric")
+    return value
+
+def _severity(raw:dict[str,Any], default:str)->str:
+    value=raw.get("severity",default)
+    if not isinstance(value,str): raise ValueError("severity must be a string")
+    value=value.upper()
+    if value not in {"INFO","LOW","MEDIUM","HIGH","CRITICAL"}:
+        raise ValueError("unsupported severity")
+    return value
+
 def normalize_firewall(raw):
     _need(raw,"event_id","src_ip","dst_service","action")
-    return CanonicalTelemetry("EDGE","firewall-waf",raw["src_ip"],raw["dst_service"],"network.connection",raw.get("severity","MEDIUM"),raw["action"],raw["event_id"],raw)
+    _num(raw,"waf_score",default=0)
+    return CanonicalTelemetry(
+        "EDGE","firewall-waf",_str(raw,"src_ip"),_str(raw,"dst_service"),
+        "network.connection",_severity(raw,"MEDIUM"),_str(raw,"action"),_str(raw,"event_id"),raw
+    )
 
 def normalize_identity(raw):
     _need(raw,"event_id","principal","context","result")
-    return CanonicalTelemetry("IDENTITY","iam",raw["principal"],raw.get("tenant","identity-provider"),"identity.login",raw.get("severity","HIGH"),raw["result"],raw["event_id"],raw)
+    return CanonicalTelemetry(
+        "IDENTITY","iam",_str(raw,"principal"),_str(raw,"tenant",default="identity-provider"),
+        "identity.login",_severity(raw,"HIGH"),_str(raw,"result"),_str(raw,"event_id"),raw
+    )
 
 def normalize_host(raw):
     _need(raw,"event_id","principal","host","process")
-    return CanonicalTelemetry("HOST",raw.get("os","linux").lower(),raw["principal"],raw["host"],"host.process",raw.get("severity","HIGH"),raw.get("result","OBSERVED"),raw["event_id"],raw)
+    os_name=_str(raw,"os",default="linux").lower()
+    return CanonicalTelemetry(
+        "HOST",os_name,_str(raw,"principal"),_str(raw,"host"),
+        "host.process",_severity(raw,"HIGH"),_str(raw,"result",default="OBSERVED"),_str(raw,"event_id"),raw
+    )
 
 def normalize_network(raw):
     _need(raw,"event_id","principal","src_host","dst_host")
-    return CanonicalTelemetry("NETWORK","network",raw["principal"],raw["dst_host"],"network.lateral",raw.get("severity","HIGH"),raw.get("result","OBSERVED"),raw["event_id"],raw)
+    if "dst_port" in raw: _num(raw,"dst_port")
+    return CanonicalTelemetry(
+        "NETWORK","network",_str(raw,"principal"),_str(raw,"dst_host"),
+        "network.lateral",_severity(raw,"HIGH"),_str(raw,"result",default="OBSERVED"),_str(raw,"event_id"),raw
+    )
 
 def normalize_db(raw):
     _need(raw,"event_id","principal","database","operation")
-    return CanonicalTelemetry("DATABASE","db-audit",raw["principal"],raw["database"],"db."+raw["operation"].lower(),raw.get("severity","HIGH"),raw.get("result","OBSERVED"),raw["event_id"],raw)
+    if "rows" in raw: _num(raw,"rows")
+    operation=_str(raw,"operation").lower()
+    return CanonicalTelemetry(
+        "DATABASE","db-audit",_str(raw,"principal"),_str(raw,"database"),
+        "db."+operation,_severity(raw,"HIGH"),_str(raw,"result",default="OBSERVED"),_str(raw,"event_id"),raw
+    )
 
 def normalize_app(raw):
     _need(raw,"event_id","principal","resource","action")
-    return CanonicalTelemetry("APPLICATION","judicial-app-synthetic",raw["principal"],raw["resource"],"app."+raw["action"].lower(),raw.get("severity","CRITICAL"),raw.get("result","OBSERVED"),raw["event_id"],raw)
+    action=_str(raw,"action").lower()
+    return CanonicalTelemetry(
+        "APPLICATION","judicial-app-synthetic",_str(raw,"principal"),_str(raw,"resource"),
+        "app."+action,_severity(raw,"CRITICAL"),_str(raw,"result",default="OBSERVED"),_str(raw,"event_id"),raw
+    )
 
 ADAPTERS={"firewall":normalize_firewall,"identity":normalize_identity,"host":normalize_host,"network":normalize_network,"db":normalize_db,"app":normalize_app}
 
