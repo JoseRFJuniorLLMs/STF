@@ -256,9 +256,14 @@ class PocEngine:
         denied=[e for e in self.events if e.outcome=="DENY"]
         tests=[
             ("PHASE1_TELEMETRY_INGEST",len({e.source for e in self.events if e.phase=="FASE 1"})>=5,"PASS"),
+            ("PHASE1_RAW_TO_CANONICAL",sum(1 for e in self.events if e.details.get("normalized_telemetry"))>=6,"PASS"),
+            ("PHASE1_RULE_ENGINE",len(self.signals)>=6 and all(s.get("rule_id") for s in self.signals),"PASS"),
+            ("PHASE1_ENTITY_CORRELATION",bool(self.incident and self.incident.get("correlation",{}).get("qualifies")),"PASS"),
             ("PHASE1_RULE_DETECTION",len(self.signals)>=3,"PASS"),
             ("PHASE1_CROSS_SOURCE_CORRELATION",self.incident is not None,"PASS"),
             ("PHASE1_INCIDENT_GRAPH",any(n["kind"]=="incident" for n in self.attack_graph["nodes"]),"PASS"),
+            ("PHASE2_POLICY_ENGINE",sum(1 for e in self.events if e.details.get("policy_decision"))>=6,"PASS"),
+            ("PHASE2_HITL_SINGLE_USE","APR-001" in self.approvals_consumed and self.upstream_hits==1,"PASS"),
             ("PHASE2_UNAPPROVED_WRITE",any(e.event_type=="app.case_update_requested" and e.outcome=="DENY" for e in self.events),"DENY"),
             ("PHASE2_REPLAY",any(e.event_type=="approval.replay" and e.outcome=="DENY" for e in self.events),"DENY"),
             ("PHASE2_IDENTITY_SWAP",any(e.event_type=="identity.swap" and e.outcome=="DENY" for e in self.events),"DENY"),
