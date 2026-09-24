@@ -101,4 +101,14 @@ class PocEngineTests(unittest.TestCase):
         self.assertEqual(report["controls"]["anti_replay"],"PASS")
         self.assertGreaterEqual(len(report["why"]["reasons"]),5)
 
+
+    def test_compare_as_of_shows_security_state_transition(self):
+        self.e.run_all()
+        cmp=self.e.compare_as_of(3,15)
+        self.assertEqual(cmp["from"]["incident"],None)
+        self.assertIsNotNone(cmp["to"]["incident"])
+        self.assertGreater(cmp["delta"]["risk"],0)
+        self.assertIn("OPEN",cmp["delta"]["incident"])
+        self.assertIn("DETECTED",cmp["delta"]["tamper"])
+
 if __name__=="__main__": unittest.main()
