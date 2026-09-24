@@ -38,4 +38,15 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(d.reason_code,"APPROVAL_EXPIRED")
         self.assertEqual(d.outcome,"DENY")
 
+
+    def test_case_write_can_execute_after_valid_human_approval_when_principal_not_compromised(self):
+        approval=dict(APR)
+        approval["target"]="case://SYNTHETIC/RE-000001"
+        approval["parameters_digest"]=digest({"field":"metadata"})
+        d=decide(action="case_write",incident=INC,principal="safe-operator",
+                 target=approval["target"],parameters_digest=approval["parameters_digest"],
+                 approval={**approval,"principal":"safe-operator"})
+        self.assertEqual(d.outcome,"ALLOW")
+        self.assertTrue(d.effect_allowed)
+
 if __name__=="__main__": unittest.main()
