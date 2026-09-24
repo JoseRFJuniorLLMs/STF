@@ -3,7 +3,195 @@ async function api(path,opts={}){const headers={'Content-Type':'application/json
 function esc(s=''){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function short(s,n=14){if(!s)return'—';return s.length>n?s.slice(0,n)+'…':s}
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove('show'),2400)}
-function render(s){state=s;$('#mode').textContent=s.mode;$('#campaignId').textContent=s.campaign_id;$('#lastAction').textContent=s.last_action;const externalMode=s.execution_mode==='API_LAB';const p=externalMode?Math.min(100,Math.round((s.events.length/12)*100)):Math.round(s.step/s.total_steps*100);$('#stepText').textContent=externalMode?`API LAB · LSN ${s.events.length}`:`${s.step} / ${s.total_steps} eventos`;$('#progressPct').textContent=externalMode?'API':p+'%';$('#progressBar').style.width=p+'%';$('#riskValue').textContent=s.risk;const rl=s.risk>=80?'CRÍTICO':s.risk>=60?'ALTO':s.risk>=30?'ELEVADO':'NORMAL';$('#riskLabel').textContent=rl;$('#riskLabel').style.color=s.risk>=60?'var(--red)':s.risk>=30?'var(--amber)':'var(--green)';$('#signalCount').textContent=s.signals.length;$('#incidentState').textContent=s.incident?s.incident.state:'NÃO ABERTO';$('#incidentId').textContent=s.incident?s.incident.incident_id:'aguardando correlação';$('#upstreamHits').textContent=s.upstream_hits;$('#integrityState').textContent=s.verification.overall;$('#tamperState').textContent=s.tamper_status;$('#offlineState').textContent=s.offline_verify;renderIncident(s);renderPath(s);renderEvents(s);renderGraph(s);renderPolicy(s);renderIntegrity(s);renderSourceHealth(s);renderWhy(s);renderDecisionPipeline(s);renderQualification(s);syncTimeMachine(s)}
+const GUIDE_BEATS = {
+  'network.connection': {title:'Primeiro, o comportamento de referência',intent:'O roteiro gera tráfego benigno para mostrar que nem todo evento representa intrusão.'},
+  'edge.suspicious': {title:'O primeiro sinal na borda',intent:'Um atacante fictício produz um padrão anômalo no perímetro de laboratório.'},
+  'identity.login': {title:'A identidade aparece em novo contexto',intent:'A campanha simula o uso suspeito de uma conta de serviço fictícia.'},
+  'host.process': {title:'Atividade incomum no host',intent:'A campanha simula execução atípica em um host de laboratório.'},
+  'network.lateral': {title:'Movimento lateral simulado',intent:'A campanha simula uma conexão entre ativos sintéticos.'},
+  'db.query': {title:'Acesso anômalo ao banco fictício',intent:'A identidade fictícia consulta dados fora do perfil esperado no laboratório.'},
+  'app.resource_access': {title:'O acesso alcança a aplicação sintética',intent:'A campanha tenta ler um recurso restrito que existe apenas no cenário.'},
+  'app.case_update_requested': {title:'Tentativa de alterar processo fictício',intent:'A identidade ligada ao incidente solicita uma escrita no caso sintético.'},
+  'agent.tool_requested': {title:'Uma exportação exige decisão',intent:'Um agente sintético solicita exportar um documento fictício restrito.'},
+  'approval.granted': {title:'Aprovação humana simulada',intent:'O roteiro concede uma aprovação vinculada à identidade, ao alvo e aos parâmetros.'},
+  'tool.executed': {title:'Ação autorizada executada uma vez',intent:'O agente sintético repete a operação aprovada para exercitar o controle de efeito.'},
+  'approval.replay': {title:'Tentativa de reutilizar aprovação',intent:'O atacante sintético tenta repetir a operação após o consumo da aprovação.'},
+  'identity.swap': {title:'Troca de identidade após aprovação',intent:'Outra identidade fictícia tenta usar a autorização concedida à primeira.'},
+  'parameters.swap': {title:'Troca de parâmetros após aprovação',intent:'O alvo da exportação é alterado depois da aprovação sintética.'},
+  'tamper.attempt': {title:'Tentativa de apagar os rastros',intent:'O roteiro adultera uma cópia da história para testar a detecção de integridade.'},
+  'evidence.exported': {title:'A campanha vira pacote de evidência',intent:'O roteiro registra a exportação da história sintética para análise.'},
+  'evidence.verified': {title:'A integridade da evidência é conferida',intent:'O cenário encerra com a verificação local do pacote sintético.'}
+};
+const NEXT_BEATS = [
+  'tráfego benigno de referência','sinal no firewall/WAF','autenticação anômala',
+  'processo incomum no host','movimento lateral sintético','consulta ao banco fictício',
+  'acesso restrito à aplicação','tentativa de escrita no processo','pedido de exportação',
+  'aprovação humana simulada','execução autorizada','replay da aprovação',
+  'troca de identidade','troca de parâmetros','adulteração da história',
+  'pacote de evidência','verificação local'
+];
+
+function guideResponse(s, event, signal) {
+  const decision = event.details?.policy_decision;
+  if (decision) {
+    if (event.outcome === 'DENY') {
+      return `BLOQUEADO pelo harness: ${decision.reason_code}. upstream_delta=${event.upstream_delta ?? 0}; nenhum efeito chegou ao alvo sintético.`;
+    }
+    if (event.outcome === 'REQUIRE_HITL') {
+      return `HITL solicitado: ${decision.reason_code}. A operação aguarda aprovação; upstream_delta=${event.upstream_delta ?? 0}.`;
+    }
+    if (event.upstream_delta === 1) {
+      return `Execução autorizada pelo harness: ${decision.reason_code}. O contador do alvo sintético aumentou uma vez.`;
+    }
+    return `Decisão ${event.outcome}: ${decision.reason_code}. Nenhum efeito foi registrado neste passo.`;
+  }
+  if (event.event_type === 'approval.granted') {
+    return 'A aprovação sintética foi vinculada à solicitação. O efeito continua em zero até uma execução autorizada.';
+  }
+  if (event.event_type === 'tamper.attempt') {
+    return `Integridade da cópia adulterada: ${s.tamper_status}. A história original continua preservada no harness.`;
+  }
+  if (event.event_type === 'evidence.exported') {
+    return 'O evento de exportação entrou na trilha. Use “Gerar Evidence Bundle” para salvar o JSON desta execução.';
+  }
+  if (event.event_type === 'evidence.verified') {
+    return `Integridade local: ${s.verification.overall}. Trust, assinatura e timestamp institucionais não estão configurados.`;
+  }
+  if (signal) {
+    const linked = s.incident?.correlation?.signal_ids?.includes(signal.signal_id);
+    return linked
+      ? `Regra ${signal.rule_id} disparou e o sinal integra o incidente ${s.incident.incident_id}.`
+      : `Regra ${signal.rule_id} disparou. O harness segue correlacionando sinais antes de abrir um incidente.`;
+  }
+  return 'Evento normalizado sem sinal de segurança. O harness não o trata como invasão confirmada.';
+}
+
+function guideStatus(s, event, signal) {
+  if (event.event_type === 'evidence.verified' && s.verification.overall === 'PASS') return ['VERIFICADO','verified'];
+  if (event.event_type === 'tamper.attempt' && s.tamper_status === 'DETECTED') return ['DETECTADO','detected'];
+  if (event.outcome === 'DENY') return ['BLOQUEADO','blocked'];
+  if (event.outcome === 'REQUIRE_HITL') return ['AGUARDA HITL','awaiting'];
+  if (event.event_type === 'approval.granted') return ['APROVADO','simulated'];
+  if (event.upstream_delta === 1) return ['EFEITO SINTÉTICO','simulated'];
+  if (signal) return ['DETECTADO','detected'];
+  return ['SIMULADO','simulated'];
+}
+
+function renderJourney(s, currentEvent) {
+  const phase1 = s.events.filter(event => event.phase === 'FASE 1');
+  const sourceCount = new Set(phase1.map(event => event.source)).size;
+  const policyEvents = s.events.filter(event => event.details?.policy_decision);
+  const deniedCount = policyEvents.filter(event => event.outcome === 'DENY').length;
+  const latestPolicy = policyEvents.at(-1);
+  const hasExport = s.events.some(event => event.event_type === 'evidence.exported');
+  const active = !currentEvent ? 'attacker'
+    : currentEvent.event_type === 'tamper.attempt' ? 'tamper'
+    : currentEvent.event_type.startsWith('evidence.') ? 'evidence'
+    : currentEvent.event_type === 'tool.executed' ? 'effect'
+    : currentEvent.phase === 'FASE 2' ? 'policy'
+    : s.incident?.evidence_lsns?.includes(currentEvent.lsn) ? 'incident'
+    : s.signals.some(signal => signal.lsn === currentEvent.lsn) ? 'correlation'
+    : 'sources';
+  const stages = [
+    {key:'attacker',phase:'ORIGEM',title:'Atacante sintético',detail:'Atividade gerada por roteiro local',state:s.signals.length?'SIMULADO':'AGUARDANDO',tone:s.signals.length?'simulated':'awaiting'},
+    {key:'sources',phase:'FASE 1',title:'Fontes de telemetria',detail:sourceCount ? `${sourceCount} fontes fictícias observadas`:'Logs ainda não ingeridos',state:sourceCount?'SIMULADO':'AGUARDANDO',tone:sourceCount?'simulated':'awaiting'},
+    {key:'correlation',phase:'FASE 1',title:'Detecção e correlação',detail:s.signals.length ? `${s.signals.length} sinais de segurança`:'Nenhuma regra disparou',state:s.signals.length?'DETECTADO':'AGUARDANDO',tone:s.signals.length?'detected':'awaiting'},
+    {key:'incident',phase:'PONTE',title:'Incidente',detail:s.incident ? `${s.incident.state} · ${s.incident.severity}`:'Ainda sem incidente aberto',state:s.incident?'DETECTADO':'AGUARDANDO',tone:s.incident?'detected':'awaiting'},
+    {key:'policy',phase:'FASE 2',title:'Policy e HITL',detail:latestPolicy ? `${policyEvents.length} decisões · approval ${s.pending_approval?.state || 'nenhuma'}`:'Nenhuma ação crítica solicitada',state:latestPolicy?.outcome === 'DENY'?'BLOQUEADO':latestPolicy?'AVALIADO':'AGUARDANDO',tone:latestPolicy?.outcome === 'DENY'?'blocked':latestPolicy?'detected':'awaiting'},
+    {key:'effect',phase:'FASE 2',title:'Efeito no alvo sintético',detail:policyEvents.length ? `${s.upstream_hits} autorizado(s) · ${deniedCount} negado(s)`:'Contador de efeitos em zero',state:s.upstream_hits?'EFEITO SINTÉTICO':deniedCount?'BLOQUEADO':'AGUARDANDO',tone:s.upstream_hits?'simulated':deniedCount?'blocked':'awaiting'},
+    {key:'tamper',phase:'FORENSE',title:'Adulteração',detail:s.tamper_status === 'DETECTED'?'Cópia alterada identificada':'Nenhuma sabotagem testada',state:s.tamper_status === 'DETECTED'?'DETECTADO':'AGUARDANDO',tone:s.tamper_status === 'DETECTED'?'detected':'awaiting'},
+    {key:'evidence',phase:'FORENSE',title:'Evidência',detail:s.offline_verify === 'PASS'?'Integridade local conferida':hasExport?'Pacote registrado na trilha':'Aguardando pacote',state:s.offline_verify === 'PASS'?'VERIFICADO':hasExport?'EXPORTADO':'AGUARDANDO',tone:s.offline_verify === 'PASS'?'verified':hasExport?'simulated':'awaiting'}
+  ];
+  $('#journeyMap').innerHTML = stages.map((stage, index) => `
+    <li class="journey-node ${stage.key === active ? 'current' : stage.tone === 'awaiting' ? 'waiting' : 'complete'}" ${stage.key === active ? 'aria-current="step"' : ''}>
+      <span class="journey-index">${String(index + 1).padStart(2,'0')}</span>
+      <span class="journey-phase">${esc(stage.phase)}</span>
+      <strong>${esc(stage.title)}</strong>
+      <p>${esc(stage.detail)}</p>
+      <span class="journey-state ${esc(stage.tone)}">${esc(stage.state)}</span>
+    </li>`).join('');
+}
+
+function renderGuide(s) {
+  const externalMode = s.execution_mode === 'API_LAB';
+  const event = s.events.at(-1);
+  const signal = event && s.signals.find(item => item.lsn === event.lsn);
+  const beat = event && GUIDE_BEATS[event.event_type];
+  const status = event ? guideStatus(s,event,signal) : ['PRONTO','awaiting'];
+  const label = $('#guideStatus');
+  label.textContent = status[0];
+  label.className = 'story-status ' + status[1];
+  $('#guideMode').textContent = externalMode ? 'API LAB · LOOPBACK' : 'ROTEIRO DEMONSTRATIVO';
+  $('#guideStep').textContent = event
+    ? externalMode ? `LSN ${event.lsn}` : `PASSO ${s.step} DE ${s.total_steps}`
+    : 'AGUARDANDO INÍCIO';
+  $('#guideHeadline').textContent = event
+    ? beat?.title || (event.phase === 'FASE 1' ? 'Telemetria sintética recebida' : 'Decisão sobre ação sintética')
+    : 'Pronto para acompanhar a campanha';
+  $('#guideSubtitle').textContent = event
+    ? `${event.phase} · ${event.source} · LSN ${event.lsn}: ${event.summary}`
+    : 'Avance um evento por vez ou execute a sequência completa. Cada resultado abaixo vem do estado atual da POC.';
+  $('#storyIntent').textContent = event
+    ? beat?.intent || (event.phase === 'FASE 1'
+      ? 'Uma fonte fictícia envia um log bruto pela API local para exercitar detecção e correlação.'
+      : 'Uma operação local testa os controles da aplicação e do gateway sintéticos.')
+    : 'O roteiro ainda não gerou atividade.';
+  $('#storyObserved').textContent = event
+    ? `LSN ${event.lsn} · ${event.source}. ${event.details?.raw_telemetry ? 'Log bruto preservado e normalizado. ' : ''}${signal ? `Sinal ${signal.rule_id} produzido.` : 'Nenhum SecuritySignal neste passo.'}`
+    : 'Aguardando a primeira telemetria sintética.';
+  $('#storyResponse').textContent = event ? guideResponse(s,event,signal) : 'Nenhuma decisão foi calculada.';
+  $('#guideNextHint').textContent = externalMode
+    ? 'API Lab ativo: use os oito comandos locais abaixo. Reinicie para voltar ao roteiro.'
+    : s.completed ? 'Roteiro concluído. Reinicie para outra execução.'
+    : `Próximo: ${NEXT_BEATS[s.step] || 'evento seguinte'}`;
+  $('#guideNextBtn').innerHTML = s.step === 0 ? 'Iniciar pelo primeiro evento <span aria-hidden="true">→</span>' : 'Próximo evento <span aria-hidden="true">→</span>';
+  $('#guideNextBtn').disabled = externalMode || s.completed || running;
+  $('#guideRunBtn').disabled = externalMode || s.completed || running;
+  $('#stepBtn').disabled = externalMode || s.completed || running;
+  $('#runBtn').disabled = externalMode || s.completed || running;
+  $('#pauseBtn').disabled = !running;
+  $('#pauseBtn').setAttribute('aria-pressed',String(paused));
+  $('#presentationBtn').setAttribute('aria-pressed',String(presentationMode));
+  renderJourney(s,event);
+}
+
+function render(s){
+  state=s;
+  $('#mode').textContent=s.mode;
+  $('#campaignId').textContent=s.campaign_id;
+  $('#lastAction').textContent=s.last_action;
+  const externalMode=s.execution_mode==='API_LAB';
+  const p=externalMode?Math.min(100,Math.round((s.events.length/12)*100)):Math.round(s.step/s.total_steps*100);
+  $('#stepText').textContent=externalMode?`API LAB · LSN ${s.events.length}`:`${s.step} / ${s.total_steps} eventos`;
+  $('#progressPct').textContent=externalMode?'API':p+'%';
+  $('#progressBar').style.width=p+'%';
+  $('#campaignProgress').setAttribute('aria-valuenow',String(externalMode ? s.events.length : s.step));
+  $('#campaignProgress').setAttribute('aria-valuemax',String(externalMode ? Math.max(12,s.events.length) : s.total_steps));
+  $('#campaignProgress').setAttribute('aria-label',externalMode?'Eventos ingeridos no API Lab':'Progresso do roteiro sintético');
+  $('#riskValue').textContent=s.risk;
+  const rl=s.risk>=80?'CRÍTICO':s.risk>=60?'ALTO':s.risk>=30?'ELEVADO':'NORMAL';
+  $('#riskLabel').textContent=rl;
+  $('#riskLabel').style.color=s.risk>=60?'var(--red)':s.risk>=30?'var(--amber)':'var(--green)';
+  $('#signalCount').textContent=s.signals.length;
+  $('#incidentState').textContent=s.incident?s.incident.state:'NÃO ABERTO';
+  $('#incidentId').textContent=s.incident?s.incident.incident_id:'aguardando correlação';
+  $('#upstreamHits').textContent=s.upstream_hits;
+  $('#integrityState').textContent=s.verification.overall;
+  $('#tamperState').textContent=s.tamper_status;
+  $('#offlineState').textContent=s.offline_verify;
+  renderGuide(s);
+  renderIncident(s);
+  renderPath(s);
+  renderEvents(s);
+  renderGraph(s);
+  renderPolicy(s);
+  renderIntegrity(s);
+  renderSourceHealth(s);
+  renderWhy(s);
+  renderDecisionPipeline(s);
+  renderQualification(s);
+  syncTimeMachine(s);
+}
 function renderIncident(s){const i=s.incident,b=$('#incidentBadge');b.className='badge '+(i?'open':'neutral');b.textContent=i?`OPEN / ${i.severity}`:'CANDIDATE';$('#incidentSeverity').textContent=i?'Incidente correlacionado':'Sem incidente';$('#incidentSummary').textContent=i?i.summary:'Aguardando sinais suficientes.';$('#principal').textContent=i?i.principal:'—';$('#incidentStatus').textContent=i?i.state:'—';$('#incidentRisk').textContent=i?i.risk_score:s.risk;$('#policyTags').textContent=i?i.policy_tags.join(' · '):'—'}
 function renderPath(s){const e=$('#attackPath');if(!s.events.length){e.innerHTML='<div class="empty" style="grid-column:1/-1">A campanha ainda não começou.</div>';return}e.innerHTML=s.events.slice(-12).map(x=>`<div class="attack-node ${x.severity.toLowerCase()} ${x.phase==='FASE 2'?'phase2node':''}"><div class="n-source">${esc(x.source)} · LSN ${x.lsn}</div><div class="n-title">${esc(x.summary)}</div><div class="n-meta">${esc(x.actor)} → ${esc(short(x.asset,24))}</div></div>`).join('')}
 function renderEvents(s){const b=$('#eventRows');if(!s.events.length){b.innerHTML='<tr><td colspan="5" class="empty">Nenhum evento processado.</td></tr>';return}b.innerHTML=[...s.events].reverse().map(e=>`<tr><td>${e.lsn}</td><td><span class="evt-title">${esc(e.source)}</span><span class="evt-sub">${esc(e.phase)}</span></td><td><span class="evt-title">${esc(e.event_type)}</span><span class="evt-sub">${esc(e.summary)}</span></td><td><span class="evt-title">${esc(e.actor)}</span><span class="evt-sub">${esc(e.asset)}</span></td><td><span class="outcome ${esc(e.outcome)}">${esc(e.outcome)}</span><span class="evt-sub">${esc(e.reason_code||'')}</span></td></tr>`).join('')}
@@ -43,3 +231,14 @@ async function apiLabParamSwap(){const id=state?.pending_approval?.approval_id;i
 async function refresh(){try{render(await api('/api/state'))}catch(e){toast('Falha ao ler estado: '+e.message)}}
 $('#resetBtn').onclick=async()=>{running=false;paused=false;$('#pauseBtn').textContent='Pausar';render(await api('/api/reset',{method:'POST'}));toast('Ambiente reiniciado')};$('#stepBtn').onclick=async()=>render(await api('/api/step',{method:'POST'}));$('#pauseBtn').onclick=()=>{paused=!paused;$('#pauseBtn').textContent=paused?'Continuar':'Pausar';toast(paused?'Campanha pausada':'Campanha retomada')};$('#presentationBtn').onclick=()=>{presentationMode=!presentationMode;$('#presentationBtn').textContent='Modo apresentação: '+(presentationMode?'ON':'OFF');if(presentationMode)$('#runSpeed').value='900';toast(presentationMode?'Checkpoints narrativos ativados':'Modo apresentação desativado')};$('#runBtn').onclick=async()=>{if(running)return;running=true;paused=false;$('#pauseBtn').textContent='Pausar';$('#runBtn').textContent='Executando…';const checkpoints={5:'Incidente aberto: explique a correlação multi-fonte.',7:'Fim da Fase 1: mostre o principal comprometido e a ponte para policy.',11:'HITL: uma ação autorizada chegou exatamente uma vez ao upstream.',15:'Tamper detectado: mostre HRKL, hash-chain e Merkle.'};try{while(running&&state&&!state.completed){if(paused){await new Promise(r=>setTimeout(r,120));continue}render(await api('/api/step',{method:'POST'}));if(presentationMode&&checkpoints[state.step]){paused=true;$('#pauseBtn').textContent='Continuar';toast(checkpoints[state.step])}await new Promise(r=>setTimeout(r,Number($('#runSpeed').value||500)))}if(state?.completed)toast('Campanha completa executada')}finally{running=false;$('#runBtn').textContent='Executar campanha'}};
 $('#tamperBtn').onclick=async()=>{const kind=$('#tamperKind').value;const r=await api('/api/tamper-demo?kind='+encodeURIComponent(kind),{method:'POST'});$('#tamperResult').innerHTML=`${esc(kind)}: <b style="color:${r.status==='DETECTED'?'var(--red)':'var(--green)'}">${esc(r.status)}</b> · chain=${esc(r.verification?.chain||'—')} · merkle=${esc(r.verification?.merkle||'—')}`;toast('Sabotagem '+kind+' executada')};$('#exportBtn').onclick=async()=>{const r=await api('/api/export',{method:'POST'});$('#exportResult').innerHTML=`<b style="color:var(--green)">${r.status}</b> · ${esc(r.path)} · sha256 ${esc(short(r.sha256,20))}`;toast('Evidence Bundle gerado')};$('#downloadBtn').onclick=()=>{location.href='/api/evidence/download'};$('#loadEvidenceBtn').onclick=()=>inspectEvidence(Number($('#evidenceLsn').value||1));$('#reportBtn').onclick=loadReport;$('#asofSlider').oninput=e=>{e.currentTarget.dataset.touched='1';renderAsof(Number(e.currentTarget.value))};$('#compareBtn').onclick=loadCompare;$('#integrationBtn').onclick=loadIntegration;$('#downloadReportBtn').onclick=()=>{location.href='/api/report/download'};$('#apiPhase1Btn').onclick=apiLabPhase1;$('#apiWriteBtn').onclick=apiLabWrite;$('#apiExportBtn').onclick=()=>apiLabExport('REQUEST EXPORT');$('#apiApproveBtn').onclick=apiLabApprove;$('#apiExecuteBtn').onclick=()=>apiLabExport('EXECUTE EXPORT');$('#apiReplayBtn').onclick=()=>apiLabExport('REPLAY');$('#apiIdentityBtn').onclick=apiLabIdentitySwap;$('#apiParamBtn').onclick=apiLabParamSwap;$('#faultBtn').onclick=async()=>{const kind=$('#faultKind').value;try{const r=await api('/api/fault-demo?kind='+encodeURIComponent(kind),{method:'POST'});$('#faultResult').innerHTML=`<div class="fault-flow"><div class="fault-state"><span>estado inicial</span><b>${esc(r.initial_state||r.decision||'—')}</b></div><div class="fault-arrow">→</div><div class="fault-state"><span>estado final</span><b style="color:${r.status==='PASS'?'var(--green)':'var(--red)'}">${esc(r.final_state||r.status)}</b></div></div><div class="fault-explain"><b>${esc(r.decision||'')}</b> · upstream_delta=${esc(r.upstream_delta??'n/a')} · ${esc(r.reconciliation||'')}<br>${esc(r.explanation||r.error||'')}</div>`;toast('Fault '+kind+': '+r.status)}catch(e){toast('Fault injection falhou: '+e.message)}};refresh();loadIntegration();
+
+// The guided controls use the same handlers as the existing demo toolbar.
+$('#guideNextBtn').onclick = () => $('#stepBtn').click();
+$('#guideRunBtn').onclick = () => $('#runBtn').click();
+$('#pauseBtn').addEventListener('click', () => { if (state) renderGuide(state); });
+$('#presentationBtn').addEventListener('click', () => { if (state) renderGuide(state); });
+const runScriptedCampaign = $('#runBtn').onclick;
+$('#runBtn').onclick = async () => {
+  try { await runScriptedCampaign(); }
+  finally { if (state) renderGuide(state); }
+};

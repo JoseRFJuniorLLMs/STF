@@ -15,8 +15,38 @@
 
   <section class="campaign-head panel">
     <div><span class="section-kicker">CAMPANHA</span><h2 id="campaignId">STF-POC-CAMPAIGN-001</h2><p id="lastAction">Ambiente pronto.</p></div>
-    <div class="progress-wrap"><div class="progress-meta"><span id="stepText">0 / 17 eventos</span><span id="progressPct">0%</span></div><div class="progress"><div id="progressBar"></div></div></div>
+    <div class="progress-wrap"><div class="progress-meta"><span id="stepText">0 / 17 eventos</span><span id="progressPct">0%</span></div><div class="progress" id="campaignProgress" role="progressbar" aria-label="Progresso do roteiro sintético" aria-valuemin="0" aria-valuemax="17" aria-valuenow="0"><div id="progressBar"></div></div></div>
     <div class="risk-box"><span>RISCO CORRELACIONADO</span><strong id="riskValue">0</strong><small id="riskLabel">NORMAL</small></div>
+  </section>
+
+  <section class="guided-demo panel" aria-labelledby="guideTitle">
+    <div class="guide-topline">
+      <div>
+        <span class="section-kicker">ACOMPANHE A CAMPANHA</span>
+        <h2 id="guideTitle">O que o atacante tenta. O que o sistema observa.</h2>
+        <p>Uma história sintética em duas fases: sinais da intrusão alimentam a decisão que governa uma ação crítica.</p>
+      </div>
+      <span class="simulation-stamp">SIMULAÇÃO LOCAL <small>Sem ataque ou dados reais do STF</small></span>
+    </div>
+
+    <div class="guide-summary">
+      <div class="guide-current">
+        <div class="guide-current-top"><span id="guideMode">ROTEIRO DEMONSTRATIVO</span><span id="guideStep">AGUARDANDO INÍCIO</span></div>
+        <div class="guide-headline" aria-live="polite"><span id="guideStatus" class="story-status awaiting">PRONTO</span><h3 id="guideHeadline">Pronto para acompanhar a campanha</h3></div>
+        <p id="guideSubtitle">Avance um evento por vez ou execute a sequência completa. Cada resultado abaixo vem do estado atual da POC.</p>
+        <div class="guide-controls"><button id="guideNextBtn" class="btn primary" type="button">Iniciar pelo primeiro evento <span aria-hidden="true">→</span></button><button id="guideRunBtn" class="btn" type="button">Executar sequência</button><span id="guideNextHint">Próximo: tráfego benigno de referência</span></div>
+      </div>
+      <div class="story-columns" aria-label="Intenção, sinal e resposta do passo atual">
+        <div class="story-column intent"><span>01 · INTENÇÃO SIMULADA</span><p id="storyIntent">O roteiro ainda não gerou atividade.</p></div>
+        <div class="story-column observed"><span>02 · SINAL OBSERVADO</span><p id="storyObserved">Aguardando a primeira telemetria sintética.</p></div>
+        <div class="story-column response"><span>03 · RESPOSTA DO HARNESS</span><p id="storyResponse">Nenhuma decisão foi calculada.</p></div>
+      </div>
+    </div>
+
+    <div class="journey-heading"><div><span class="section-kicker">MAPA DA CAMPANHA</span><h3>Da atividade simulada à evidência verificável</h3></div><span>Fase 1: observar e correlacionar <b>→</b> Fase 2: decidir e provar</span></div>
+    <ol id="journeyMap" class="journey-map" aria-label="Etapas da campanha sintética"></ol>
+    <div class="journey-legend"><span><i class="legend-dot simulated"></i> SIMULADO: evento gerado no laboratório</span><span><i class="legend-dot detected"></i> DETECTADO: sinal ou incidente calculado</span><span><i class="legend-dot blocked"></i> BLOQUEADO: ação negada com efeito zero</span><span><i class="legend-dot verified"></i> VERIFICADO: integridade local conferida</span></div>
+    <p class="guide-disclosure">O roteiro e o API Lab executam o mesmo harness Python local. O API Lab recebe logs sintéticos pela API de loopback; o painel de integração, mais abaixo, mostra separadamente a leitura opcional de um HeraclitusDB real.</p>
   </section>
 
   <section class="kpis">
