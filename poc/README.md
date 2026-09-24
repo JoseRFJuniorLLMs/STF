@@ -130,3 +130,40 @@ O dashboard possui cenários controlados de resiliência:
 - `clock_jump`: relógio de origem pode regredir sem reordenar LSN/HLC.
 
 Esses cenários não atacam serviços reais; exercitam a semântica de erro e reconciliação da POC.
+
+
+## Ingestão externa local
+
+Além do cenário embutido, o servidor aceita telemetria bruta por HTTP **somente porque ele próprio está limitado a loopback**:
+
+```text
+POST /api/telemetry?kind=firewall
+POST /api/telemetry?kind=identity
+POST /api/telemetry?kind=host
+POST /api/telemetry?kind=network
+POST /api/telemetry?kind=db
+POST /api/telemetry?kind=app
+```
+
+Exemplo com dado reservado para documentação:
+
+```bash
+curl -X POST "http://127.0.0.1:8787/api/telemetry?kind=firewall" \
+  -H "Content-Type: application/json" \
+  -d '{"event_id":"LAB-1","src_ip":"203.0.113.42","dst_service":"portal-synthetic","action":"OBSERVED","waf_score":71}'
+```
+
+O caminho executado é:
+
+```text
+raw JSON
+  -> adapter vendor-neutral
+  -> canonical telemetry
+  -> detector
+  -> SecuritySignal (quando houver regra)
+  -> correlação por entidades
+  -> incidente
+  -> HRKL/evidence do harness
+```
+
+O corpo é limitado a 64 KiB e deve ser um objeto JSON.
