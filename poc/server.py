@@ -698,26 +698,61 @@ class PocEngine:
             })
         return signals
 
+    @classmethod
+    def _replay_incident_state(cls, events:list[EvidenceEvent])->tuple[list[dict[str,Any]],dict[str,Any]|None,int]:
+        signals=[]
+        incident=None
+        risk=0
+        for ev in events:
+            normalized=ev.details.get("normalized_telemetry") if isinstance(ev.details,dict) else None
+            detection=detect_event(normalized)
+            if detection is None:
+                continue
+            signals.append({
+                "signal_id":f"SIG-{len(signals)+1:03d}","lsn":ev.lsn,"hlc":ev.hlc,
+                "source":ev.source,"source_class":normalized.get("source_class",ev.source),
+                "severity":detection.severity,"reason_code":detection.reason_code,
+                "rule_id":detection.rule_id,"rule_explanation":detection.explanation,
+                "score":detection.score,"actor":ev.actor,"asset":ev.asset,
+                "entities":list(detection.entities),"campaign_id":CAMPAIGN_ID,
+                "evidence_hash":ev.event_hash,
+            })
+            corr=correlate(signals)
+            if incident is None:
+                best=corr["best"]
+                risk=int(best.get("score",0))
+                if best.get("qualifies"):
+                    principal=cls._principal_from_component(signals,best)
+                    if principal:
+                        incident={
+                            "incident_id":INCIDENT_ID,"campaign_id":CAMPAIGN_ID,"state":"OPEN",
+                            "severity":"CRITICAL" if best["score"]>=90 else "HIGH",
+                            "risk_score":best["score"],"principal":principal,
+                            "summary":"Reconstrução AS-OF pelo mesmo correlador do runtime",
+                            "policy_tags":["COMPROMISE_SUSPECTED","REQUIRE_STRONGER_APPROVAL"],
+                            "evidence_lsns":list(best.get("lsns",[])),
+                            "correlation":deepcopy(best),"correlation_explanation":corr["explanation"],
+                        }
+            else:
+                principal_entity=f"principal:{incident['principal']}"
+                matches=[x for x in corr.get("components",[]) if principal_entity in set(x.get("entities",[]))]
+                if matches:
+                    matches.sort(key=lambda x:(x.get("qualifies",False),x.get("score",0),len(x.get("signal_ids",[]))),reverse=True)
+                    chosen=matches[0]
+                    if chosen.get("qualifies"):
+                        risk=int(chosen.get("score",0))
+                        incident["risk_score"]=risk
+                        incident["severity"]="CRITICAL" if risk>=90 else "HIGH"
+                        incident["evidence_lsns"]=list(chosen.get("lsns",[]))
+                        incident["correlation"]=deepcopy(chosen)
+                        incident["correlation_explanation"]=corr["explanation"]
+        return signals,incident,risk
+
     @locked_method
     def as_of(self, lsn:int)->dict[str,Any]:
         lsn=max(0,min(int(lsn),len(self.events)))
         events=list(self.events[:lsn])
-        signals=self._signals_from_events(events)
-        corr=correlate(signals)
-        best=corr["best"]
-        incident=None
-        if best.get("qualifies"):
-            principal=self._principal_from_component(signals,best)
-            if principal:
-                incident={
-                    "incident_id":INCIDENT_ID,"campaign_id":CAMPAIGN_ID,"state":"OPEN",
-                    "severity":"CRITICAL" if best["score"]>=90 else "HIGH",
-                    "risk_score":best["score"],"principal":principal,
-                    "summary":"Reconstrução AS-OF pelo mesmo correlador do runtime",
-                    "policy_tags":["COMPROMISE_SUSPECTED","REQUIRE_STRONGER_APPROVAL"],
-                    "evidence_lsns":list(best.get("lsns",[])),"correlation":deepcopy(best),
-                    "correlation_explanation":corr["explanation"],
-                }
+        signals,incident,risk=self._replay_incident_state(events)
         upstream=sum((e.upstream_delta or 0) for e in events if (e.upstream_delta or 0)>0)
         tamper="DETECTED" if any(e.event_type.startswith("tamper.") for e in events) else "NOT_TESTED"
         approval_state="NONE"
@@ -729,7 +764,7 @@ class PocEngine:
             elif e.details.get("policy_decision",{}).get("effect_allowed"):
                 approval_state="CONSUMED"
         return {
-            "as_of_lsn":lsn,"event_count":len(events),"risk":int(best.get("score",0)),
+            "as_of_lsn":lsn,"event_count":len(events),"risk":risk,
             "incident":incident,"signals":signals,"upstream_hits":upstream,
             "tamper_status":tamper,"approval_state":approval_state,
             "case_state":{
