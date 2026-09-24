@@ -18,6 +18,8 @@ A POC demonstra uma única campanha de ataque sintética do primeiro sinal obser
 
 > **Auditoria de código:** a auditoria recursiva em três passadas e sua remediação estão registradas em [AUDIT-CODE-3-PASSES-2026-09-23.md](docs/AUDIT-CODE-3-PASSES-2026-09-23.md) e [AUDIT-REMEDIATION-2026-09-23.md](docs/AUDIT-REMEDIATION-2026-09-23.md).
 
+> **Guia Visual e Lâminas Arquiteturais:** veja [GUIA-VISUAL.md](docs/GUIA-VISUAL.md) para os diagramas da arquitetura integrada, fluxo de governança e visão executiva para leigos.
+
 ## POC executável e dashboard
 
 A implementação funcional está em [`poc/`](poc/README.md). Ela usa somente a biblioteca padrão do Python e foi desenhada para rodar **apenas em loopback**, sem scanner, exploit real, credencial institucional ou conexão com infraestrutura do STF.
@@ -25,6 +27,8 @@ A implementação funcional está em [`poc/`](poc/README.md). Ela usa somente a 
 ```bash
 cd poc
 python server.py
+# No Windows (com launcher py):
+py server.py
 ```
 
 Abra no navegador:

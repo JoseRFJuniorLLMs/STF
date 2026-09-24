@@ -18,17 +18,18 @@ Este documento separa capacidades realmente executadas pelo harness da POC de en
 | Policy enforcement | IMPLEMENTADO | `poc/policy.py`, fail-closed |
 | HITL | IMPLEMENTADO NA POC | approval vinculada, single-use |
 | Anti-replay | IMPLEMENTADO | approval consumida não executa de novo |
-| Identity binding | IMPLEMENTADO | identidade diferente é DENY |
-| Parameter/target binding | IMPLEMENTADO | alvo/digest diferente é DENY |
-| Independent upstream oracle | IMPLEMENTADO | `upstream_hits` só aumenta quando há efeito autorizado |
+| Identity & Action binding | IMPLEMENTADO | identidade ou ação divergente gera DENY (`IDENTITY_BINDING_MISMATCH`, `ACTION_BINDING_MISMATCH`) |
+| Parameter/target binding | IMPLEMENTADO | alvo/digest diferente gera DENY (`PARAMETERS_DIGEST_MISMATCH`) |
+| Independent upstream oracle | IMPLEMENTADO | `poc/synthetic_upstream.py` emite recibos (`EFF-xxxxxx`) com digest canônico; `upstream_hits` e `upstream_delta=0` em DENY estritamente verificados |
 | Hash-chain | IMPLEMENTADO NO HARNESS | SHA-256 entre eventos da POC |
 | Merkle root | IMPLEMENTADO NO HARNESS | raiz sobre hashes dos eventos |
 | Tamper modify/delete/reorder/truncate | IMPLEMENTADO | cópia adulterada falha na verificação |
-| Time travel AS-OF | IMPLEMENTADO NO HARNESS | reconstrução determinística por LSN |
+| Time travel AS-OF | IMPLEMENTADO NO HARNESS | reconstrução determinística por LSN com replay de recibos |
 | Evidence Bundle | IMPLEMENTADO NO HARNESS | pacote JSON com eventos, signals, incidente, grafo e qualification |
-| Offline verifier | IMPLEMENTADO | `poc/verify.py` independente do servidor |
-| Dashboard | IMPLEMENTADO | replay, WHY, graph, policy, forensic diff, evidence inspector |
-| HTTP smoke | IMPLEMENTADO | CI sobe servidor loopback e consulta API |
+| Offline verifier | IMPLEMENTADO | `poc/verify.py` independente do servidor e com isolamento temporário |
+| Adapter & Surface Health | IMPLEMENTADO | `poc/heraclitus_adapter.py` monitora status `CONNECTED`, `DEGRADED` e `UNAVAILABLE` |
+| Dashboard & Guided Journey | IMPLEMENTADO | modo guiado narrativo ("Acompanhe a Campanha"), Journey Map em 8 estágios, replay, WHY, graph, policy, forensic diff, evidence inspector |
+| HTTP smoke | IMPLEMENTADO | CI sobe servidor loopback e valida endpoints e proteções CSRF |
 
 ## Sintético por desenho
 
