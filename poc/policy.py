@@ -35,6 +35,9 @@ def _validate_approval(*,principal:str,target:str,parameters_digest:str|None,
     if approval_id in consumed or approval.get("state")=="CONSUMED":
         return PolicyDecision("DENY","REPLAY_DETECTED",False,False,
             "A aprovação single-use já foi consumida.")
+    if approval.get("state")=="PENDING":
+        return PolicyDecision("REQUIRE_HITL","APPROVAL_PENDING",False,True,
+            "A aprovação já foi criada e ainda aguarda decisão humana.")
     if approval.get("state")!="APPROVED":
         return PolicyDecision("DENY","APPROVAL_NOT_VALID",False,False,
             "A aprovação não está em estado válido para execução.")
