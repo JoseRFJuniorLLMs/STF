@@ -101,10 +101,23 @@
     </section>
 
     <section class="panel span-6">
-      <div class="panel-head"><div><span class="section-kicker">ANALYST</span><h3>Relatório do incidente</h3></div><button id="reportBtn" class="btn">Atualizar relatório</button></div>
+      <div class="panel-head"><div><span class="section-kicker">ANALYST</span><h3>Relatório do incidente</h3></div><div class="panel-actions"><button id="reportBtn" class="btn">Atualizar</button><button id="downloadReportBtn" class="btn">Baixar JSON</button></div></div>
       <div id="reportSummary" class="report-summary">Aguardando execução da campanha.</div>
       <div id="reportControls" class="report-controls"></div>
       <div class="report-limitations"><b>Limites da POC</b><ul id="reportLimitations"></ul></div>
+    </section>
+
+
+    <section class="panel span-6">
+      <div class="panel-head"><div><span class="section-kicker">DIFF FORENSE</span><h3>Antes × Depois</h3></div><div class="compare-controls"><label>de LSN</label><input id="compareFrom" type="number" min="0" value="3"/><label>até</label><input id="compareTo" type="number" min="0" value="15"/><button id="compareBtn" class="btn">Comparar</button></div></div>
+      <div id="compareSummary" class="compare-summary">Compare dois pontos do histórico para ver exatamente o que mudou.</div>
+      <div id="compareGrid" class="compare-grid"></div>
+    </section>
+
+    <section class="panel span-6">
+      <div class="panel-head"><div><span class="section-kicker">BRIDGE</span><h3>HeraclitusDB real / loopback</h3></div><button id="integrationBtn" class="btn">Verificar integração</button></div>
+      <div class="integration-hero"><span id="integrationStatus" class="badge">NOT CONFIGURED</span><p id="integrationNote">A POC funciona standalone. Defina HERACLITUS_URL para consultar um HeraclitusDB local.</p></div>
+      <div id="integrationSurfaces" class="integration-surfaces"></div>
     </section>
 
     <section class="panel span-12 qualification-panel">
