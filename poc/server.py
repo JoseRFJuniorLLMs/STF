@@ -17,6 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse, parse_qs
+from telemetry import sample_campaign, normalize
 
 ROOT = Path(__file__).resolve().parent
 DASHBOARD = ROOT / "dashboard"
@@ -99,7 +100,7 @@ class PocEngine:
             self._scenario = self._build_scenario()
 
     def _build_scenario(self) -> list[dict[str, Any]]:
-        return [
+        scenario = [
             {"phase":"FASE 1","source":"Firewall","type":"network.connection","severity":"INFO","actor":"external-client-42","asset":"edge","summary":"Tráfego benigno de referência aceito","outcome":"ALLOW","risk":0,"signal":False},
             {"phase":"FASE 1","source":"Firewall/WAF","type":"edge.suspicious","severity":"MEDIUM","actor":"ai-attacker-synthetic","asset":"public-edge","summary":"Padrão de acesso incomum observado no perímetro sintético","outcome":"OBSERVED","risk":12,"signal":True,"reason":"EDGE_ANOMALY"},
             {"phase":"FASE 1","source":"IAM","type":"identity.login","severity":"HIGH","actor":COMPROMISED_PRINCIPAL,"asset":"identity-provider","summary":"Autenticação em contexto novo para conta de serviço fictícia","outcome":"OBSERVED","risk":18,"signal":True,"reason":"NEW_AUTH_CONTEXT"},
@@ -118,6 +119,12 @@ class PocEngine:
             {"phase":"FASE 2","source":"Evidence","type":"evidence.exported","severity":"INFO","actor":"service:evidence-exporter","asset":"evidence://STF-POC-001","summary":"Pacote de evidências gerado para verificação independente","outcome":"PASS","evidence":True},
             {"phase":"FASE 2","source":"Offline Verifier","type":"evidence.verified","severity":"INFO","actor":"service:offline-verifier","asset":"evidence://STF-POC-001","summary":"Integridade local verificada sem depender do sistema de origem","outcome":"PASS","verify":True},
         ]
+        # Enrich the six suspicious Phase-1 steps with heterogeneous raw telemetry
+        # and the canonical result produced by the adapter. Index 0 is benign baseline.
+        for offset, (kind, raw) in enumerate(sample_campaign(), start=1):
+            scenario[offset]["raw_telemetry"] = raw
+            scenario[offset]["normalized_telemetry"] = normalize(kind, raw)
+        return scenario
 
     def _append(self, spec: dict[str, Any], incident_id: str | None = None) -> EvidenceEvent:
         lsn = len(self.events) + 1
