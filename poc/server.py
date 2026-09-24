@@ -226,6 +226,79 @@ class PocEngine:
             self.last_action=f"Telemetria externa local ingerida: {kind}"
             return {"ingested":asdict(ev),"detection":detection.to_dict() if detection else None,"state":self.snapshot()}
 
+
+    def submit_action(self, action: str, principal: str, target: str, parameters: dict[str, Any] | None = None) -> dict[str, Any]:
+        with self.lock:
+            parameters=parameters or {}
+            params_digest=sha256_hex(parameters) if parameters else None
+            decision=policy_decide(
+                action=action,
+                incident=self.incident,
+                principal=principal,
+                target=target,
+                parameters_digest=params_digest,
+                approval=self.pending_approval,
+                consumed=self.approvals_consumed,
+            )
+            if action=="case_write":
+                event_type="app.case_update_requested"; source="Policy Gateway"; severity="CRITICAL"
+                summary="Ação externa local solicita escrita no processo sintético"
+            elif action=="export_restricted":
+                event_type="tool.executed" if decision.effect_allowed else "agent.tool_requested"
+                source="Agent Gateway"; severity="HIGH" if decision.outcome!="DENY" else "CRITICAL"
+                summary="Ação externa local solicita exportação de documento sintético restrito"
+            else:
+                event_type="policy.unknown_action"; source="Policy Gateway"; severity="CRITICAL"
+                summary="Ação externa local não reconhecida pelo policy engine"
+            spec={
+                "phase":"FASE 2","source":source,"type":event_type,"severity":severity,
+                "actor":principal,"asset":target,"summary":summary,
+                "outcome":"PASS" if decision.effect_allowed else decision.outcome,
+                "reason":decision.reason_code,
+                "upstream":1 if decision.effect_allowed else 0,
+                "policy_action":action,"policy_params":parameters,
+                "policy_decision":decision.to_dict(),"ingest_mode":"external_loopback",
+            }
+            ev=self._append(spec,INCIDENT_ID if self.incident else None)
+            if decision.requires_human and action=="export_restricted":
+                self.pending_approval={
+                    "approval_id":f"APR-LAB-{ev.lsn:03d}","state":"PENDING","principal":principal,
+                    "tool":"export_restricted_document","target":target,
+                    "parameters_digest":params_digest,"single_use":True,"expires_in":"5m",
+                }
+            if decision.effect_allowed:
+                self.upstream_hits += 1
+                if self.pending_approval:
+                    self.pending_approval["state"]="CONSUMED"
+                    self.approvals_consumed.add(self.pending_approval["approval_id"])
+                self.case_state["last_effect"]="DOCUMENT_EXPORT_SYNTHETIC" if action=="export_restricted" else "SYNTHETIC_EFFECT"
+            self._add_graph(ev)
+            self.last_action=f"Policy externa local: {action} -> {spec['outcome']}"
+            return {
+                "event":asdict(ev),"decision":decision.to_dict(),
+                "pending_approval":self.pending_approval,"upstream_hits":self.upstream_hits,
+                "state":self.snapshot(),
+            }
+
+    def grant_approval(self, approval_id: str, approver: str) -> dict[str, Any]:
+        with self.lock:
+            approval=self.pending_approval
+            if not approval or approval.get("approval_id")!=approval_id:
+                return {"status":"REJECT","reason":"APPROVAL_NOT_FOUND","pending_approval":approval}
+            if approval.get("state")!="PENDING":
+                return {"status":"REJECT","reason":"APPROVAL_NOT_PENDING","pending_approval":approval}
+            approval["state"]="APPROVED"; approval["approved_by"]=approver
+            spec={
+                "phase":"FASE 2","source":"HITL","type":"approval.granted","severity":"INFO",
+                "actor":approver,"asset":approval["target"],
+                "summary":"Aprovação humana sintética concedida via API local",
+                "outcome":"APPROVED","reason":"HUMAN_APPROVAL_GRANTED",
+                "approval_id":approval_id,"ingest_mode":"external_loopback",
+            }
+            ev=self._append(spec,INCIDENT_ID if self.incident else None)
+            self._add_graph(ev); self.last_action=f"HITL aprovado: {approval_id}"
+            return {"status":"APPROVED","event":asdict(ev),"pending_approval":approval,"state":self.snapshot()}
+
     def step(self) -> dict[str, Any]:
         with self.lock:
             if self.step_index >= len(self._scenario):
@@ -636,6 +709,27 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(ENGINE.ingest_telemetry(kind,raw),201)
             except (ValueError,KeyError,TypeError) as e:
                 return self._json({"error":"invalid_telemetry","detail":str(e)},400)
+        if path=="/api/action":
+            try:
+                body=self._read_json_body()
+                action=str(body.get("action",""))
+                principal=str(body.get("principal",COMPROMISED_PRINCIPAL))
+                target=str(body.get("target",""))
+                parameters=body.get("parameters") or {}
+                if not action or not target or not isinstance(parameters,dict): raise ValueError("action, target and object parameters are required")
+                return self._json(ENGINE.submit_action(action,principal,target,parameters),200)
+            except (ValueError,KeyError,TypeError) as e:
+                return self._json({"error":"invalid_action","detail":str(e)},400)
+        if path=="/api/approval/grant":
+            try:
+                body=self._read_json_body()
+                approval_id=str(body.get("approval_id",""))
+                approver=str(body.get("approver","human:approver-api"))
+                if not approval_id: raise ValueError("approval_id required")
+                result=ENGINE.grant_approval(approval_id,approver)
+                return self._json(result,200 if result.get("status")=="APPROVED" else 409)
+            except (ValueError,KeyError,TypeError) as e:
+                return self._json({"error":"invalid_approval","detail":str(e)},400)
         if path=="/api/reset": ENGINE.reset(); return self._json(ENGINE.snapshot("Ambiente reiniciado"))
         if path=="/api/step": return self._json(ENGINE.step())
         if path=="/api/run": return self._json(ENGINE.run_all())
