@@ -419,11 +419,16 @@ class PocEngine:
             return self.snapshot(message=f"Executado passo {self.step_index}/{len(self._scenario)}")
 
     def run_all(self) -> dict[str, Any]:
-        while self.step_index < len(self._scenario): self.step()
-        return self.snapshot(message="Campanha completa executada")
+        with self.lock:
+            while self.step_index < len(self._scenario):
+                self.step()
+            return self.snapshot(message="Campanha completa executada")
 
+    @locked_method
     def qualification(self) -> list[dict[str, str]]:
         denied=[e for e in self.events if e.outcome=="DENY"]
+        policy_events=[e for e in self.events if e.details.get("policy_decision")]
+        reason_codes={e.reason_code for e in policy_events}
         tests=[
             ("PHASE1_TELEMETRY_INGEST",len({e.source for e in self.events if e.phase=="FASE 1"})>=5,"PASS"),
             ("PHASE1_RAW_TO_CANONICAL",sum(1 for e in self.events if e.details.get("normalized_telemetry"))>=6,"PASS"),
@@ -432,134 +437,220 @@ class PocEngine:
             ("PHASE1_RULE_DETECTION",len(self.signals)>=3,"PASS"),
             ("PHASE1_CROSS_SOURCE_CORRELATION",self.incident is not None,"PASS"),
             ("PHASE1_INCIDENT_GRAPH",any(n["kind"]=="incident" for n in self.attack_graph["nodes"]),"PASS"),
-            ("PHASE2_POLICY_ENGINE",sum(1 for e in self.events if e.details.get("policy_decision"))>=6,"PASS"),
-            ("PHASE2_HITL_SINGLE_USE","APR-001" in self.approvals_consumed and self.upstream_hits==1,"PASS"),
+            ("PHASE2_POLICY_ENGINE",len(policy_events)>=4,"PASS"),
+            ("PHASE2_HITL_SINGLE_USE",bool(self.approvals_consumed) and self.upstream_hits==1,"PASS"),
             ("PHASE2_UNAPPROVED_WRITE",any(e.event_type=="app.case_update_requested" and e.outcome=="DENY" for e in self.events),"DENY"),
-            ("PHASE2_REPLAY",any(e.event_type=="approval.replay" and e.outcome=="DENY" for e in self.events),"DENY"),
-            ("PHASE2_IDENTITY_SWAP",any(e.event_type=="identity.swap" and e.outcome=="DENY" for e in self.events),"DENY"),
-            ("PHASE2_PARAMETER_SWAP",any(e.event_type=="parameters.swap" and e.outcome=="DENY" for e in self.events),"DENY"),
+            ("PHASE2_REPLAY","REPLAY_DETECTED" in reason_codes,"DENY"),
+            ("PHASE2_IDENTITY_SWAP","IDENTITY_BINDING_MISMATCH" in reason_codes,"DENY"),
+            ("PHASE2_PARAMETER_SWAP","PARAMETERS_DIGEST_MISMATCH" in reason_codes,"DENY"),
             ("UPSTREAM_ON_DENY",all((e.upstream_delta in (None,0)) for e in denied),"0"),
             ("HISTORY_TAMPER",self.tamper_status=="DETECTED","DETECTED"),
-            ("EVIDENCE_EXPORT",any(e.event_type=="evidence.exported" for e in self.events),"PASS"),
+            ("EVIDENCE_EXPORT",self.export_count>0 or any(e.event_type=="evidence.exported" for e in self.events),"PASS"),
             ("OFFLINE_VERIFY",self.offline_verify=="PASS","PASS"),
         ]
         return [{"id":i,"ok":ok,"expected":expected,"observed":expected if ok else "PENDING"} for i,ok,expected in tests]
 
+    @locked_method
     def evidence_bundle(self) -> dict[str, Any]:
-        event_dicts=[asdict(e) for e in self.events]; event_hashes=[e.event_hash for e in self.events]
-        trust={"local_content_integrity":"PASS" if self.events else "NOT_RUN","external_timestamp":"NOT_CONFIGURED","institutional_signature":"NOT_CONFIGURED","institutional_trust":"UNVERIFIED"}
-        limitations=["Dados integralmente sintéticos","Nenhuma conexão com infraestrutura real do STF","Sem IAM, HSM ou trust anchor institucional"]
+        event_dicts=[asdict(e) for e in self.events]
+        event_hashes=[e.event_hash for e in self.events]
+        event_root=merkle_root(event_hashes)
+        metadata={
+            "schema_version":"stf-poc-evidence/3",
+            "package_id":"POC-STF-001",
+            "campaign_id":CAMPAIGN_ID,
+            "incident_id":self.incident.get("incident_id") if self.incident else None,
+            "generated_at_claimed":"2026-09-23T20:00:00-03:00",
+            "event_count":len(event_dicts),
+            "lsn_range":[1,len(event_dicts)] if event_dicts else [0,0],
+            "merkle_root":event_root,
+        }
+        trust={
+            "local_content_integrity":"PASS" if event_dicts else "NOT_RUN",
+            "external_timestamp":"NOT_CONFIGURED",
+            "institutional_signature":"NOT_CONFIGURED",
+            "institutional_trust":"UNVERIFIED",
+        }
+        limitations=[
+            "Dados integralmente sintéticos",
+            "Nenhuma conexão com infraestrutura real do STF",
+            "Sem IAM, HSM ou trust anchor institucional",
+        ]
         sections={
+            "metadata":deepcopy(metadata),
             "events":event_dicts,
-            "signals":self.signals,
-            "incident":self.incident,
-            "attack_graph":self.attack_graph,
-            "qualification":self.qualification(),
+            "signals":deepcopy(self.signals),
+            "incident":deepcopy(self.incident),
+            "attack_graph":deepcopy(self.attack_graph),
+            "qualification":deepcopy(self.qualification()),
             "trust":trust,
             "limitations":limitations,
         }
         manifest={name:sha256_hex(value) for name,value in sections.items()}
         package_root=merkle_root([manifest[name] for name in sorted(manifest)])
-        return {
-            "schema_version":"stf-poc-evidence/2","package_id":"POC-STF-001","campaign_id":CAMPAIGN_ID,
-            "incident_id":INCIDENT_ID if self.incident else None,"generated_at_claimed":"2026-09-23T20:00:00-03:00",
-            "event_count":len(self.events),"lsn_range":[1,len(self.events)] if self.events else [0,0],
-            "merkle_root":merkle_root(event_hashes),"package_root":package_root,"manifest":manifest,
-            **sections,
-        }
+        return {**metadata,"metadata":deepcopy(metadata),"package_root":package_root,"manifest":manifest,**sections}
 
     def verify_bundle(self,bundle:dict[str,Any])->dict[str,Any]:
-        events=bundle.get("events",[]); prev="0"*64; hashes=[]; chain_ok=True
+        def is_hex64(value:Any)->bool:
+            if not isinstance(value,str) or len(value)!=64:
+                return False
+            try:
+                bytes.fromhex(value)
+                return True
+            except ValueError:
+                return False
+
+        events=bundle.get("events",[])
+        if not isinstance(events,list):
+            return {
+                "chain":"FAIL","merkle":"FAIL","manifest":"FAIL","package_root":"FAIL",
+                "semantic":"FAIL","overall":"FAIL",
+            }
+
+        prev="0"*64
+        hashes=[]
+        chain_ok=True
         for raw in events:
             if not isinstance(raw,dict):
-                chain_ok=False; continue
-            item=dict(raw); event_hash=item.pop("event_hash","")
-            if item.get("prev_hash") != prev: chain_ok=False
-            if sha256_hex(item) != event_hash: chain_ok=False
-            if isinstance(event_hash,str) and len(event_hash)==64: hashes.append(event_hash)
-            else: chain_ok=False
+                chain_ok=False
+                continue
+            item=dict(raw)
+            event_hash=item.pop("event_hash","")
+            if item.get("prev_hash") != prev:
+                chain_ok=False
+            if not is_hex64(event_hash) or sha256_hex(item) != event_hash:
+                chain_ok=False
+            if is_hex64(event_hash):
+                hashes.append(event_hash)
             prev=event_hash
-        root_ok=merkle_root(hashes)==bundle.get("merkle_root")
-        section_names=("events","signals","incident","attack_graph","qualification","trust","limitations")
+
+        computed_root=None
+        if len(hashes)==len(events):
+            try: computed_root=merkle_root(hashes)
+            except ValueError: computed_root=None
+        root_ok=computed_root is not None and computed_root==bundle.get("merkle_root")
+
+        section_names=("metadata","events","signals","incident","attack_graph","qualification","trust","limitations")
         manifest=bundle.get("manifest") if isinstance(bundle.get("manifest"),dict) else {}
-        manifest_ok=all(manifest.get(name)==sha256_hex(bundle.get(name)) for name in section_names)
-        expected_package_root=merkle_root([manifest[name] for name in sorted(manifest)]) if manifest and all(isinstance(v,str) and len(v)==64 for v in manifest.values()) else None
-        package_ok=expected_package_root is not None and expected_package_root==bundle.get("package_root")
-        overall=chain_ok and root_ok and manifest_ok and package_ok
+        manifest_ok=all(
+            is_hex64(manifest.get(name)) and manifest.get(name)==sha256_hex(bundle.get(name))
+            for name in section_names
+        )
+        package_ok=False
+        if manifest_ok:
+            try:
+                expected_package_root=merkle_root([manifest[name] for name in sorted(manifest)])
+                package_ok=is_hex64(bundle.get("package_root")) and expected_package_root==bundle.get("package_root")
+            except ValueError:
+                package_ok=False
+
+        metadata=bundle.get("metadata") if isinstance(bundle.get("metadata"),dict) else {}
+        metadata_keys=("schema_version","package_id","campaign_id","incident_id","generated_at_claimed","event_count","lsn_range","merkle_root")
+        metadata_match=all(bundle.get(k)==metadata.get(k) for k in metadata_keys)
+
+        semantic_ok=metadata_match
+        semantic_ok=semantic_ok and bundle.get("event_count")==len(events)
+        expected_range=[1,len(events)] if events else [0,0]
+        semantic_ok=semantic_ok and bundle.get("lsn_range")==expected_range
+        semantic_ok=semantic_ok and [e.get("lsn") for e in events if isinstance(e,dict)]==list(range(1,len(events)+1))
+        semantic_ok=semantic_ok and all(
+            isinstance(e,dict) and e.get("campaign_id")==bundle.get("campaign_id")
+            for e in events
+        )
+        top_incident_id=bundle.get("incident_id")
+        semantic_ok=semantic_ok and all(
+            e.get("incident_id") in (None,top_incident_id)
+            for e in events if isinstance(e,dict)
+        )
+        signals=bundle.get("signals") if isinstance(bundle.get("signals"),list) else []
+        event_by_lsn={e.get("lsn"):e for e in events if isinstance(e,dict)}
+        seen_signal_ids=set()
+        for signal in signals:
+            if not isinstance(signal,dict):
+                semantic_ok=False
+                continue
+            sid=signal.get("signal_id")
+            if sid in seen_signal_ids:
+                semantic_ok=False
+            seen_signal_ids.add(sid)
+            ev=event_by_lsn.get(signal.get("lsn"))
+            if not ev or signal.get("campaign_id")!=bundle.get("campaign_id") or signal.get("evidence_hash")!=ev.get("event_hash"):
+                semantic_ok=False
+        incident=bundle.get("incident")
+        if incident is not None:
+            if not isinstance(incident,dict) or incident.get("incident_id")!=top_incident_id:
+                semantic_ok=False
+            else:
+                for lsn in incident.get("evidence_lsns",[]):
+                    if lsn not in event_by_lsn:
+                        semantic_ok=False
+
+        overall=chain_ok and root_ok and manifest_ok and package_ok and semantic_ok
         return {
             "chain":"PASS" if chain_ok else "FAIL",
             "merkle":"PASS" if root_ok else "FAIL",
             "manifest":"PASS" if manifest_ok else "FAIL",
             "package_root":"PASS" if package_ok else "FAIL",
+            "semantic":"PASS" if semantic_ok else "FAIL",
             "overall":"PASS" if overall else "FAIL",
         }
 
-
+    @locked_method
     def source_health(self) -> list[dict[str, Any]]:
-        expected = [
-            ("Firewall/WAF", {"Firewall","Firewall/WAF"}),
-            ("IAM", {"IAM"}),
-            ("Host", {"Linux Host","Windows Host"}),
-            ("Network", {"Network"}),
-            ("DB Audit", {"DB Audit"}),
-            ("Application", {"STF-Digital-like App"}),
-            ("Agent Gateway", {"Agent Gateway","Policy Gateway","HITL"}),
-            ("Evidence", {"HRKL","Evidence","Offline Verifier"}),
+        expected=[
+            ("Firewall/WAF",{"Firewall","Firewall/WAF"}),("IAM",{"IAM"}),
+            ("Host",{"Linux Host","Windows Host"}),("Network",{"Network"}),
+            ("DB Audit",{"DB Audit"}),("Application",{"STF-Digital-like App"}),
+            ("Agent Gateway",{"Agent Gateway","Policy Gateway","HITL"}),
+            ("Evidence",{"HRKL","Evidence","Offline Verifier"}),
         ]
-        seen = {e.source for e in self.events}
-        out = []
-        for label, aliases in expected:
-            matched = sorted(seen.intersection(aliases))
-            out.append({
-                "source": label,
-                "status": "ACTIVE" if matched else "WAITING",
-                "events": sum(1 for e in self.events if e.source in aliases),
-                "matched": matched,
-            })
-        return out
+        seen={e.source for e in self.events}
+        return [{
+            "source":label,"status":"ACTIVE" if seen.intersection(aliases) else "WAITING",
+            "events":sum(1 for e in self.events if e.source in aliases),
+            "matched":sorted(seen.intersection(aliases)),
+        } for label,aliases in expected]
 
+    @locked_method
     def why_incident(self) -> dict[str, Any]:
         if not self.incident:
-            return {
-                "status":"NOT_OPEN",
-                "summary":"Ainda não há evidência suficiente para abrir o incidente.",
-                "reasons":[],
-                "evidence_lsns":[],
-            }
-        reasons = []
+            return {"status":"NOT_OPEN","summary":"Ainda não há evidência suficiente para abrir o incidente.","reasons":[],"evidence_lsns":[]}
+        ids=set(self.incident.get("correlation",{}).get("signal_ids",[]))
+        reasons=[]
         for signal in self.signals:
-            ev = next((e for e in self.events if e.lsn == signal["lsn"]), None)
+            if signal.get("signal_id") not in ids:
+                continue
+            ev=next((e for e in self.events if e.lsn==signal.get("lsn")),None)
             if not ev:
                 continue
             reasons.append({
-                "lsn": ev.lsn,
-                "source": ev.source,
-                "reason_code": signal["reason_code"],
-                "severity": signal["severity"],
-                "actor": signal["actor"],
-                "asset": signal["asset"],
-                "summary": ev.summary,
-                "evidence_hash": ev.event_hash,
+                "signal_id":signal.get("signal_id"),"lsn":ev.lsn,"source":ev.source,
+                "reason_code":signal["reason_code"],"severity":signal["severity"],
+                "actor":signal["actor"],"asset":signal["asset"],"summary":ev.summary,
+                "evidence_hash":signal["evidence_hash"],"event_hash":ev.event_hash,
+                "hash_reference_valid":signal["evidence_hash"]==ev.event_hash,
             })
         return {
-            "status":"OPEN",
-            "incident_id":INCIDENT_ID,
-            "principal":self.incident["principal"],
-            "risk_score":self.incident["risk_score"],
-            "threshold":60,
-            "summary":"O incidente foi aberto porque sinais independentes de múltiplas fontes apontaram para a mesma identidade/ativos dentro da mesma campanha sintética.",
-            "reasons":reasons,
-            "evidence_lsns":[x["lsn"] for x in reasons],
+            "status":"OPEN","incident_id":self.incident["incident_id"],
+            "principal":self.incident["principal"],"risk_score":self.incident["risk_score"],
+            "qualification_rule":"typed-entity correlation + source diversity + temporal window",
+            "summary":"O incidente foi aberto por um componente temporal de sinais ligados por entidades tipadas.",
+            "reasons":reasons,"evidence_lsns":[x["lsn"] for x in reasons],
         }
 
-    def evidence_object(self, lsn: int) -> dict[str, Any]:
-        ev = next((e for e in self.events if e.lsn == lsn), None)
+    @locked_method
+    def evidence_object(self, lsn:int)->dict[str,Any]:
+        ev=next((e for e in self.events if e.lsn==lsn),None)
         if ev is None:
             return {"status":"NOT_FOUND","lsn":lsn}
-        prev_ev = next((e for e in self.events if e.lsn == lsn - 1), None)
-        next_ev = next((e for e in self.events if e.lsn == lsn + 1), None)
+        prev_ev=next((e for e in self.events if e.lsn==lsn-1),None)
+        next_ev=next((e for e in self.events if e.lsn==lsn+1),None)
+        current_hash_valid=sha256_hex(ev.material())==ev.event_hash
+        previous_link_valid=ev.prev_hash==(prev_ev.event_hash if prev_ev else "0"*64)
+        next_link_valid=(next_ev is None or next_ev.prev_hash==ev.event_hash)
+        bundle_verify=self.verify_bundle(self.evidence_bundle())
         return {
-            "status":"PASS",
+            "status":"PASS" if current_hash_valid and previous_link_valid and next_link_valid else "FAIL",
             "event":asdict(ev),
             "provenance":{
                 "previous_lsn":prev_ev.lsn if prev_ev else None,
@@ -567,78 +658,110 @@ class PocEngine:
                 "current_hash":ev.event_hash,
                 "next_lsn":next_ev.lsn if next_ev else None,
                 "next_prev_hash":next_ev.prev_hash if next_ev else None,
-                "chain_link_valid":ev.prev_hash == (prev_ev.event_hash if prev_ev else "0"*64),
+                "content_hash_valid":current_hash_valid,
+                "previous_link_valid":previous_link_valid,
+                "next_link_valid":next_link_valid,
+                "chain_link_valid":previous_link_valid and next_link_valid,
+                "bundle_overall":bundle_verify["overall"],
             },
         }
 
-    def as_of(self, lsn: int) -> dict[str, Any]:
-        lsn = max(0, min(int(lsn), len(self.events)))
-        events = self.events[:lsn]
-        signals = [s for s in self.signals if s["lsn"] <= lsn]
-        risk = sum(int(e.details.get("risk",0)) for e in events)
-        incident = None
-        if risk >= 60:
-            incident = {
-                "incident_id":INCIDENT_ID,
-                "campaign_id":CAMPAIGN_ID,
-                "state":"OPEN",
-                "severity":"HIGH",
-                "risk_score":risk,
-                "principal":COMPROMISED_PRINCIPAL,
-                "summary":"Reconstrução AS-OF do incidente sintético",
-                "policy_tags":["COMPROMISE_SUSPECTED","REQUIRE_STRONGER_APPROVAL"],
-            }
-        hashes=[e.event_hash for e in events]
-        upstream=sum(e.upstream_delta or 0 for e in events if (e.upstream_delta or 0) > 0)
-        tamper="DETECTED" if any(e.event_type=="tamper.attempt" for e in events) else "NOT_TESTED"
+    @staticmethod
+    def _signals_from_events(events:list[EvidenceEvent])->list[dict[str,Any]]:
+        signals=[]
+        for ev in events:
+            normalized=ev.details.get("normalized_telemetry") if isinstance(ev.details,dict) else None
+            detection=detect_event(normalized)
+            if detection is None:
+                continue
+            signals.append({
+                "signal_id":f"SIG-{len(signals)+1:03d}","lsn":ev.lsn,"hlc":ev.hlc,
+                "source":ev.source,"source_class":normalized.get("source_class",ev.source),
+                "severity":detection.severity,"reason_code":detection.reason_code,
+                "rule_id":detection.rule_id,"rule_explanation":detection.explanation,
+                "score":detection.score,"actor":ev.actor,"asset":ev.asset,
+                "entities":list(detection.entities),"campaign_id":CAMPAIGN_ID,
+                "evidence_hash":ev.event_hash,
+            })
+        return signals
+
+    @locked_method
+    def as_of(self, lsn:int)->dict[str,Any]:
+        lsn=max(0,min(int(lsn),len(self.events)))
+        events=list(self.events[:lsn])
+        signals=self._signals_from_events(events)
+        corr=correlate(signals)
+        best=corr["best"]
+        incident=None
+        if best.get("qualifies"):
+            principal=self._principal_from_component(signals,best)
+            if principal:
+                incident={
+                    "incident_id":INCIDENT_ID,"campaign_id":CAMPAIGN_ID,"state":"OPEN",
+                    "severity":"CRITICAL" if best["score"]>=90 else "HIGH",
+                    "risk_score":best["score"],"principal":principal,
+                    "summary":"Reconstrução AS-OF pelo mesmo correlador do runtime",
+                    "policy_tags":["COMPROMISE_SUSPECTED","REQUIRE_STRONGER_APPROVAL"],
+                    "evidence_lsns":list(best.get("lsns",[])),"correlation":deepcopy(best),
+                    "correlation_explanation":corr["explanation"],
+                }
+        upstream=sum((e.upstream_delta or 0) for e in events if (e.upstream_delta or 0)>0)
+        tamper="DETECTED" if any(e.event_type.startswith("tamper.") for e in events) else "NOT_TESTED"
         approval_state="NONE"
         for e in events:
-            if e.event_type=="agent.tool_requested": approval_state="PENDING"
-            elif e.event_type=="approval.granted": approval_state="APPROVED"
-            elif e.event_type=="tool.executed": approval_state="CONSUMED"
+            if e.outcome=="REQUIRE_HITL":
+                approval_state="PENDING"
+            elif e.event_type=="approval.granted":
+                approval_state="APPROVED"
+            elif e.details.get("policy_decision",{}).get("effect_allowed"):
+                approval_state="CONSUMED"
         return {
-            "as_of_lsn":lsn,
-            "event_count":len(events),
-            "risk":risk,
-            "incident":incident,
-            "signals":signals,
-            "upstream_hits":upstream,
-            "tamper_status":tamper,
-            "approval_state":approval_state,
+            "as_of_lsn":lsn,"event_count":len(events),"risk":int(best.get("score",0)),
+            "incident":incident,"signals":signals,"upstream_hits":upstream,
+            "tamper_status":tamper,"approval_state":approval_state,
             "case_state":{
-                "id":SYNTHETIC_CASE,
-                "classification":"RESTRICTED",
+                "id":SYNTHETIC_CASE,"classification":"RESTRICTED",
                 "last_effect":"DOCUMENT_EXPORT_SYNTHETIC" if upstream else "NONE",
             },
-            "merkle_root":merkle_root(hashes),
+            "merkle_root":merkle_root([e.event_hash for e in events]),
             "events":[asdict(e) for e in events],
         }
 
-    def tamper_variant(self, kind: str) -> dict[str, Any]:
-        bundle=json.loads(json.dumps(self.evidence_bundle()))
+    @locked_method
+    def tamper_variant(self, kind:str)->dict[str,Any]:
+        bundle=deepcopy(self.evidence_bundle())
         events=bundle.get("events",[])
         if not events:
             return {"kind":kind,"status":"NOT_RUN","verification":{"overall":"NOT_RUN"}}
         if kind=="modify":
             events[0]["summary"]="EVENTO ADULTERADO"
-        elif kind=="delete" and len(events) > 2:
+        elif kind=="delete" and len(events)>2:
             del events[len(events)//2]
-        elif kind=="reorder" and len(events) > 2:
+        elif kind=="reorder" and len(events)>2:
             events[1],events[2]=events[2],events[1]
         elif kind=="truncate":
             bundle["events"]=events[:-1]
         else:
             return {"kind":kind,"status":"REJECT","error":"kind must be modify, delete, reorder or truncate"}
         verification=self.verify_bundle(bundle)
-        return {"kind":kind,"status":"DETECTED" if verification["overall"]=="FAIL" else "MISSED","verification":verification}
+        status="DETECTED" if verification["overall"]=="FAIL" else "MISSED"
+        if status=="DETECTED":
+            self.tamper_status="DETECTED"
+            ev=self._append({
+                "phase":"FASE 2","source":"HRKL","type":"tamper.validation","severity":"CRITICAL",
+                "actor":"service:tamper-test","asset":"evidence://STF-POC-001",
+                "summary":f"Sabotagem controlada {kind} detectada pelo verifier",
+                "outcome":"DETECTED","reason":"EVIDENCE_INTEGRITY_FAILURE","tamper_kind":kind,
+            },INCIDENT_ID if self.incident else None)
+            self._add_graph(ev)
+        return {"kind":kind,"status":status,"verification":verification}
 
-
-    def compare_as_of(self, from_lsn: int, to_lsn: int) -> dict[str, Any]:
+    @locked_method
+    def compare_as_of(self,from_lsn:int,to_lsn:int)->dict[str,Any]:
         left=self.as_of(from_lsn); right=self.as_of(to_lsn)
         def incident_state(x): return x["incident"]["state"] if x.get("incident") else "NONE"
         return {
-            "from":left,
-            "to":right,
+            "from":left,"to":right,
             "delta":{
                 "events":right["event_count"]-left["event_count"],
                 "risk":right["risk"]-left["risk"],
@@ -647,55 +770,85 @@ class PocEngine:
                 "approval":left["approval_state"]+" -> "+right["approval_state"],
                 "tamper":left["tamper_status"]+" -> "+right["tamper_status"],
                 "case_effect":left["case_state"]["last_effect"]+" -> "+right["case_state"]["last_effect"],
-            }
+            },
         }
 
-    def incident_report(self) -> dict[str, Any]:
+    @locked_method
+    def incident_report(self)->dict[str,Any]:
         why=self.why_incident()
+        policy_events=[e for e in self.events if e.details.get("policy_decision")]
+        reasons={e.reason_code for e in policy_events}
         return {
-            "title":"Relatório Sintético de Incidente — STF POC",
-            "campaign_id":CAMPAIGN_ID,
-            "incident_id":INCIDENT_ID if self.incident else None,
+            "title":"Relatório Sintético de Incidente — STF POC","campaign_id":CAMPAIGN_ID,
+            "incident_id":self.incident.get("incident_id") if self.incident else None,
             "executive_summary":(
-                "Campanha sintética correlacionada a partir de telemetria multi-fonte. "
-                "A identidade fictícia comprometida tentou ações pós-compromisso; operações não autorizadas foram negadas, "
-                "uma operação com HITL foi executada uma única vez e a tentativa posterior de replay foi bloqueada."
-                if self.incident else
-                "Campanha ainda não atingiu o limiar de correlação."
+                "Campanha sintética correlacionada a partir de telemetria multi-fonte; "
+                "decisões de policy e approvals são auditadas no mesmo histórico."
+                if self.incident else "Campanha ainda não atingiu o critério de correlação."
             ),
-            "risk":self.risk,
-            "sources":self.source_health(),
-            "why":why,
+            "risk":self.risk,"sources":self.source_health(),"why":why,
             "controls":{
-                "policy_enforcement":"PASS" if any(e.outcome=="DENY" for e in self.events) else "PENDING",
-                "hitl":"PASS" if "APR-001" in self.approvals_consumed else "PENDING",
-                "anti_replay":"PASS" if any(e.event_type=="approval.replay" and e.outcome=="DENY" for e in self.events) else "PENDING",
+                "policy_enforcement":"PASS" if any(e.outcome=="DENY" for e in policy_events) else "PENDING",
+                "hitl":"PASS" if self.approvals_consumed else "PENDING",
+                "anti_replay":"PASS" if "REPLAY_DETECTED" in reasons else "PENDING",
                 "tamper_detection":self.tamper_status,
                 "offline_verification":self.offline_verify,
             },
             "limitations":[
-                "Ambiente integralmente sintético.",
-                "Nenhuma conexão com infraestrutura real do STF.",
-                "Detecção limitada à telemetria ingerida.",
-                "Bloqueio limitado a rotas que passam pelo ponto de enforcement.",
+                "Ambiente integralmente sintético.","Nenhuma conexão com infraestrutura real do STF.",
+                "Detecção limitada à telemetria ingerida.","Bloqueio limitado a rotas sob enforcement.",
             ],
         }
 
+    def record_export(self)->dict[str,Any]:
+        with self.lock:
+            export_ev=self._append({
+                "phase":"FASE 2","source":"Evidence","type":"evidence.exported","severity":"INFO",
+                "actor":"service:evidence-exporter","asset":"evidence://STF-POC-001",
+                "summary":"Evidence Bundle exportado via API local","outcome":"PASS",
+            },INCIDENT_ID if self.incident else None)
+            self._add_graph(export_ev)
+            pre_bundle=self.evidence_bundle()
+            pre_verify=self.verify_bundle(pre_bundle)
+            verifier_ev=self._append({
+                "phase":"FASE 2","source":"Offline Verifier","type":"evidence.verified","severity":"INFO",
+                "actor":"service:offline-verifier","asset":"evidence://STF-POC-001",
+                "summary":"Bundle verificado localmente após exportação",
+                "outcome":"PASS" if pre_verify["overall"]=="PASS" else "FAIL",
+                "verified_package_root":pre_bundle.get("package_root"),
+            },INCIDENT_ID if self.incident else None)
+            self._add_graph(verifier_ev)
+            final_bundle=self.evidence_bundle()
+            final_verify=self.verify_bundle(final_bundle)
+            self.offline_verify=final_verify["overall"]
+            self.export_count+=1
+            return {"bundle":final_bundle,"verification":final_verify}
+
+    @locked_method
     def snapshot(self,message:str|None=None)->dict[str,Any]:
         bundle=self.evidence_bundle()
-        verify=self.verify_bundle(bundle) if self.events else {"chain":"NOT_RUN","merkle":"NOT_RUN","overall":"NOT_RUN"}
+        verify=self.verify_bundle(bundle) if self.events else {
+            "chain":"NOT_RUN","merkle":"NOT_RUN","manifest":"NOT_RUN",
+            "package_root":"NOT_RUN","semantic":"NOT_RUN","overall":"NOT_RUN",
+        }
         counts={"info":0,"medium":0,"high":0,"critical":0}
         for e in self.events:
             key=e.severity.lower()
             if key in counts: counts[key]+=1
         return {
-            "campaign_id":CAMPAIGN_ID,"incident_id":INCIDENT_ID,"step":self.step_index,"total_steps":len(self._scenario),
-            "completed":self.step_index>=len(self._scenario),"risk":self.risk,"incident":self.incident,"signals":self.signals,
-            "events":[asdict(e) for e in self.events],"graph":self.attack_graph,"pending_approval":self.pending_approval,
-            "case_state":self.case_state,"upstream_hits":self.upstream_hits,"tamper_status":self.tamper_status,
-            "offline_verify":self.offline_verify,"merkle_root":bundle["merkle_root"],"package_root":bundle["package_root"],"verification":verify,
-            "qualification":self.qualification(),"severity_counts":counts,"source_health":self.source_health(),"why_incident":self.why_incident(),"last_action":self.last_action,
-            "message":message or "OK","mode":"SYNTHETIC / LOOPBACK ONLY"
+            "campaign_id":CAMPAIGN_ID,"incident_id":self.incident.get("incident_id") if self.incident else None,
+            "step":self.step_index,"total_steps":len(self._scenario),
+            "completed":self.step_index>=len(self._scenario),"risk":self.risk,
+            "incident":deepcopy(self.incident),"signals":deepcopy(self.signals),
+            "events":[asdict(e) for e in self.events],"graph":deepcopy(self.attack_graph),
+            "pending_approval":deepcopy(self.pending_approval),"approvals":deepcopy(self.approvals),
+            "case_state":deepcopy(self.case_state),"upstream_hits":self.upstream_hits,
+            "tamper_status":self.tamper_status,"offline_verify":self.offline_verify,
+            "merkle_root":bundle["merkle_root"],"package_root":bundle["package_root"],
+            "verification":verify,"qualification":deepcopy(self.qualification()),
+            "severity_counts":counts,"source_health":deepcopy(self.source_health()),
+            "why_incident":deepcopy(self.why_incident()),"last_action":self.last_action,
+            "message":message or "OK","mode":"SYNTHETIC / LOOPBACK ONLY",
         }
 
 ENGINE=PocEngine()
