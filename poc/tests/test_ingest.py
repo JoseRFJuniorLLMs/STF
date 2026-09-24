@@ -61,9 +61,10 @@ class IngestTests(unittest.TestCase):
         params={"document":"DOC-001","format":"pdf"}
         req=e.submit_action("export_restricted","service-account-17","document://SYNTHETIC/DOC-001",params)
         e.grant_approval(req["pending_approval"]["approval_id"],"human:approver-api")
-        identity=e.submit_action("export_restricted","agent:other","document://SYNTHETIC/DOC-001",params)
+        approval_id=req["pending_approval"]["approval_id"]
+        identity=e.submit_action("export_restricted","agent:other","document://SYNTHETIC/DOC-001",params,approval_id)
         self.assertEqual(identity["decision"]["reason_code"],"IDENTITY_BINDING_MISMATCH")
-        changed=e.submit_action("export_restricted","service-account-17","document://SYNTHETIC/DOC-999",{"document":"DOC-999","format":"pdf"})
+        changed=e.submit_action("export_restricted","service-account-17","document://SYNTHETIC/DOC-999",{"document":"DOC-999","format":"pdf"},approval_id)
         self.assertEqual(changed["decision"]["reason_code"],"PARAMETERS_DIGEST_MISMATCH")
 
 
@@ -136,5 +137,21 @@ class IngestTests(unittest.TestCase):
         e.approvals[aid]["expires_at_epoch"]=0
         result=e.grant_approval(aid,"human:late")
         self.assertEqual(result["reason"],"APPROVAL_EXPIRED")
+
+
+    def test_as_of_preserves_original_incident_after_parallel_campaign(self):
+        e=mod.PocEngine()
+        for kind,raw in telemetry.sample_campaign(): e.ingest_telemetry(kind,raw)
+        original=e.incident["principal"]
+        unrelated=[
+          ("identity",{"event_id":"C-IAM","principal":"parallel","source_ip":"198.51.100.99","context":"new-device","result":"OBSERVED","severity":"HIGH","device_trust":"unknown"}),
+          ("host",{"event_id":"C-HOST","principal":"parallel","host":"p-app","process":"synthetic-worker","os":"Linux","severity":"HIGH"}),
+          ("network",{"event_id":"C-NET","principal":"parallel","src_host":"p-app","dst_host":"p-db","severity":"HIGH"}),
+          ("db",{"event_id":"C-DB","principal":"parallel","database":"p-db","operation":"query","rows":100,"severity":"CRITICAL"}),
+        ]
+        for kind,raw in unrelated: e.ingest_telemetry(kind,raw)
+        historic=e.as_of(len(e.events))
+        self.assertEqual(historic["incident"]["principal"],original)
+        self.assertEqual(historic["incident"]["principal"],e.incident["principal"])
 
 if __name__=="__main__": unittest.main()
