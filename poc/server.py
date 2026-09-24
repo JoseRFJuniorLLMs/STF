@@ -197,6 +197,35 @@ class PocEngine:
             }
             self.last_action="Incidente correlacionado e aberto"
 
+
+    def ingest_telemetry(self, kind: str, raw: dict[str, Any]) -> dict[str, Any]:
+        with self.lock:
+            normalized=normalize(kind,raw)
+            detection=detect_event(normalized)
+            source_names={
+                "EDGE":"Firewall/WAF","IDENTITY":"IAM","HOST":"Linux Host",
+                "NETWORK":"Network","DATABASE":"DB Audit","APPLICATION":"STF-Digital-like App",
+            }
+            source=source_names.get(normalized.get("source_class"),normalized.get("source_system","Telemetry"))
+            spec={
+                "phase":"FASE 1","source":source,"type":normalized.get("activity","telemetry.event"),
+                "severity":detection.severity if detection else normalized.get("severity","INFO"),
+                "actor":normalized.get("actor","unknown"),"asset":normalized.get("asset","unknown"),
+                "summary":detection.explanation if detection else f"Telemetria {kind} normalizada sem sinal de segurança",
+                "outcome":normalized.get("outcome","OBSERVED"),
+                "raw_telemetry":raw,"normalized_telemetry":normalized,"ingest_mode":"external_loopback",
+            }
+            ev=self._append(spec,INCIDENT_ID if self.incident else None)
+            if detection is not None:
+                self.risk += int(detection.score)
+                self._signal(ev,detection)
+            self._maybe_open_incident()
+            if self.incident and ev.incident_id is None:
+                ev.incident_id=INCIDENT_ID; ev.event_hash=sha256_hex(ev.material())
+            self._add_graph(ev)
+            self.last_action=f"Telemetria externa local ingerida: {kind}"
+            return {"ingested":asdict(ev),"detection":detection.to_dict() if detection else None,"state":self.snapshot()}
+
     def step(self) -> dict[str, Any]:
         with self.lock:
             if self.step_index >= len(self._scenario):
@@ -538,6 +567,14 @@ class Handler(BaseHTTPRequestHandler):
         raw=json.dumps(obj,ensure_ascii=False,indent=2).encode("utf-8")
         self.send_response(status); self.send_header("Content-Type","application/json; charset=utf-8")
         self.send_header("Content-Length",str(len(raw))); self.send_header("Cache-Control","no-store"); self.end_headers(); self.wfile.write(raw)
+    def _read_json_body(self,max_bytes:int=65536)->dict[str,Any]:
+        try: length=int(self.headers.get("Content-Length","0"))
+        except ValueError: raise ValueError("invalid content length")
+        if length<=0 or length>max_bytes: raise ValueError("body size out of bounds")
+        raw=self.rfile.read(length)
+        value=json.loads(raw.decode("utf-8"))
+        if not isinstance(value,dict): raise ValueError("JSON body must be an object")
+        return value
     def do_GET(self)->None:
         parsed=urlparse(self.path)
         path=parsed.path
@@ -592,6 +629,13 @@ class Handler(BaseHTTPRequestHandler):
         parsed=urlparse(self.path)
         path=parsed.path
         query=parse_qs(parsed.query)
+        if path=="/api/telemetry":
+            kind=query.get("kind",[""])[0]
+            try:
+                raw=self._read_json_body()
+                return self._json(ENGINE.ingest_telemetry(kind,raw),201)
+            except (ValueError,KeyError,TypeError) as e:
+                return self._json({"error":"invalid_telemetry","detail":str(e)},400)
         if path=="/api/reset": ENGINE.reset(); return self._json(ENGINE.snapshot("Ambiente reiniciado"))
         if path=="/api/step": return self._json(ENGINE.step())
         if path=="/api/run": return self._json(ENGINE.run_all())
