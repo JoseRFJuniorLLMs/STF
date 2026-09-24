@@ -14,6 +14,8 @@ A POC demonstra uma única campanha de ataque sintética do primeiro sinal obser
   <img src="assets/campanha-adversarial-sintetica.svg" alt="Campanha adversarial sintética em duas fases integrada ao HeraclitusDB" width="100%" />
 </p>
 
+> **Estado de implementação:** consulte [IMPLEMENTATION-STATUS.md](docs/IMPLEMENTATION-STATUS.md) para distinguir o que é calculado pelo código da POC, o que permanece sintético e o que depende de integração com o HeraclitusDB real.
+
 ## POC executável e dashboard
 
 A implementação funcional está em [`poc/`](poc/README.md). Ela usa somente a biblioteca padrão do Python e foi desenhada para rodar **apenas em loopback**, sem scanner, exploit real, credencial institucional ou conexão com infraestrutura do STF.
