@@ -21,7 +21,7 @@ class DetectorTests(unittest.TestCase):
     def test_detection_contains_entities_and_explanation(self):
         kind,raw=telemetry.sample_campaign()[1]
         d=evaluate(telemetry.normalize(kind,raw))
-        self.assertIn("service-account-17",d.entities)
+        self.assertIn("principal:service-account-17",d.entities)
         self.assertTrue(d.explanation)
         self.assertTrue(d.rule_id.startswith("DET-"))
 
