@@ -105,4 +105,36 @@ class IngestTests(unittest.TestCase):
         self.assertEqual(e.incident["principal"],original_principal)
         self.assertIn("principal:"+original_principal,e.incident["correlation"]["entities"])
 
+
+    def test_case_write_hitl_path_for_non_compromised_principal(self):
+        e=mod.PocEngine()
+        for kind,raw in telemetry.sample_campaign(): e.ingest_telemetry(kind,raw)
+        principal="safe-operator"
+        params={"field":"metadata"}
+        req=e.submit_action("case_write",principal,mod.SYNTHETIC_CASE,params)
+        self.assertEqual(req["decision"]["outcome"],"REQUIRE_HITL")
+        approval_id=req["pending_approval"]["approval_id"]
+        self.assertEqual(e.grant_approval(approval_id,"human:approver")["status"],"APPROVED")
+        executed=e.submit_action("case_write",principal,mod.SYNTHETIC_CASE,params)
+        self.assertTrue(executed["decision"]["effect_allowed"])
+        self.assertEqual(executed["event"]["outcome"],"PASS")
+
+    def test_multiple_pending_approvals_do_not_overwrite_each_other(self):
+        e=mod.PocEngine()
+        a=e.submit_action("export_restricted","p1","document://SYNTHETIC/A",{"document":"A"})
+        b=e.submit_action("export_restricted","p2","document://SYNTHETIC/B",{"document":"B"})
+        aid=a["pending_approval"]["approval_id"]; bid=b["pending_approval"]["approval_id"]
+        self.assertNotEqual(aid,bid)
+        self.assertIn(aid,e.approvals); self.assertIn(bid,e.approvals)
+        self.assertEqual(e.approvals[aid]["principal"],"p1")
+        self.assertEqual(e.approvals[bid]["principal"],"p2")
+
+    def test_expired_pending_approval_cannot_be_granted(self):
+        e=mod.PocEngine()
+        req=e.submit_action("export_restricted","p1","document://SYNTHETIC/A",{"document":"A"})
+        aid=req["pending_approval"]["approval_id"]
+        e.approvals[aid]["expires_at_epoch"]=0
+        result=e.grant_approval(aid,"human:late")
+        self.assertEqual(result["reason"],"APPROVAL_EXPIRED")
+
 if __name__=="__main__": unittest.main()
