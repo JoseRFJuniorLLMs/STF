@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!python
 """STF POC - synthetic two-phase cyber campaign dashboard.
 
 No external dependencies. No network calls. No offensive payloads.

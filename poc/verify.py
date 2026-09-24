@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!python
 """Independent offline verifier for STF POC Evidence Bundle."""
 import argparse, hashlib, json
 from pathlib import Path
