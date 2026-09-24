@@ -111,7 +111,8 @@ const FIXED_INFRA_EDGES = [
 // ========================================================
 async function api(path, opts = {}) {
   const headers = { 'Content-Type': 'application/json', 'X-STF-POC': '1', ...(opts.headers || {}) };
-  const r = await fetch(path, { ...opts, headers });
+  // Caminho relativo: funciona na raiz (local) e atrás do nginx em /stf/
+  const r = await fetch(path.replace(/^\//, ''), { ...opts, headers });
   if (!r.ok) throw new Error('HTTP ' + r.status);
   return r.json();
 }
@@ -187,7 +188,8 @@ function showAttackHint(attack, ev, equipCounter) {
 
   const outcomeBadge = $('#hintOutcome');
   outcomeBadge.textContent = outcome + (reasonCode ? ` [${reasonCode}]` : '');
-  outcomeBadge.className = 'hint-outcome-badge ' + (outcome === 'DENY' || outcome === 'BLOCKED' ? 'DENY' : outcome === 'REQUIRE_HITL' ? 'REQUIRE_HITL' : outcome === 'DETECTED' ? 'DENY' : 'PASS');
+  // Legenda única: verde = bloqueado/detetado (não invadiu), roxo = passou, âmbar = aguarda aprovação
+  outcomeBadge.className = 'hint-outcome-badge ' + (outcome === 'DENY' || outcome === 'BLOCKED' || outcome === 'DETECTED' ? 'DENY' : outcome === 'REQUIRE_HITL' ? 'REQUIRE_HITL' : outcome === 'PASS' || outcome === 'ALLOW' ? 'PASS' : 'INFO');
 
   const upstreamBadge = $('#hintUpstream');
   upstreamBadge.textContent = `upstream=${upstreamDelta}`;
@@ -196,8 +198,8 @@ function showAttackHint(attack, ev, equipCounter) {
   const badge = $('#hintBadge');
   if (outcome === 'DENY' || outcome === 'BLOCKED') {
     h.className = 'attack-hint show deny';
-    badge.textContent = '🛑 ACESSO INDEVIDO BLOQUEADO';
-    badge.style.color = 'var(--gov-red)';
+    badge.textContent = '🛡️ ATAQUE BLOQUEADO — NÃO INVADIU';
+    badge.style.color = 'var(--legend-blocked)';
     $('#hintDesc').textContent = `Invasão contra ${eqName} interceptada com sucesso! Tentativa #${attempts} neutralizada com efeito zero na rede judicial às ${dt}.`;
   } else if (outcome === 'REQUIRE_HITL') {
     h.className = 'attack-hint show hitl';
@@ -206,8 +208,8 @@ function showAttackHint(attack, ev, equipCounter) {
     $('#hintDesc').textContent = `Operação de risco contra ${eqName} exige aprovação formal de gabinete (HITL) para prosseguir às ${dt}.`;
   } else if (outcome === 'DETECTED') {
     h.className = 'attack-hint show deny';
-    badge.textContent = '🚨 FRAUDE / SABOTAGEM DETECTADA';
-    badge.style.color = 'var(--gov-red)';
+    badge.textContent = '🛡️ SABOTAGEM DETECTADA — NÃO INVADIU';
+    badge.style.color = 'var(--legend-blocked)';
     $('#hintDesc').textContent = `Tentativa de adulteração detectada pelo elo criptográfico Merkle da trilha HRKL às ${dt}.`;
   } else {
     h.className = 'attack-hint show pass';
@@ -479,10 +481,10 @@ window.showNodeHintBottomRight = function(nodeId, friendlyName, kind) {
   if (outcomeBadge) {
     if (counter && (counter.attempts > 0 || counter.unauthorized_blocked > 0)) {
       outcomeBadge.textContent = `${counter.attempts} Tentativas | ${counter.unauthorized_blocked} Bloqueios`;
-      outcomeBadge.className = 'hint-outcome-badge ' + (counter.unauthorized_blocked > 0 ? 'DENY' : 'PASS');
+      outcomeBadge.className = 'hint-outcome-badge ' + (counter.attempts > counter.unauthorized_blocked ? 'PASS' : 'DENY');
     } else {
       outcomeBadge.textContent = '100% ÍNTEGRO';
-      outcomeBadge.className = 'hint-outcome-badge PASS';
+      outcomeBadge.className = 'hint-outcome-badge DENY';
     }
   }
 
@@ -512,7 +514,10 @@ window.hideNodeHintBottomRight = function() {
 // POPUP DO NÚMERO DO ATAQUE NO NÓ DO GRAFO (APARECE E SOME)
 // ========================================================
 const activeNodeAttacks = new Map(); // nodeId -> { attackNum, text, title, expireTime }
-const nodeAttackCounts = new Map(); // nodeId -> count of attacks suffered
+const nodeAttackCounts = new Map(); // nodeId -> disparos vistos nesta sessão do browser
+const serverNodeTotals = new Map(); // nodeId -> tentativas acumuladas no servidor (equipment_counters)
+const serverNodeBlocked = new Map(); // nodeId -> tentativas bloqueadas no servidor
+const localNodeOutcomes = new Map(); // nodeId -> { blocked, passed } vistos nesta sessão
 
 function syncNodeAttackCountsFromState(s) {
   if (!s) return;
@@ -538,13 +543,56 @@ function syncNodeAttackCountsFromState(s) {
     hdb_rest: 'asset:heraclitusdb'
   };
 
+  // Soma as tentativas de todos os equipamentos que caem no mesmo nó (ex.: hdb_* → HeraclitusDB)
+  const totals = new Map();
+  const blocked = new Map();
   for (const [eqId, eqData] of Object.entries(counters)) {
     const nodeId = equipToNode[eqId];
     if (nodeId && eqData && typeof eqData.attempts === 'number') {
-      const current = nodeAttackCounts.get(nodeId) || 0;
-      nodeAttackCounts.set(nodeId, Math.max(current, eqData.attempts));
+      totals.set(nodeId, (totals.get(nodeId) || 0) + eqData.attempts);
+      blocked.set(nodeId, (blocked.get(nodeId) || 0) + (eqData.unauthorized_blocked || 0));
     }
   }
+  serverNodeTotals.clear();
+  for (const [nodeId, total] of totals) serverNodeTotals.set(nodeId, total);
+  serverNodeBlocked.clear();
+  for (const [nodeId, b] of blocked) serverNodeBlocked.set(nodeId, b);
+}
+
+// Total mostrado no nó: o acumulado do servidor já inclui os disparos locais, por isso é o maior dos dois (não a soma)
+function nodeAttackTotal(nodeId) {
+  return Math.max(serverNodeTotals.get(nodeId) || 0, nodeAttackCounts.get(nodeId) || 0);
+}
+
+// Legenda do painel: vermelho = tentativa, verde = bloqueado (não invadiu), roxo = não bloqueado
+const BLOCKED_OUTCOMES = new Set(['DENY', 'BLOCKED', 'DETECTED', 'REJECTED', 'FAIL']);
+const PASSED_OUTCOMES = new Set(['PASS', 'ALLOW', 'MISSED', 'EXECUTED']);
+
+function outcomeOf(res) {
+  const ev = res?.event;
+  // Mesma regra do hint: sem outcome, o oráculo "pass" do teste HeraclitusDB significa defesa bloqueou
+  const o = ev?.outcome || res?.outcome || (ev?.oracle_verdict ? (ev.oracle_verdict === 'pass' ? 'DENY' : 'PASS') : '');
+  return String(o).toUpperCase();
+}
+
+function recordNodeOutcome(nodeId, outcome) {
+  const o = String(outcome || '').toUpperCase();
+  if (!nodeId || !o) return;
+  const cur = localNodeOutcomes.get(nodeId) || { blocked: 0, passed: 0 };
+  if (BLOCKED_OUTCOMES.has(o)) cur.blocked++;
+  else if (PASSED_OUTCOMES.has(o)) cur.passed++;
+  localNodeOutcomes.set(nodeId, cur);
+}
+
+// Bloqueados e não bloqueados do nó: servidor quando o nó tem contadores, senão o visto nesta sessão
+function nodeOutcomeTotals(nodeId) {
+  const local = localNodeOutcomes.get(nodeId) || { blocked: 0, passed: 0 };
+  if (serverNodeTotals.has(nodeId)) {
+    const attempts = serverNodeTotals.get(nodeId) || 0;
+    const blocked = Math.max(serverNodeBlocked.get(nodeId) || 0, local.blocked);
+    return { blocked, passed: Math.max(0, attempts - blocked, local.passed) };
+  }
+  return local;
 }
 
 function findNodeIdForTarget(target) {
@@ -587,8 +635,9 @@ function findNodeIdForTarget(target) {
   return null;
 }
 
-function triggerNodeAttackPopup(targetId, attackNum, title) {
+function triggerNodeAttackPopup(targetId, attackNum, title, outcome) {
   if (!targetId) return;
+  recordNodeOutcome(targetId, outcome);
   const now = Date.now();
   const text = typeof attackNum === 'number' ? `Ataque #${String(attackNum).padStart(2, '0')}` : `Ataque #${attackNum}`;
   activeNodeAttacks.set(targetId, {
@@ -834,8 +883,10 @@ function getEdgeInfo(edge, s, currentStep) {
   }
 
   const ev = (s.events && lsn) ? s.events.find(e => e.lsn === lsn) : null;
-  const att = lsn ? ATTACKS[lsn - 1] : null;
-  const isCurrentAttack = Boolean(currentStep && lsn === currentStep);
+  const att = lsn && lsn <= ATTACKS.length ? ATTACKS[lsn - 1] : null;
+  // Campanha: o passo atual; ataques do menu: o LSN real acabado de disparar
+  const isCampaignStep = Boolean(currentStep && lsn === currentStep && lsn <= ATTACKS.length);
+  const isCurrentAttack = isCampaignStep || isLiveAttackLsn(lsn);
 
   let icon = '⚡';
   let badgeColor = '#0c326f';
@@ -847,17 +898,23 @@ function getEdgeInfo(edge, s, currentStep) {
     badgeBg = '#fdebee';
   } else if (ev) {
     if (ev.outcome === 'DENY') {
-      icon = '🛑';
-      badgeColor = '#c9182b';
-      badgeBg = '#fdebee';
+      // Bloqueado = não invadiu (verde, igual à legenda dos gráficos)
+      icon = '🛡️';
+      badgeColor = '#2fa66a';
+      badgeBg = '#e9f7ef';
     } else if (ev.outcome === 'REQUIRE_HITL') {
       icon = '⚠️';
       badgeColor = '#b87704';
       badgeBg = '#fff8e8';
     } else if (ev.outcome === 'DETECTED') {
-      icon = '🚨';
-      badgeColor = '#c9182b';
-      badgeBg = '#fdebee';
+      icon = '🛡️';
+      badgeColor = '#2fa66a';
+      badgeBg = '#e9f7ef';
+    } else if (ev.outcome === 'PASS' || ev.outcome === 'ALLOW' || ev.outcome === 'MISSED') {
+      // Chegou ao alvo = invadiu (roxo)
+      icon = '⚠️';
+      badgeColor = '#7a3fbf';
+      badgeBg = '#f3ecfb';
     } else if (ev.actor && ev.actor.includes('human')) {
       icon = '✍️';
       badgeColor = '#147a24';
@@ -902,10 +959,88 @@ function getEdgeInfo(edge, s, currentStep) {
 // ========================================================
 // RENDERIZAÇÃO DO GRAFO (REDE FIXA + ATAQUES DINÂMICOS)
 // ========================================================
+// ========================================================
+// CAMINHO DE ATAQUE "AO VIVO" (MESMO EFEITO DA CAMPANHA PARA OS ATAQUES DO MENU)
+// ========================================================
+const liveAttackLsns = new Map(); // lsn -> expireTime
+
+function markLiveAttackLsn(lsn) {
+  const n = Number(lsn);
+  if (!Number.isFinite(n) || n <= 0) return;
+  liveAttackLsns.set(n, Date.now() + 3500);
+}
+
+function isLiveAttackLsn(lsn) {
+  const exp = liveAttackLsns.get(lsn);
+  if (!exp) return false;
+  if (exp > Date.now()) return true;
+  liveAttackLsns.delete(lsn);
+  return false;
+}
+
+// Os eventos dos ataques do menu trazem asset "asset:x" e o servidor prefixa de novo
+// ("asset:asset:x"); os endpoints reais do HeraclitusDB vêm como URL. Normaliza tudo
+// para o nó fixo da rede, para o caminho do ataque ligar ao componente real.
+const FIXED_NODE_IDS = new Set();
+function canonicalNodeId(id) {
+  if (!id || !id.startsWith('asset:')) return id;
+  let bare = id.slice('asset:'.length);
+  while (bare.startsWith('asset:')) bare = bare.slice('asset:'.length);
+  const direct = `asset:${bare}`;
+  if (FIXED_NODE_IDS.has(direct)) return direct;
+  const mapped = findNodeIdForTarget(bare);
+  return mapped && FIXED_NODE_IDS.has(mapped) ? mapped : direct;
+}
+
+// Mantém só os eventos mais recentes (e quem está ligado a eles) para o grafo ficar legível
+const MAX_GRAPH_EVENTS = 18;
+function buildDynamicGraph(s) {
+  if (!FIXED_NODE_IDS.size) FIXED_INFRA_NODES.forEach(n => FIXED_NODE_IDS.add(n.id));
+
+  const nodesById = new Map();
+  for (const n of s?.graph?.nodes || []) {
+    const id = canonicalNodeId(n.id);
+    if (!nodesById.has(id)) nodesById.set(id, { ...n, id });
+  }
+
+  const seen = new Set();
+  const edges = [];
+  for (const e of s?.graph?.edges || []) {
+    const from = canonicalNodeId(e.from);
+    const to = canonicalNodeId(e.to);
+    const key = `${from}|${to}|${e.type}`;
+    if (from === to || seen.has(key)) continue;
+    seen.add(key);
+    edges.push({ ...e, from, to });
+  }
+
+  // Ordem de chegada no grafo do servidor (a campanha usa LSN local e o menu o LSN real do ledger)
+  const recentEvents = [...nodesById.values()]
+    .filter(n => n.kind === 'event')
+    .slice(-MAX_GRAPH_EVENTS);
+  // Só um salto a partir dos eventos recentes (senão o atacante puxa todos os eventos antigos)
+  const recentIds = new Set(recentEvents.map(n => n.id));
+  const keep = new Set(recentIds);
+  for (const e of edges) {
+    if (recentIds.has(e.from)) keep.add(e.to);
+    if (recentIds.has(e.to)) keep.add(e.from);
+  }
+  for (const n of nodesById.values()) if (n.kind === 'incident') keep.add(n.id);
+
+  return {
+    nodes: [...nodesById.values()].filter(n => keep.has(n.id)),
+    edges: edges.filter(e => keep.has(e.from) && keep.has(e.to))
+  };
+}
+
+// Cores da legenda única (iguais às dos gráficos em styles.css)
+const LEGEND = { attack: '#c9182b', blocked: '#2fa66a', blockedText: '#1d7a4a', breached: '#7a3fbf' };
+
 function renderGraph(s) {
   const e = $('#graph');
-  const rawNodes = s?.graph?.nodes || [];
-  const rawEdges = s?.graph?.edges || [];
+  const dyn = buildDynamicGraph(s);
+  const rawNodes = dyn.nodes;
+  const rawEdges = dyn.edges;
 
   // Botão de tela cheia
   const fsBtn = $('#fullscreenGraphBtn');
@@ -965,8 +1100,8 @@ function renderGraph(s) {
   let nextIdx = FIXED_INFRA_NODES.length;
   const activeIds = new Set(FIXED_INFRA_NODES.map(n => n.id));
 
-  const dynamicSlice = rawNodes.slice(-24);
-  dynamicSlice.forEach(n => {
+  // buildDynamicGraph já limitou aos eventos recentes
+  rawNodes.forEach(n => {
     activeIds.add(n.id);
     if (simNodes.has(n.id)) return;
 
@@ -1046,7 +1181,8 @@ function renderGraph(s) {
     const edgeInfo = getEdgeInfo(x, s, currentStep);
     const hasNodeAttack = (activeNodeAttacks.has(x.from) && activeNodeAttacks.get(x.from).expireTime > now) ||
                           (activeNodeAttacks.has(x.to) && activeNodeAttacks.get(x.to).expireTime > now);
-    const isAttack = edgeInfo.isCurrentAttack || hasNodeAttack;
+    // Acende o caminho do ataque atual e a rede até ao componente atingido (não os eventos antigos desse nó)
+    const isAttack = edgeInfo.isCurrentAttack || (hasNodeAttack && x.isInfra);
 
     return `
       <g class="graph-edge-group ${isAttack ? 'active-attack-edge' : ''} ${x.isInfra ? 'infra-edge' : 'attack-edge'}">
@@ -1075,31 +1211,38 @@ function renderGraph(s) {
     const isTargeted = currentAttack && (n.label === currentAttack.target || n.id.includes(currentAttack.target));
     const attackPopup = activeNodeAttacks.get(n.id);
     const hasActiveAttack = attackPopup && attackPopup.expireTime > now;
-    const attackCount = nodeAttackCounts.get(n.id) || 0;
+    const attackCount = nodeAttackTotal(n.id);
 
-    // Cores dinâmicas de ataque: componente fica vermelho e conta os ataques
+    // Legenda: vermelho = a ser atacado agora; depois fica verde se tudo foi bloqueado
+    // (não invadiu) ou roxo se algum ataque chegou ao alvo (invadiu)
     const isUnderAttackNow = Boolean(isTargeted || hasActiveAttack);
     const hasBeenAttacked = attackCount > 0;
+    const outcomes = nodeOutcomeTotals(n.id);
+    const wasBreached = outcomes.passed > 0;
 
     let nodeFill = n.style.fill;
     let nodeStroke = n.style.stroke;
     let nodeStrokeWidth = 2;
 
     if (isUnderAttackNow) {
-      nodeFill = '#c9182b'; // FICA VERMELHO VIBRANTE DURANTE O ATAQUE
+      nodeFill = LEGEND.attack;
       nodeStroke = '#ffffff';
       nodeStrokeWidth = 3.5;
+    } else if (hasBeenAttacked && wasBreached) {
+      nodeFill = '#f3ecfb';
+      nodeStroke = LEGEND.breached;
+      nodeStrokeWidth = 3;
     } else if (hasBeenAttacked) {
-      nodeFill = '#ffebee'; // FUNDO ALERTA VERMELHO CONTÍNUO
-      nodeStroke = '#c9182b'; // BORDA VERMELHA
-      nodeStrokeWidth = 2.8;
+      nodeFill = '#e9f7ef';
+      nodeStroke = LEGEND.blocked;
+      nodeStrokeWidth = 3;
     } else if (isSelected) {
       nodeStroke = '#df9b15';
       nodeStrokeWidth = 3;
     }
 
     const countStr = String(attackCount);
-    const pillW = countStr.length > 2 ? countStr.length * 8 + 8 : 22;
+    const pillW = Math.max(22, countStr.length * 7 + 12);
 
     return `
       <g class="graph-node ${n.isFixed ? 'fixed-network-node' : 'dynamic-attack-node'} ${isUnderAttackNow ? 'targeted-node attack-active-now' : ''} ${hasBeenAttacked ? 'node-has-attacks' : ''}" 
@@ -1139,20 +1282,38 @@ function renderGraph(s) {
           ${esc(short(n.friendlyName, 22))}
         </text>
 
-        <!-- SUBRÓTULO COM CONTAGEM DE ATAQUES -->
+        <!-- SUBRÓTULO: TENTATIVAS (VERMELHO) · BLOQUEADOS (VERDE ✓) · INVADIU (ROXO) -->
         ${hasBeenAttacked ? `
-          <text x="0" y="${n.r + 26}" text-anchor="middle" font-size="9.5" font-weight="900" fill="#c9182b" class="attack-count-sublabel">
-            ${attackCount} ${attackCount === 1 ? 'ataque' : 'ataques'}
+          <text x="0" y="${n.r + 26}" text-anchor="middle" font-size="9.5" font-weight="900" class="attack-count-sublabel">
+            <tspan fill="${LEGEND.attack}">${attackCount} ${attackCount === 1 ? 'ataque' : 'ataques'}</tspan>${outcomes.blocked ? `<tspan fill="${LEGEND.blockedText}"> · ✓${outcomes.blocked} bloq.</tspan>` : ''}${wasBreached ? `<tspan fill="${LEGEND.breached}"> · ${outcomes.passed} invadiu</tspan>` : ''}
           </text>
         ` : ''}
 
-        <!-- CONTADOR DE ATAQUES NO COMPONENTE (FICA VERMELHO E CONTA) -->
+        <!-- CONTADORES NO COMPONENTE: tentativas (vermelho, direita) e bloqueados (verde ✓, esquerda) -->
         ${hasBeenAttacked ? `
           <g class="node-attack-counter-badge ${isUnderAttackNow ? 'counter-pulse-anim' : ''}" transform="translate(${n.r * 0.72}, ${-n.r * 0.72})">
-            <rect x="${-pillW / 2}" y="-10" width="${pillW}" height="20" rx="10" fill="#c9182b" stroke="#ffffff" stroke-width="2" class="popup-rect-shadow" />
+            <title>${attackCount} tentativas de ataque</title>
+            <rect x="${-pillW / 2}" y="-10" width="${pillW}" height="20" rx="10" fill="${LEGEND.attack}" stroke="#ffffff" stroke-width="2" class="popup-rect-shadow" />
             <text x="0" y="0" text-anchor="middle" dominant-baseline="central" fill="#ffffff" font-size="11" font-weight="900" font-family="ui-monospace, Consolas, monospace">
               ${attackCount}
             </text>
+          </g>
+        ` : ''}
+        ${outcomes.blocked ? (() => {
+          const bStr = `✓${outcomes.blocked}`;
+          const bW = Math.max(26, bStr.length * 7 + 10);
+          return `
+          <g class="node-blocked-badge" transform="translate(${-n.r * 0.72}, ${-n.r * 0.72})">
+            <title>${outcomes.blocked} bloqueados — não invadiu</title>
+            <rect x="${-bW / 2}" y="-10" width="${bW}" height="20" rx="10" fill="${LEGEND.blocked}" stroke="#ffffff" stroke-width="2" />
+            <text x="0" y="0" text-anchor="middle" dominant-baseline="central" fill="#ffffff" font-size="11" font-weight="900" font-family="ui-monospace, Consolas, monospace">${bStr}</text>
+          </g>`;
+        })() : ''}
+        ${wasBreached ? `
+          <g class="node-breached-badge" transform="translate(${n.r * 0.72}, ${n.r * 0.72})">
+            <title>${outcomes.passed} chegaram ao alvo — invadiu</title>
+            <rect x="-12" y="-10" width="24" height="20" rx="10" fill="${LEGEND.breached}" stroke="#ffffff" stroke-width="2" />
+            <text x="0" y="0" text-anchor="middle" dominant-baseline="central" fill="#ffffff" font-size="11" font-weight="900" font-family="ui-monospace, Consolas, monospace">${outcomes.passed}</text>
           </g>
         ` : ''}
 
@@ -1175,6 +1336,11 @@ function renderGraph(s) {
       <g class="graph-edges-layer">${linesAndBadges}</g>
       <g class="graph-nodes-layer">${circles}</g>
     </svg>
+    <div class="graph-legend" aria-label="Legenda do grafo">
+      <span class="lg-item"><span class="lg-dot" style="background:${LEGEND.attack}">17</span>tentativas de ataque</span>
+      <span class="lg-item"><span class="lg-dot" style="background:${LEGEND.blocked}">✓</span>bloqueado — não invadiu</span>
+      <span class="lg-item"><span class="lg-dot" style="background:${LEGEND.breached}">2</span>chegou ao alvo — invadiu</span>
+    </div>
   `;
 
   // Configurar eventos de arrastar nós
@@ -1187,6 +1353,8 @@ function renderGraph(s) {
       if (!nodeId) return;
 
       draggedNodeId = nodeId;
+      dragStart = { x: evt.clientX, y: evt.clientY };
+      dragMoved = false;
       nodeG.classList.add('dragging');
       simAlpha = 0.85;
       startPhysicsLoop();
@@ -1198,9 +1366,12 @@ function renderGraph(s) {
   startPhysicsLoop();
 }
 
-// ARRASTAR NÓS COM O MOUSE
+// ARRASTAR NÓS COM O MOUSE (um arrasto não conta como clique de seleção)
+let dragStart = null;
+let dragMoved = false;
 window.addEventListener('mousemove', evt => {
   if (!draggedNodeId) return;
+  if (dragStart && Math.hypot(evt.clientX - dragStart.x, evt.clientY - dragStart.y) > 5) dragMoved = true;
   const svg = document.getElementById('graphSvg');
   if (!svg) return;
 
@@ -1228,9 +1399,12 @@ window.addEventListener('mouseup', () => {
 
 // SELEÇÃO DE NÓ NO GRAFO
 window.selectGraphNode = function(id, kind, label) {
+  if (dragMoved) { dragMoved = false; return; }
   selectedNode = { id, kind, label };
   $('#focusAsset').textContent = label;
   $('#focusNarrative').textContent = `Nó selecionado na infraestrutura: [${kind.toUpperCase()}] ${label}.`;
+  setNodeFilter(id, label);
+  if (!nodeFilter) selectedNode = null;
   if (state) renderGraph(state);
 };
 
@@ -1301,6 +1475,7 @@ async function loadRealHeraclitusTrail() {
       // Ordena por LSN decrescente para os mais recentes ficarem no topo
       hdbAllEvents = [...events].sort((a, b) => (Number(b.lsn) || 0) - (Number(a.lsn) || 0));
       renderHdbPage();
+      renderIncidentCharts();
     } else {
       if (badge) {
         badge.textContent = 'OFFLINE (WSL 8080)';
@@ -1356,11 +1531,18 @@ function renderHdbPage() {
     }
 
     const resUpper = (ev.result || 'UNKNOWN').toUpperCase();
+    const decision = classifyDecision(ev);
     let badgeClass = 'PASS';
     let label = resUpper;
-    if (resUpper === 'DENY' || resUpper === 'BLOCKED' || ev.blocked) {
+    if (decision === 'PASS') {
+      badgeClass = 'PASS';
+      label = 'CHEGOU AO ALVO';
+    } else if (decision === 'DENY') {
       badgeClass = 'DENY';
       label = 'BLOQUEADO';
+    } else if (decision === 'OBSERVED' && resUpper !== 'OBSERVED') {
+      badgeClass = 'OBSERVED';
+      label = 'SONDAGEM SEM EFEITO';
     } else if (resUpper === 'REQUIRE_HITL') {
       badgeClass = 'REQUIRE_HITL';
       label = 'RETIDO (HITL)';
@@ -1372,7 +1554,7 @@ function renderHdbPage() {
       label = 'OBSERVADO';
     } else if (resUpper === 'PASS' || resUpper === 'ALLOW') {
       badgeClass = 'PASS';
-      label = 'LIBERADO';
+      label = 'CHEGOU AO ALVO';
     } else if (resUpper === 'INCONCLUSIVE') {
       badgeClass = 'INCONCLUSIVE';
       label = 'INCONCLUSIVO';
@@ -1482,7 +1664,7 @@ window.executeAttackTo = async function(targetStep) {
       const currentAtt = ATTACKS[r.step - 1];
       const lastEv = r.events && r.events.length ? r.events[r.events.length - 1] : null;
       const targetNodeId = findNodeIdForTarget(currentAtt?.target);
-      if (targetNodeId && currentAtt) triggerNodeAttackPopup(targetNodeId, currentAtt.step, currentAtt.title);
+      if (targetNodeId && currentAtt) triggerNodeAttackPopup(targetNodeId, currentAtt.step, currentAtt.title, lastEv?.outcome);
       showAttackHint(currentAtt, lastEv);
       loadRealHeraclitusTrail();
       if (state.step < targetStep) {
@@ -1510,7 +1692,7 @@ $('#stepBtn').onclick = async () => {
     const currentAtt = ATTACKS[r.step - 1];
     const lastEv = r.events && r.events.length ? r.events[r.events.length - 1] : null;
     const targetNodeId = findNodeIdForTarget(currentAtt?.target);
-    if (targetNodeId && currentAtt) triggerNodeAttackPopup(targetNodeId, currentAtt.step, currentAtt.title);
+    if (targetNodeId && currentAtt) triggerNodeAttackPopup(targetNodeId, currentAtt.step, currentAtt.title, lastEv?.outcome);
     showAttackHint(currentAtt, lastEv);
     toast(`Passo ${r.step} executado com sucesso`);
   } catch (e) {
@@ -1531,7 +1713,7 @@ $('#runBtn').onclick = async () => {
       const currentAtt = ATTACKS[r.step - 1];
       const lastEv = r.events && r.events.length ? r.events[r.events.length - 1] : null;
       const targetNodeId = findNodeIdForTarget(currentAtt?.target);
-      if (targetNodeId && currentAtt) triggerNodeAttackPopup(targetNodeId, currentAtt.step, currentAtt.title);
+      if (targetNodeId && currentAtt) triggerNodeAttackPopup(targetNodeId, currentAtt.step, currentAtt.title, lastEv?.outcome);
       showAttackHint(currentAtt, lastEv);
       await new Promise(res => setTimeout(res, 380));
     }
@@ -1549,6 +1731,7 @@ $('#resetBtn').onclick = async () => {
   running = false;
   try {
     const r = await api('/api/reset', { method: 'POST' });
+    nodeAttackCounts.clear();
     render(r);
     toast('Ambiente reiniciado');
   } catch (e) {
@@ -1571,7 +1754,7 @@ if (expBtn) {
 const dlBtn = $('#downloadBtn');
 if (dlBtn) {
   dlBtn.onclick = () => {
-    location.href = '/api/evidence/download';
+    location.href = 'api/evidence/download';
   };
 }
 
@@ -1743,7 +1926,7 @@ function renderAttackList(s) {
     }
 
     return `
-      <div class="${cardClass}" id="attack-step-${att.step}">
+      <div class="${cardClass}" id="attack-step-${att.step}"${attackCardAttrs(att.target, `${att.infra} → ${att.target}`)}>
         <div class="attack-card-main">
           <div class="attack-meta">
             <span class="attack-phase-tag">${esc(att.phase)}</span>
@@ -1757,6 +1940,7 @@ function renderAttackList(s) {
       </div>
     `;
   }).join('');
+  applyNodeFilter();
 }
 
 // PAINEL ESQUERDO: ATAQUES REAIS DO HERACLITUSDB (9 TESTES DE AGENT-ATACK-2.0)
@@ -1775,7 +1959,7 @@ async function loadAndRenderHdbAttacks() {
     container.innerHTML = cachedHdbAttacks.map(atk => {
       const riskClass = atk.risk === 'ELEVATED' ? 'critical' : 'normal';
       return `
-        <div class="attack-card hdb-attack-card" id="hdb-atk-${atk.id}">
+        <div class="attack-card hdb-attack-card" id="hdb-atk-${atk.id}"${attackCardAttrs(atk.target, `Alvo: ${atk.target} [Porta: ${atk.port}]\n${atk.hypothesis || ''}`, 'asset:heraclitusdb')}>
           <div class="attack-card-main">
             <div class="attack-meta">
               <span class="attack-phase-tag" style="background:#0c326f; color:#fff;">HERACLITUS 2.0</span>
@@ -1790,6 +1974,7 @@ async function loadAndRenderHdbAttacks() {
         </div>
       `;
     }).join('');
+    applyNodeFilter();
   } catch (err) {
     container.innerHTML = `<div class="empty">Erro ao carregar catálogo do HeraclitusDB: ${esc(err.message)}</div>`;
   }
@@ -1816,7 +2001,8 @@ window.executeHdbAttack = async function(attackId) {
     const counters = res.counters || (state?.equipment_counters);
     const eqCounter = counters && atk?.equipment_id ? counters[atk.equipment_id] : null;
     const targetNodeId = findNodeIdForTarget(atk?.target) || 'asset:heraclitusdb';
-    if (targetNodeId && atk) triggerNodeAttackPopup(targetNodeId, atk.id, atk.title);
+    markLiveAttackLsn(res.lsn ?? res.event?.lsn);
+    if (targetNodeId && atk) triggerNodeAttackPopup(targetNodeId, atk.id, atk.title, outcomeOf(res));
     showAttackHint(atk, ev, eqCounter);
     toast(`Teste ${attackId} executado no HeraclitusDB (LSN real ${res.lsn})`);
     loadHeraclitusWslData();
@@ -1843,6 +2029,15 @@ window.executeAllHdbAttacks = async function() {
       body: JSON.stringify({ attack_id: 'all' })
     });
     if (res.state) render(res.state);
+    const results = res.results || [];
+    for (const item of results) {
+      const atk = item.attack;
+      const targetNodeId = findNodeIdForTarget(atk?.target) || 'asset:heraclitusdb';
+      markLiveAttackLsn(item.lsn ?? item.event?.lsn);
+      if (atk) triggerNodeAttackPopup(targetNodeId, atk.id, atk.title, outcomeOf(item));
+      await new Promise(r => setTimeout(r, 80));
+    }
+    if (results.length) showAttackHint(results[results.length - 1].attack, results[results.length - 1].event);
     toast(`Bateria de ${res.count || 9} ataques executada com sucesso no HeraclitusDB!`);
     loadHeraclitusWslData();
   } catch (err) {
@@ -1875,8 +2070,10 @@ function renderEquipmentCounters(counters) {
     totalBlk += (eq.unauthorized_blocked || 0);
     const isAttacked = (eq.attempts || 0) > 0;
     const isBlocked = (eq.unauthorized_blocked || 0) > 0;
-    const statusClass = isBlocked ? 'critical' : isAttacked ? 'warning' : 'normal';
-    const statusText = isBlocked ? 'SOB ATAQUE (BLOQUEADO)' : isAttacked ? 'ATIVO' : 'PROTEGIDO';
+    // Legenda: verde = todas bloqueadas (não invadiu); roxo = alguma chegou ao alvo
+    const breached = (eq.attempts || 0) > (eq.unauthorized_blocked || 0);
+    const statusClass = breached ? 'breached' : isBlocked ? 'blocked-ok' : 'normal';
+    const statusText = breached ? 'CHEGOU AO ALVO' : isBlocked ? 'ATACADO • BLOQUEADO' : 'PROTEGIDO';
 
     return `
       <tr class="${isAttacked ? 'row-attacked' : ''}">
@@ -1889,8 +2086,8 @@ function renderEquipmentCounters(counters) {
             </div>
           </div>
         </td>
-        <td style="text-align:center; font-weight:800; font-size:13px;">${eq.attempts || 0}</td>
-        <td style="text-align:center; font-weight:800; font-size:13px; color:var(--gov-red);">${eq.unauthorized_blocked || 0}</td>
+        <td style="text-align:center; font-weight:800; font-size:13px; color:var(--legend-attack);">${eq.attempts || 0}</td>
+        <td style="text-align:center; font-weight:800; font-size:13px; color:var(--legend-blocked-text);">${eq.unauthorized_blocked || 0}</td>
         <td style="text-align:center;">
           <span class="tag-status ${statusClass}" style="font-size:9.5px; padding:2px 5px;">${statusText}</span>
         </td>
@@ -1902,6 +2099,10 @@ function renderEquipmentCounters(counters) {
   const totBlkBadge = $('#totalBlockedBadge');
   if (totAttBadge) totAttBadge.textContent = totalAtt;
   if (totBlkBadge) totBlkBadge.textContent = totalBlk;
+  syncNodeAttackCountsFromState(state);
+  const accBadge = $('#totalAttemptsAccBadge');
+  if (accBadge) accBadge.textContent = totalAtt;
+  renderIncidentCharts();
 }
 
 // ========================================================
@@ -1924,8 +2125,11 @@ async function loadAndRenderStfAttacks() {
     }
 
     const grouped = { IA: [], DB: [], LINUX: [], NETWORK: [] };
+    // O servidor usa DATABASE; o painel agrupa em DB
+    const CAT_ALIAS = { DATABASE: 'DB' };
     for (const atk of cachedStfAttacks) {
-      if (grouped[atk.category]) grouped[atk.category].push(atk);
+      const cat = CAT_ALIAS[atk.category] || atk.category;
+      if (grouped[cat]) grouped[cat].push(atk);
     }
 
     for (const [cat, container] of Object.entries(catContainers)) {
@@ -1934,7 +2138,7 @@ async function loadAndRenderStfAttacks() {
       container.innerHTML = atks.map(atk => {
         const riskClass = atk.risk === 'CRÍTICO' ? 'critical' : atk.risk === 'ELEVADO' ? 'warning' : 'normal';
         return `
-          <div class="attack-card stf-infra-card" id="stf-atk-${atk.id}">
+          <div class="attack-card stf-infra-card" id="stf-atk-${atk.id}"${attackCardAttrs(atk.target, `Alvo: ${atk.target} • Vetor: ${atk.vector}\n${atk.hypothesis || ''}`)}>
             <div class="attack-card-main">
               <div class="attack-meta">
                 <span class="attack-phase-tag">${esc(atk.phase)}</span>
@@ -1950,6 +2154,7 @@ async function loadAndRenderStfAttacks() {
         `;
       }).join('');
     }
+    applyNodeFilter();
   } catch (err) {
     console.error('Erro ao carregar catálogo da infraestrutura STF:', err);
   }
@@ -1976,7 +2181,8 @@ window.executeStfAttack = async function(attackId) {
     const counters = res.counters || (state?.equipment_counters);
     const eqCounter = counters && atk?.equipment_id ? counters[atk.equipment_id] : null;
     const targetNodeId = findNodeIdForTarget(atk?.target) || 'asset:heraclitusdb';
-    if (targetNodeId && atk) triggerNodeAttackPopup(targetNodeId, atk.id, atk.title);
+    markLiveAttackLsn(res.lsn ?? res.event?.lsn);
+    if (targetNodeId && atk) triggerNodeAttackPopup(targetNodeId, atk.id, atk.title, outcomeOf(res));
     showAttackHint(atk, ev, eqCounter);
     toast(`Ataque ${attackId} auditado no HeraclitusDB (LSN real ${res.lsn})`);
     loadRealHeraclitusTrail();
@@ -2005,7 +2211,8 @@ window.executeStfCategoryAttacks = async function(category) {
       for (const item of res.results) {
         const atk = item.attack;
         const targetNodeId = findNodeIdForTarget(atk?.target) || 'asset:heraclitusdb';
-        if (targetNodeId && atk) triggerNodeAttackPopup(targetNodeId, atk.id, atk.title);
+        markLiveAttackLsn(item.lsn ?? item.event?.lsn);
+        if (targetNodeId && atk) triggerNodeAttackPopup(targetNodeId, atk.id, atk.title, outcomeOf(item));
         await new Promise(r => setTimeout(r, 80));
       }
       const lastItem = res.results[res.results.length - 1];
@@ -2179,7 +2386,8 @@ async function executeStfAttackSilent(attackId) {
     }
     const atk = res.attack;
     const targetNodeId = findNodeIdForTarget(atk?.target) || 'asset:heraclitusdb';
-    if (targetNodeId && atk) triggerNodeAttackPopup(targetNodeId, atk.id, atk.title);
+    markLiveAttackLsn(res.lsn ?? res.event?.lsn);
+    if (targetNodeId && atk) triggerNodeAttackPopup(targetNodeId, atk.id, atk.title, outcomeOf(res));
     showMassiveAttackHint(res);
 
     if (massiveAttackCount % 2 === 0) {
@@ -2205,7 +2413,8 @@ async function executeHdbAttackSilent(attackId) {
     }
     const atk = res.attack;
     const targetNodeId = findNodeIdForTarget(atk?.target) || 'asset:heraclitusdb';
-    if (targetNodeId && atk) triggerNodeAttackPopup(targetNodeId, atk.id, atk.title);
+    markLiveAttackLsn(res.lsn ?? res.event?.lsn);
+    if (targetNodeId && atk) triggerNodeAttackPopup(targetNodeId, atk.id, atk.title, outcomeOf(res));
     showMassiveAttackHint(res);
 
     if (massiveAttackCount % 2 === 0) {
@@ -2216,52 +2425,24 @@ async function executeHdbAttackSilent(attackId) {
   }
 }
 
-// CONTROLE DE NAVEGAÇÃO DE ABAS NO PAINEL ESQUERDO
+// PAINEL ESQUERDO EM SANFONA: SECÇÕES E CATEGORIAS ABREM/FECHAM, PAINEL RECOLHE
 function setupLeftPanelTabs() {
-  const tabInfra = $('#tabStfInfraBtn');
-  const tabHdb = $('#tabHdbAttacksBtn');
-  const tabStf = $('#tabStfAttacksBtn');
-  const tabCounters = $('#tabEquipCountersBtn');
+  const sections = [
+    { head: '#tabStfInfraBtn', onOpen: () => loadAndRenderStfAttacks() },
+    { head: '#tabHdbAttacksBtn', onOpen: () => loadAndRenderHdbAttacks() },
+    { head: '#tabStfAttacksBtn' },
+    { head: '#tabEquipCountersBtn', onOpen: () => state?.equipment_counters && renderEquipmentCounters(state.equipment_counters) }
+  ];
 
-  const contentInfra = $('#contentStfInfraAttacks');
-  const contentHdb = $('#contentHdbAttacks');
-  const contentStf = $('#contentStfAttacks');
-  const contentCounters = $('#contentEquipCounters');
-
-  const allTabs = [tabInfra, tabHdb, tabStf, tabCounters];
-  const allContents = [contentInfra, contentHdb, contentStf, contentCounters];
-
-  function activateTab(activeTab, activeContent) {
-    allTabs.forEach(t => t && t.classList.remove('active'));
-    allContents.forEach(c => c && c.classList.remove('active'));
-    if (activeTab) activeTab.classList.add('active');
-    if (activeContent) activeContent.classList.add('active');
-  }
-
-  if (tabInfra) {
-    tabInfra.onclick = () => {
-      activateTab(tabInfra, contentInfra);
-      loadAndRenderStfAttacks();
-    };
-  }
-
-  if (tabHdb) {
-    tabHdb.onclick = () => {
-      activateTab(tabHdb, contentHdb);
-      loadAndRenderHdbAttacks();
-    };
-  }
-
-  if (tabStf) {
-    tabStf.onclick = () => {
-      activateTab(tabStf, contentStf);
-    };
-  }
-
-  if (tabCounters) {
-    tabCounters.onclick = () => {
-      activateTab(tabCounters, contentCounters);
-      if (state?.equipment_counters) renderEquipmentCounters(state.equipment_counters);
+  for (const sec of sections) {
+    const head = $(sec.head);
+    if (!head) continue;
+    head.onclick = () => {
+      const section = head.closest('.acc-section');
+      const open = !section.classList.contains('open');
+      section.classList.toggle('open', open);
+      head.setAttribute('aria-expanded', String(open));
+      if (open && sec.onOpen) sec.onOpen();
     };
   }
 
@@ -2270,8 +2451,339 @@ function setupLeftPanelTabs() {
 
   const runAllHdbBtn = $('#runAllHdbBtn');
   if (runAllHdbBtn) runAllHdbBtn.onclick = () => executeAllHdbAttacks();
+
+  try {
+    if (localStorage.getItem('stf.attacksCollapsed') === '1') setAttacksPanelCollapsed(true);
+  } catch (_) { /* armazenamento indisponível: começa expandido */ }
 }
 
+window.toggleCategory = function(headEl) {
+  headEl.closest('.stf-category-block')?.classList.toggle('collapsed');
+};
+
+function setAttacksPanelCollapsed(collapsed) {
+  const ws = $('#workspace');
+  if (!ws) return;
+  ws.classList.toggle('attacks-collapsed', collapsed);
+  try { localStorage.setItem('stf.attacksCollapsed', collapsed ? '1' : '0'); } catch (_) {}
+  // O grafo mede o contentor: redesenha depois de a coluna mudar de largura
+  requestAnimationFrame(() => { if (state) renderGraph(state); });
+}
+
+window.toggleAttacksPanel = function() {
+  const ws = $('#workspace');
+  setAttacksPanelCollapsed(!ws?.classList.contains('attacks-collapsed'));
+};
+
+// ========================================================
+// FILTRO DOS ATAQUES PELO COMPONENTE CLICADO NO GRAFO
+// ========================================================
+let nodeFilter = null; // { id, label }
+
+function attackCardAttrs(target, tip, fallbackNode) {
+  const node = findNodeIdForTarget(target) || fallbackNode || '';
+  return ` data-node="${esc(node)}" title="${esc(tip || '')}"`;
+}
+
+function applyNodeFilter() {
+  const cards = document.querySelectorAll('#attacksAccordion .attack-card');
+  cards.forEach(c => {
+    c.classList.toggle('filtered-out', Boolean(nodeFilter) && c.dataset.node !== nodeFilter.id);
+  });
+
+  // Esconde categorias sem ataques visíveis e abre as que têm
+  document.querySelectorAll('#attacksAccordion .stf-category-block').forEach(block => {
+    const visible = block.querySelectorAll('.attack-card:not(.filtered-out)').length;
+    block.classList.toggle('filtered-empty', Boolean(nodeFilter) && visible === 0);
+    if (nodeFilter && visible) block.classList.remove('collapsed');
+  });
+
+  // Com filtro, abre as secções que têm ataques deste componente
+  document.querySelectorAll('#attacksAccordion .acc-section').forEach(section => {
+    const count = section.querySelectorAll('.attack-card:not(.filtered-out)').length;
+    if (nodeFilter && count && section.dataset.acc !== 'conta') {
+      section.classList.add('open');
+      section.querySelector('.acc-head')?.setAttribute('aria-expanded', 'true');
+    }
+  });
+
+  const bar = $('#nodeFilterBar');
+  if (bar) {
+    bar.hidden = !nodeFilter;
+    const lbl = $('#nodeFilterLabel');
+    if (lbl && nodeFilter) {
+      const n = document.querySelectorAll('#attacksAccordion .attack-card:not(.filtered-out)').length;
+      lbl.textContent = `${nodeFilter.label} (${n} ${n === 1 ? 'ataque' : 'ataques'})`;
+    }
+  }
+}
+
+function setNodeFilter(id, label) {
+  nodeFilter = nodeFilter && nodeFilter.id === id ? null : { id, label };
+  if (nodeFilter && $('#workspace')?.classList.contains('attacks-collapsed')) setAttacksPanelCollapsed(false);
+  applyNodeFilter();
+}
+
+window.clearNodeFilter = function() {
+  nodeFilter = null;
+  applyNodeFilter();
+};
+// ========================================================
+// ANÁLISE DE INCIDENTES: GRÁFICOS A PARTIR DO LEDGER REAL E DOS CONTADORES
+// ========================================================
+const DECISION_CATS = [
+  { key: 'DENY', label: 'Bloqueado (não invadiu)', color: 'var(--chart-blocked)' },
+  { key: 'REQUIRE_HITL', label: 'Retido (HITL)', color: 'var(--chart-hitl)' },
+  { key: 'PASS', label: 'Chegou ao alvo (invadiu)', color: 'var(--chart-pass)' },
+  { key: 'OBSERVED', label: 'Sondagem sem efeito', color: 'var(--chart-observed)' },
+  { key: 'OTHER', label: 'Outros', color: 'var(--chart-other)' }
+];
+
+// No ledger, result "pass" é o veredito do TESTE (a defesa aguentou), não "o ataque passou".
+// Só conta como invasão (chegou ao alvo) o evento com efeito real no sistema: upstream_delta > 0.
+function classifyDecision(ev) {
+  const r = String(ev.result || '').toUpperCase();
+  if ((Number(ev.upstream_delta) || 0) > 0) return 'PASS';
+  if (r === 'DENY' || r === 'BLOCKED' || ev.blocked || /_BLOCKED$/.test(String(ev.reason_code || ''))) return 'DENY';
+  if (r === 'REQUIRE_HITL') return 'REQUIRE_HITL';
+  if (r === 'OBSERVED' || r === 'PASS' || r === 'ALLOW' || r === 'APPROVED') return 'OBSERVED';
+  return 'OTHER';
+}
+
+function eventTimeMs(ev) {
+  const ns = Number(ev.observed_at_unix_nanos);
+  return Number.isFinite(ns) && ns > 0 ? Math.floor(ns / 1e6) : null;
+}
+
+const fmtInt = n => Number(n || 0).toLocaleString('pt-BR');
+
+function renderIncidentCharts() {
+  const events = hdbAllEvents || [];
+  const counters = state?.equipment_counters || {};
+
+  // KPIs
+  const byDecision = Object.fromEntries(DECISION_CATS.map(c => [c.key, 0]));
+  let upstream = 0;
+  for (const ev of events) {
+    byDecision[classifyDecision(ev)]++;
+    upstream += Number(ev.upstream_delta) || 0;
+  }
+  const total = events.length;
+  const setText = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+  setText('#kpiEvents', fmtInt(total));
+  // O servidor pede ao ledger no máximo 200 eventos (limit=200 em /api/heraclitus-events)
+  setText('#kpiEventsSub', total >= 200 ? 'os 200 mais recentes do ledger' : 'todos os eventos do ledger');
+  setText('#kpiBlocked', fmtInt(byDecision.DENY));
+  setText('#kpiBlockedPct', total ? `${Math.round((byDecision.DENY / total) * 100)}% do total` : '');
+  setText('#kpiHitl', fmtInt(byDecision.REQUIRE_HITL));
+  setText('#kpiUpstream', fmtInt(upstream));
+  const topEq = Object.values(counters).sort((a, b) => (b.attempts || 0) - (a.attempts || 0))[0];
+  setText('#kpiTopEquip', topEq && topEq.attempts ? `${topEq.name} (${fmtInt(topEq.attempts)})` : '—');
+
+  renderTimelineChart(events);
+  renderDecisionDonut(byDecision, total);
+  renderEquipmentChart(counters);
+  renderVectorChart(events);
+}
+
+// Colunas empilhadas por decisão ao longo do tempo (intervalo escolhido pelo alcance dos dados)
+function renderTimelineChart(events) {
+  const host = $('#chartTimeline');
+  const legend = $('#legendTimeline');
+  if (!host) return;
+  const timed = events.map(ev => ({ t: eventTimeMs(ev), k: classifyDecision(ev) })).filter(e => e.t);
+  if (!timed.length) {
+    host.innerHTML = '<div class="chart-empty">Sem eventos com data no ledger.</div>';
+    if (legend) legend.innerHTML = '';
+    return;
+  }
+
+  const minT = Math.min(...timed.map(e => e.t));
+  const maxT = Math.max(...timed.map(e => e.t));
+  const STEPS = [60e3, 5 * 60e3, 15 * 60e3, 3600e3, 6 * 3600e3, 86400e3, 7 * 86400e3];
+  const step = STEPS.find(s => (maxT - minT) / s <= 48) || STEPS[STEPS.length - 1];
+  const start = Math.floor(minT / step) * step;
+  const nBuckets = Math.floor((maxT - start) / step) + 1;
+
+  const buckets = Array.from({ length: nBuckets }, (_, i) => ({ t: start + i * step, c: Object.fromEntries(DECISION_CATS.map(d => [d.key, 0])), total: 0 }));
+  for (const e of timed) {
+    const b = buckets[Math.floor((e.t - start) / step)];
+    b.c[e.k]++;
+    b.total++;
+  }
+  const present = DECISION_CATS.filter(d => buckets.some(b => b.c[d.key]));
+  if (legend) legend.innerHTML = present.map(d => `<span class="lg-item"><i class="lg-swatch" style="background:${d.color}"></i>${d.label}</span>`).join('');
+
+  const W = 1000, H = 220, padL = 36, padR = 8, padT = 10, padB = 26;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const maxY = niceMax(Math.max(...buckets.map(b => b.total)));
+  const slot = plotW / nBuckets;
+  const barW = Math.max(3, Math.min(28, slot - 2));
+  const y = v => padT + plotH - (v / maxY) * plotH;
+
+  const fmtTick = t => {
+    const d = new Date(t);
+    return step >= 86400e3
+      ? d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+      : d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const grid = [0, 0.5, 1].map(f => {
+    const v = Math.round(maxY * f);
+    return `<line class="grid-line" x1="${padL}" x2="${W - padR}" y1="${y(v)}" y2="${y(v)}"/>
+            <text class="axis-text" x="${padL - 6}" y="${y(v)}" text-anchor="end" dominant-baseline="central">${fmtInt(v)}</text>`;
+  }).join('');
+
+  const labelEvery = Math.ceil(nBuckets / 8);
+  const bars = buckets.map((b, i) => {
+    const x = padL + i * slot + (slot - barW) / 2;
+    let acc = 0;
+    const segs = present.map(d => {
+      const v = b.c[d.key];
+      if (!v) return '';
+      const y1 = y(acc + v), y0 = y(acc);
+      acc += v;
+      // 1px de folga entre segmentos empilhados
+      return `<rect class="mark" x="${x}" y="${y1}" width="${barW}" height="${Math.max(1, y0 - y1 - 1)}" rx="1.5" fill="${d.color}"/>`;
+    }).join('');
+    const tip = `<strong>${esc(new Date(b.t).toLocaleString('pt-BR'))}</strong>` +
+      present.map(d => `<div class="tt-row"><i class="lg-swatch" style="background:${d.color}"></i>${d.label}<b>${fmtInt(b.c[d.key])}</b></div>`).join('') +
+      `<div class="tt-row">Total<b>${fmtInt(b.total)}</b></div>`;
+    const tick = i % labelEvery === 0 ? `<text class="axis-text" x="${x + barW / 2}" y="${H - 8}" text-anchor="middle">${fmtTick(b.t)}</text>` : '';
+    return `<g class="bar-group" data-tip="${esc(tip)}"><rect class="hit" x="${padL + i * slot}" y="${padT}" width="${slot}" height="${plotH}"/>${segs}</g>${tick}`;
+  }).join('');
+
+  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="height:${H}px">${grid}
+    <line x1="${padL}" x2="${W - padR}" y1="${y(0)}" y2="${y(0)}" stroke="#b9c7d8"/>${bars}</svg>`;
+}
+
+function renderDecisionDonut(byDecision, total) {
+  const host = $('#chartDecisions');
+  if (!host) return;
+  if (!total) {
+    host.innerHTML = '<div class="chart-empty">Sem decisões registadas.</div>';
+    return;
+  }
+  const R = 62, r = 40, C = 75;
+  const cats = DECISION_CATS.filter(d => byDecision[d.key]);
+  let a0 = -Math.PI / 2;
+  const gap = cats.length > 1 ? 0.025 : 0;
+  const arcs = cats.map(d => {
+    const frac = byDecision[d.key] / total;
+    const a1 = a0 + frac * Math.PI * 2;
+    const s = a0 + gap / 2, e = a1 - gap / 2;
+    a0 = a1;
+    const pct = Math.round(frac * 100);
+    const tip = `<strong>${d.label}</strong><div class="tt-row">Eventos<b>${fmtInt(byDecision[d.key])}</b></div><div class="tt-row">Parcela<b>${pct}%</b></div>`;
+    if (frac >= 0.999) {
+      return `<g data-tip="${esc(tip)}"><circle class="mark" cx="${C}" cy="${C}" r="${(R + r) / 2}" fill="none" stroke="${d.color}" stroke-width="${R - r}"/></g>`;
+    }
+    const large = e - s > Math.PI ? 1 : 0;
+    const p = (rad, ang) => `${C + rad * Math.cos(ang)} ${C + rad * Math.sin(ang)}`;
+    return `<g data-tip="${esc(tip)}"><path class="mark" fill="${d.color}" d="M ${p(R, s)} A ${R} ${R} 0 ${large} 1 ${p(R, e)} L ${p(r, e)} A ${r} ${r} 0 ${large} 0 ${p(r, s)} Z"/></g>`;
+  }).join('');
+  const blockedPct = Math.round((byDecision.DENY / total) * 100);
+
+  host.innerHTML = `<div class="donut-wrap">
+    <svg viewBox="0 0 150 150">${arcs}
+      <text x="${C}" y="${C - 6}" text-anchor="middle" class="value-text" style="font-size:20px">${blockedPct}%</text>
+      <text x="${C}" y="${C + 13}" text-anchor="middle" class="axis-text">bloqueados</text>
+    </svg>
+    <div class="donut-legend">${cats.map(d =>
+      `<span class="lg-item"><span><i class="lg-swatch" style="background:${d.color}"></i> ${d.label}</span><b>${fmtInt(byDecision[d.key])}</b></span>`).join('')}
+    </div></div>`;
+}
+
+// Barras horizontais: tentativas e bloqueios por equipamento (top 10)
+function renderEquipmentChart(counters) {
+  const host = $('#chartEquipment');
+  if (!host) return;
+  const rows = Object.values(counters).filter(eq => (eq.attempts || 0) > 0)
+    .sort((a, b) => (b.attempts || 0) - (a.attempts || 0)).slice(0, 10);
+  if (!rows.length) {
+    host.innerHTML = '<div class="chart-empty">Nenhum equipamento atacado ainda.</div>';
+    return;
+  }
+  const maxV = niceMax(Math.max(...rows.map(r => r.attempts || 0)));
+  const W = 420, labelW = 130, valW = 34, rowH = 26, barH = 8;
+  const plotW = W - labelW - valW;
+  const H = rows.length * rowH + 4;
+  const body = rows.map((eq, i) => {
+    const y0 = i * rowH + 4;
+    const wA = Math.max(2, ((eq.attempts || 0) / maxV) * plotW);
+    const wB = (eq.unauthorized_blocked || 0) ? Math.max(2, (eq.unauthorized_blocked / maxV) * plotW) : 0;
+    const tip = `<strong>${esc(eq.name)}</strong><div class="tt-row"><i class="lg-swatch" style="background:var(--chart-attempts)"></i>Tentativas<b>${fmtInt(eq.attempts)}</b></div><div class="tt-row"><i class="lg-swatch" style="background:var(--chart-blocked)"></i>Bloqueadas<b>${fmtInt(eq.unauthorized_blocked)}</b></div>`;
+    return `<g class="bar-group" data-tip="${esc(tip)}">
+      <rect class="hit" x="0" y="${y0 - 3}" width="${W}" height="${rowH}"/>
+      <text class="label-text" x="${labelW - 8}" y="${y0 + barH}" text-anchor="end" dominant-baseline="central">${esc(short(eq.name, 20))}</text>
+      <rect class="mark" x="${labelW}" y="${y0 + 1}" width="${wA}" height="${barH}" rx="2" fill="var(--chart-attempts)"/>
+      ${wB ? `<rect class="mark" x="${labelW}" y="${y0 + barH + 3}" width="${wB}" height="${barH}" rx="2" fill="var(--chart-blocked)"/>` : ''}
+      <text class="value-text" x="${labelW + wA + 5}" y="${y0 + 1 + barH / 2}" dominant-baseline="central">${fmtInt(eq.attempts)}</text>
+    </g>`;
+  }).join('');
+  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}">${body}</svg>`;
+}
+
+// Barras horizontais: vetores de ataque mais frequentes no ledger (top 8)
+function renderVectorChart(events) {
+  const host = $('#chartVectors');
+  if (!host) return;
+  const counts = new Map();
+  for (const ev of events) {
+    const v = ev.vector || ev.attack_id;
+    if (!v) continue;
+    counts.set(v, (counts.get(v) || 0) + 1);
+  }
+  const rows = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+  if (!rows.length) {
+    host.innerHTML = '<div class="chart-empty">Sem vetores registados.</div>';
+    return;
+  }
+  const maxV = niceMax(rows[0][1]);
+  const W = 420, labelW = 150, valW = 34, rowH = 24, barH = 12;
+  const plotW = W - labelW - valW;
+  const H = rows.length * rowH + 4;
+  const body = rows.map(([name, n], i) => {
+    const y0 = i * rowH + 4;
+    const w = Math.max(2, (n / maxV) * plotW);
+    const tip = `<strong>${esc(name)}</strong><div class="tt-row">Eventos<b>${fmtInt(n)}</b></div>`;
+    return `<g class="bar-group" data-tip="${esc(tip)}">
+      <rect class="hit" x="0" y="${y0 - 3}" width="${W}" height="${rowH}"/>
+      <text class="label-text" x="${labelW - 8}" y="${y0 + barH / 2}" text-anchor="end" dominant-baseline="central">${esc(short(name, 24))}</text>
+      <rect class="mark" x="${labelW}" y="${y0}" width="${w}" height="${barH}" rx="2" fill="var(--chart-attempts)"/>
+      <text class="value-text" x="${labelW + w + 5}" y="${y0 + barH / 2}" dominant-baseline="central">${fmtInt(n)}</text>
+    </g>`;
+  }).join('');
+  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}">${body}</svg>`;
+}
+
+function niceMax(v) {
+  if (!v || v <= 0) return 1;
+  const mag = Math.pow(10, Math.floor(Math.log10(v)));
+  const n = v / mag;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * mag;
+}
+
+// Tooltip único para todos os gráficos (delegação por data-tip)
+function setupChartTooltip() {
+  const panel = $('#chartsPanel');
+  const tt = $('#chartTooltip');
+  if (!panel || !tt) return;
+  panel.addEventListener('mousemove', evt => {
+    const g = evt.target.closest('[data-tip]');
+    if (!g) { tt.classList.remove('show'); return; }
+    tt.innerHTML = g.getAttribute('data-tip');
+    const pad = 14;
+    let x = evt.clientX + pad, yy = evt.clientY + pad;
+    const r = tt.getBoundingClientRect();
+    if (x + r.width > window.innerWidth - 8) x = evt.clientX - r.width - pad;
+    if (yy + r.height > window.innerHeight - 8) yy = evt.clientY - r.height - pad;
+    tt.style.left = `${x}px`;
+    tt.style.top = `${yy}px`;
+    tt.classList.add('show');
+  });
+  panel.addEventListener('mouseleave', () => tt.classList.remove('show'));
+}
 // RENDERIZAÇÃO GERAL DO ESTADO
 function render(s) {
   state = s;
@@ -2315,6 +2827,7 @@ function render(s) {
 // INICIALIZAÇÃO
 async function init() {
   setupLeftPanelTabs();
+  setupChartTooltip();
   const refreshTrailBtn = $('#refreshTrailBtn');
   if (refreshTrailBtn) refreshTrailBtn.onclick = () => loadRealHeraclitusTrail();
   try {
