@@ -11,6 +11,9 @@ import hashlib
 import json
 import mimetypes
 import os
+import subprocess
+import sys
+import tempfile
 import threading
 import time
 from copy import deepcopy
@@ -25,6 +28,7 @@ from correlation import correlate
 from detector import evaluate as detect_event
 from policy import decide as policy_decide
 from faults import simulate as simulate_fault
+from synthetic_upstream import SyntheticUpstream
 
 ROOT = Path(__file__).resolve().parent
 DASHBOARD = ROOT / "dashboard"
@@ -89,10 +93,25 @@ class EvidenceEvent:
 class PocEngine:
     def __init__(self) -> None:
         self.lock = threading.RLock()
+        self.upstream = SyntheticUpstream()
         self.reset()
+
+    @property
+    def upstream_hits(self) -> int:
+        return self.upstream.hits
+
+    def __del__(self) -> None:
+        directory=getattr(self,"_scripted_export_dir",None)
+        if directory is not None:
+            directory.cleanup()
 
     def reset(self) -> None:
         with getattr(self, "lock", threading.RLock()):
+            previous_export=getattr(self,"_scripted_export_dir",None)
+            if previous_export is not None:
+                previous_export.cleanup()
+            self._scripted_export_dir: tempfile.TemporaryDirectory[str] | None = None
+            self._scripted_export_path: Path | None = None
             self.events: list[EvidenceEvent] = []
             self.signals: list[dict[str, Any]] = []
             self.incident: dict[str, Any] | None = None
@@ -100,7 +119,7 @@ class PocEngine:
             self.step_index = 0
             self.execution_mode = "IDLE"
             self.risk = 0
-            self.upstream_hits = 0
+            self.upstream.reset()
             self.pending_approval: dict[str, Any] | None = None
             self.approvals: dict[str, dict[str, Any]] = {}
             self.approvals_consumed: set[str] = set()
@@ -170,7 +189,10 @@ class PocEngine:
             if not any(n["id"]==nid for n in self.attack_graph["nodes"]):
                 self.attack_graph["nodes"].append({"id":nid,"kind":kind,"label":value,"severity":"INFO"})
             self.attack_graph["edges"].append({"from":nid,"to":eid,"type":"OBSERVED_IN"})
-        if self.incident:
+        if self.incident and (
+            ev.incident_id==self.incident["incident_id"]
+            or ev.lsn in self.incident.get("evidence_lsns",[])
+        ):
             iid=f"incident:{INCIDENT_ID}"
             if not any(n["id"]==iid for n in self.attack_graph["nodes"]):
                 self.attack_graph["nodes"].append({"id":iid,"kind":"incident","label":INCIDENT_ID,"severity":self.incident["severity"]})
@@ -202,15 +224,39 @@ class PocEngine:
                 counts[actor]=counts.get(actor,0)+1
         return max(counts,key=counts.get) if counts else None
 
-    def _component_for_incident(self, corr: dict[str, Any]) -> dict[str, Any] | None:
-        if not self.incident:
+    @staticmethod
+    def _anchored_component(corr: dict[str, Any], incident: dict[str, Any] | None) -> dict[str, Any] | None:
+        if not incident:
             return corr.get("best")
-        principal_entity=f"principal:{self.incident.get('principal')}"
-        matches=[x for x in corr.get("components",[]) if principal_entity in set(x.get("entities",[]))]
+        principal_entity=f"principal:{incident.get('principal')}"
+        prior_ids=set(incident.get("correlation",{}).get("signal_ids",[]))
+        matches=[
+            x for x in corr.get("components",[])
+            if principal_entity in set(x.get("entities",[]))
+            and prior_ids.intersection(x.get("signal_ids",[]))
+        ]
         if not matches:
             return None
         matches.sort(key=lambda x:(x.get("qualifies",False),x.get("score",0),len(x.get("signal_ids",[]))),reverse=True)
         return matches[0]
+
+    def _component_for_incident(self, corr: dict[str, Any]) -> dict[str, Any] | None:
+        return self._anchored_component(corr,self.incident)
+
+    def _telemetry_incident_id(self, normalized: dict[str, Any], detection: Any) -> str | None:
+        if not self.incident or detection is None:
+            return None
+        next_lsn=len(self.events)+1
+        next_signal_id=f"SIG-{len(self.signals)+1:03d}"
+        candidate={
+            "signal_id":next_signal_id,"lsn":next_lsn,"hlc":1_800_000_000_000+next_lsn,
+            "source_class":normalized.get("source_class"),"severity":detection.severity,
+            "entities":list(detection.entities),
+        }
+        component=self._component_for_incident(correlate(self.signals+[candidate]))
+        if component and component.get("qualifies") and next_signal_id in component.get("signal_ids",[]):
+            return self.incident["incident_id"]
+        return None
 
     def _maybe_open_incident(self) -> None:
         corr=correlate(self.signals)
@@ -293,7 +339,7 @@ class PocEngine:
                 "outcome":normalized.get("outcome","OBSERVED"),
                 "raw_telemetry":deepcopy(raw),"normalized_telemetry":deepcopy(normalized),"ingest_mode":"external_loopback",
             }
-            ev=self._append(spec,INCIDENT_ID if self.incident else None)
+            ev=self._append(spec,self._telemetry_incident_id(normalized,detection))
             self.raw_registry[raw_key]={"digest":raw_digest,"lsn":ev.lsn}
             if detection is not None:
                 self._signal(ev,detection)
@@ -316,6 +362,9 @@ class PocEngine:
                 action=action,incident=self.incident,principal=principal,target=target,
                 parameters_digest=params_digest,approval=selected,consumed=self.approvals_consumed,
             )
+            prior_hits=self.upstream.hits
+            receipt=self.upstream.execute(action,principal,target,parameters) if decision.effect_allowed else None
+            actual_delta=self.upstream.hits-prior_hits
             if action=="case_write":
                 event_type="app.case_update_requested"; source="Policy Gateway"; severity="CRITICAL"
                 summary="Ação externa local solicita escrita no processo sintético"
@@ -330,10 +379,11 @@ class PocEngine:
                 "phase":"FASE 2","source":source,"type":event_type,"severity":severity,
                 "actor":principal,"asset":target,"summary":summary,
                 "outcome":"PASS" if decision.effect_allowed else decision.outcome,
-                "reason":decision.reason_code,"upstream":1 if decision.effect_allowed else 0,
+                "reason":decision.reason_code,"upstream":actual_delta,
                 "policy_action":action,"policy_params":deepcopy(parameters),
                 "policy_decision":decision.to_dict(),"ingest_mode":"external_loopback",
                 "approval_id":selected.get("approval_id") if selected else None,
+                "upstream_receipt":receipt,
             }
             ev=self._append(spec,INCIDENT_ID if self.incident else None)
             if decision.requires_human:
@@ -343,12 +393,11 @@ class PocEngine:
                 else:
                     self.pending_approval=existing
             if decision.effect_allowed:
-                self.upstream_hits += 1
                 if selected:
                     selected["state"]="CONSUMED"
                     self.approvals_consumed.add(selected["approval_id"])
                     self.pending_approval=selected
-                self.case_state["last_effect"]="DOCUMENT_EXPORT_SYNTHETIC" if action=="export_restricted" else "SYNTHETIC_CASE_WRITE"
+                self.case_state["last_effect"]=receipt["effect_kind"]
             self._add_graph(ev)
             self.last_action=f"Policy externa local: {action} -> {spec['outcome']}"
             return {
@@ -380,6 +429,62 @@ class PocEngine:
             self._add_graph(ev); self.last_action=f"HITL aprovado: {approval_id}"
             return {"status":"APPROVED","event":asdict(ev),"pending_approval":deepcopy(approval),"state":self.snapshot()}
 
+    @staticmethod
+    def _offline_verify_file(path: Path | None) -> dict[str, Any]:
+        if path is None or not path.is_file():
+            return {"overall":"FAIL","error":"exported evidence file is unavailable"}
+        try:
+            completed=subprocess.run(
+                [sys.executable,str(ROOT/"verify.py"),str(path)],
+                capture_output=True,text=True,encoding="utf-8",timeout=10,check=False,
+            )
+            result=json.loads(completed.stdout)
+            if not isinstance(result,dict):
+                return {"overall":"FAIL","error":"offline verifier returned a non-object result"}
+            if completed.returncode!=0:
+                result["overall"]="FAIL"
+            return result
+        except (OSError,subprocess.TimeoutExpired,ValueError) as exc:
+            return {"overall":"FAIL","error":str(exc)}
+
+    @classmethod
+    def _offline_verify_bundle(cls, bundle: dict[str, Any]) -> dict[str, Any]:
+        try:
+            with tempfile.TemporaryDirectory(prefix="stf-poc-verify-") as directory:
+                path=Path(directory)/"evidence.json"
+                path.write_text(json.dumps(bundle,ensure_ascii=False),encoding="utf-8")
+                return cls._offline_verify_file(path)
+        except OSError as exc:
+            return {"overall":"FAIL","error":str(exc)}
+
+    def _scripted_tamper_check(self) -> dict[str, Any]:
+        original=self.evidence_bundle()
+        baseline=self._offline_verify_bundle(original)
+        tampered=deepcopy(original)
+        if not tampered["events"]:
+            return {"status":"MISSED","baseline":baseline,"verification":{"overall":"FAIL","error":"no event to tamper"}}
+        tampered["events"][0]["summary"]="EVENTO ADULTERADO"
+        verification=self._offline_verify_bundle(tampered)
+        status="DETECTED" if baseline.get("overall")=="PASS" and verification.get("overall")=="FAIL" else "MISSED"
+        return {"status":status,"baseline":baseline,"verification":verification}
+
+    def _scripted_export(self) -> dict[str, Any]:
+        bundle=self.evidence_bundle()
+        if self.verify_bundle(bundle)["overall"]!="PASS":
+            return {"status":"FAIL","error":"pre-export integrity check failed"}
+        directory=None
+        try:
+            directory=tempfile.TemporaryDirectory(prefix="stf-poc-export-")
+            path=Path(directory.name)/"evidence.json"
+            path.write_text(json.dumps(bundle,ensure_ascii=False,indent=2),encoding="utf-8")
+            self._scripted_export_dir=directory
+            self._scripted_export_path=path
+            return {"status":"PASS","package_root":bundle["package_root"]}
+        except OSError as exc:
+            if directory is not None:
+                directory.cleanup()
+            return {"status":"FAIL","error":str(exc)}
+
     def step(self) -> dict[str, Any]:
         with self.lock:
             if self.execution_mode=="API_LAB":
@@ -388,6 +493,22 @@ class PocEngine:
             if self.step_index >= len(self._scenario):
                 return self.snapshot(message="Campanha concluída")
             spec=dict(self._scenario[self.step_index]); self.step_index += 1
+            tamper_result=None
+            export_result=None
+            offline_result=None
+            if spec.get("tamper"):
+                tamper_result=self._scripted_tamper_check()
+                spec["outcome"]=tamper_result["status"]
+                spec["reason"]="EVIDENCE_INTEGRITY_FAILURE" if spec["outcome"]=="DETECTED" else "TAMPER_NOT_DETECTED"
+                spec["tamper_probe"]=tamper_result
+            if spec.get("evidence"):
+                export_result=self._scripted_export()
+                spec["outcome"]=export_result["status"]
+                spec["export_result"]=export_result
+            if spec.get("verify"):
+                offline_result=self._offline_verify_file(self._scripted_export_path)
+                spec["outcome"]="PASS" if offline_result.get("overall")=="PASS" else "FAIL"
+                spec["offline_verification"]=offline_result
             if spec.get("policy_action"):
                 params=spec.get("policy_params") or {}
                 params_digest=sha256_hex(params) if params else None
@@ -400,9 +521,16 @@ class PocEngine:
                     approval=self.approvals.get(spec.get("approval_ref")) if spec.get("approval_ref") else self._matching_approval(spec["policy_action"],spec.get("actor","unknown"),spec.get("asset","unknown"),params_digest),
                     consumed=self.approvals_consumed,
                 )
+                prior_hits=self.upstream.hits
+                receipt=(
+                    self.upstream.execute(spec["policy_action"],spec.get("actor","unknown"),
+                                          spec.get("asset","unknown"),params)
+                    if decision.effect_allowed and spec.get("execute") else None
+                )
                 spec["reason"]=decision.reason_code
                 spec["policy_decision"]=decision.to_dict()
-                spec["upstream"]=1 if decision.effect_allowed and spec.get("execute") else 0
+                spec["upstream"]=self.upstream.hits-prior_hits
+                spec["upstream_receipt"]=receipt
                 spec["outcome"]="PASS" if decision.effect_allowed and spec.get("execute") else decision.outcome
             incident_id=INCIDENT_ID if self.incident else None
             ev=self._append(spec,incident_id)
@@ -419,12 +547,12 @@ class PocEngine:
             if spec.get("approve") and self.pending_approval:
                 self.pending_approval["state"]="APPROVED"; self.pending_approval["approved_by"]="human:approver-01"
             if spec.get("execute") and spec.get("upstream")==1:
-                self.upstream_hits += 1
                 if self.pending_approval:
                     self.pending_approval["state"]="CONSUMED"; self.approvals_consumed.add(self.pending_approval["approval_id"])
-                self.case_state["last_effect"]="DOCUMENT_EXPORT_SYNTHETIC"
-            if spec.get("tamper"): self.tamper_status="DETECTED"
-            if spec.get("verify"): self.offline_verify="PASS"
+                self.case_state["last_effect"]=receipt["effect_kind"]
+            if tamper_result is not None: self.tamper_status=tamper_result["status"]
+            if export_result is not None and export_result["status"]=="PASS": self.export_count+=1
+            if offline_result is not None: self.offline_verify="PASS" if offline_result.get("overall")=="PASS" else "FAIL"
             self._add_graph(ev); self.last_action=spec["summary"]
             return self.snapshot(message=f"Executado passo {self.step_index}/{len(self._scenario)}")
 
@@ -456,9 +584,10 @@ class PocEngine:
             ("PHASE2_REPLAY","REPLAY_DETECTED" in reason_codes,"DENY"),
             ("PHASE2_IDENTITY_SWAP","IDENTITY_BINDING_MISMATCH" in reason_codes,"DENY"),
             ("PHASE2_PARAMETER_SWAP","PARAMETERS_DIGEST_MISMATCH" in reason_codes,"DENY"),
-            ("UPSTREAM_ON_DENY",all((e.upstream_delta in (None,0)) for e in denied),"0"),
+            ("UPSTREAM_ON_DENY",all((e.upstream_delta in (None,0)) and not e.details.get("upstream_receipt") for e in denied)
+             and self.upstream_hits==sum((e.upstream_delta or 0) for e in self.events),"0"),
             ("HISTORY_TAMPER",self.tamper_status=="DETECTED","DETECTED"),
-            ("EVIDENCE_EXPORT",self.export_count>0 or any(e.event_type=="evidence.exported" for e in self.events),"PASS"),
+            ("EVIDENCE_EXPORT",self.export_count>0,"PASS"),
             ("OFFLINE_VERIFY",self.offline_verify=="PASS","PASS"),
         ]
         return [{"id":i,"ok":ok,"expected":expected,"observed":expected if ok else "PENDING"} for i,ok,expected in tests]
@@ -734,18 +863,14 @@ class PocEngine:
                             "correlation":deepcopy(best),"correlation_explanation":corr["explanation"],
                         }
             else:
-                principal_entity=f"principal:{incident['principal']}"
-                matches=[x for x in corr.get("components",[]) if principal_entity in set(x.get("entities",[]))]
-                if matches:
-                    matches.sort(key=lambda x:(x.get("qualifies",False),x.get("score",0),len(x.get("signal_ids",[]))),reverse=True)
-                    chosen=matches[0]
-                    if chosen.get("qualifies"):
-                        risk=int(chosen.get("score",0))
-                        incident["risk_score"]=risk
-                        incident["severity"]="CRITICAL" if risk>=90 else "HIGH"
-                        incident["evidence_lsns"]=list(chosen.get("lsns",[]))
-                        incident["correlation"]=deepcopy(chosen)
-                        incident["correlation_explanation"]=corr["explanation"]
+                chosen=cls._anchored_component(corr,incident)
+                if chosen and chosen.get("qualifies"):
+                    risk=int(chosen.get("score",0))
+                    incident["risk_score"]=risk
+                    incident["severity"]="CRITICAL" if risk>=90 else "HIGH"
+                    incident["evidence_lsns"]=list(chosen.get("lsns",[]))
+                    incident["correlation"]=deepcopy(chosen)
+                    incident["correlation_explanation"]=corr["explanation"]
         return signals,incident,risk
 
     @locked_method
@@ -753,8 +878,14 @@ class PocEngine:
         lsn=max(0,min(int(lsn),len(self.events)))
         events=list(self.events[:lsn])
         signals,incident,risk=self._replay_incident_state(events)
-        upstream=sum((e.upstream_delta or 0) for e in events if (e.upstream_delta or 0)>0)
-        tamper="DETECTED" if any(e.event_type.startswith("tamper.") for e in events) else "NOT_TESTED"
+        receipts=[
+            e.details["upstream_receipt"] for e in events
+            if isinstance(e.details,dict) and isinstance(e.details.get("upstream_receipt"),dict)
+            and e.details["upstream_receipt"].get("status")=="EXECUTED"
+        ]
+        upstream=len(receipts)
+        tamper_events=[e for e in events if e.event_type.startswith("tamper.")]
+        tamper=tamper_events[-1].outcome if tamper_events else "NOT_TESTED"
         approval_state="NONE"
         for e in events:
             if e.outcome=="REQUIRE_HITL":
@@ -769,7 +900,7 @@ class PocEngine:
             "tamper_status":tamper,"approval_state":approval_state,
             "case_state":{
                 "id":SYNTHETIC_CASE,"classification":"RESTRICTED",
-                "last_effect":"DOCUMENT_EXPORT_SYNTHETIC" if upstream else "NONE",
+                "last_effect":receipts[-1]["effect_kind"] if receipts else "NONE",
             },
             "merkle_root":merkle_root([e.event_hash for e in events]),
             "events":[asdict(e) for e in events],
@@ -974,7 +1105,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"status":"NOT_CONFIGURED","expected_surfaces":["/sentinel/status","/api/v1/agent/status","/api/v1/agent/red-team/events"],"note":"Defina HERACLITUS_URL para um endpoint loopback."})
             try:
                 from heraclitus_adapter import HeraclitusAdapter
-                return self._json({"status":"CONNECTED","snapshot":HeraclitusAdapter(base).snapshot()})
+                snapshot=HeraclitusAdapter(base).snapshot()
+                return self._json({"status":snapshot["status"],"snapshot":snapshot})
             except Exception as e: return self._json({"status":"UNAVAILABLE","error":str(e)})
         return self._static(path)
     def do_POST(self)->None:

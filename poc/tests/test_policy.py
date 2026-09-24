@@ -4,7 +4,7 @@ from policy import decide
 
 def digest(v): return hashlib.sha256(json.dumps(v,sort_keys=True,separators=(",",":")).encode()).hexdigest()
 INC={"state":"OPEN","severity":"HIGH","principal":"service-account-17"}
-APR={"approval_id":"APR-001","state":"APPROVED","principal":"service-account-17","target":"document://SYNTHETIC/DOC-001","parameters_digest":digest({"document":"DOC-001","format":"pdf"})}
+APR={"approval_id":"APR-001","state":"APPROVED","action":"export_restricted","principal":"service-account-17","target":"document://SYNTHETIC/DOC-001","parameters_digest":digest({"document":"DOC-001","format":"pdf"})}
 
 class PolicyTests(unittest.TestCase):
     def test_compromised_principal_write_is_denied(self):
@@ -25,6 +25,24 @@ class PolicyTests(unittest.TestCase):
     def test_parameter_swap_is_denied_before_replay_reason(self):
         d=decide(action="export_restricted",incident=INC,principal="service-account-17",target="document://SYNTHETIC/DOC-999",parameters_digest=digest({"document":"DOC-999","format":"pdf"}),approval=APR,consumed={"APR-001"})
         self.assertEqual(d.reason_code,"PARAMETERS_DIGEST_MISMATCH")
+    def test_case_write_approval_cannot_authorize_export(self):
+        approval={**APR,"action":"case_write"}
+        d=decide(action="export_restricted",incident=INC,principal=APR["principal"],
+                 target=APR["target"],parameters_digest=APR["parameters_digest"],approval=approval)
+        self.assertEqual(d.reason_code,"ACTION_BINDING_MISMATCH")
+        self.assertFalse(d.effect_allowed)
+    def test_export_approval_cannot_authorize_case_write(self):
+        approval={**APR,"principal":"safe-operator"}
+        d=decide(action="case_write",incident=INC,principal="safe-operator",
+                 target=APR["target"],parameters_digest=APR["parameters_digest"],approval=approval)
+        self.assertEqual(d.reason_code,"ACTION_BINDING_MISMATCH")
+        self.assertFalse(d.effect_allowed)
+    def test_approval_without_action_fails_closed(self):
+        approval=dict(APR); approval.pop("action")
+        d=decide(action="export_restricted",incident=INC,principal=APR["principal"],
+                 target=APR["target"],parameters_digest=APR["parameters_digest"],approval=approval)
+        self.assertEqual(d.reason_code,"ACTION_BINDING_MISMATCH")
+        self.assertFalse(d.effect_allowed)
     def test_unknown_action_fails_closed(self):
         d=decide(action="something_new",incident=None,principal="x",target="y")
         self.assertEqual(d.reason_code,"UNKNOWN_ACTION_FAIL_CLOSED");self.assertEqual(d.outcome,"DENY")
@@ -41,6 +59,7 @@ class PolicyTests(unittest.TestCase):
 
     def test_case_write_can_execute_after_valid_human_approval_when_principal_not_compromised(self):
         approval=dict(APR)
+        approval["action"]="case_write"
         approval["target"]="case://SYNTHETIC/RE-000001"
         approval["parameters_digest"]=digest({"field":"metadata"})
         d=decide(action="case_write",incident=INC,principal="safe-operator",

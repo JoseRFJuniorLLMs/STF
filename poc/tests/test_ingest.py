@@ -67,6 +67,21 @@ class IngestTests(unittest.TestCase):
         changed=e.submit_action("export_restricted","service-account-17","document://SYNTHETIC/DOC-999",{"document":"DOC-999","format":"pdf"},approval_id)
         self.assertEqual(changed["decision"]["reason_code"],"PARAMETERS_DIGEST_MISMATCH")
 
+    def test_explicit_approval_id_cannot_authorize_another_action(self):
+        e=mod.PocEngine()
+        principal="safe-operator"
+        target="document://SYNTHETIC/DOC-001"
+        params={"document":"DOC-001","format":"pdf"}
+        request=e.submit_action("case_write",principal,target,params)
+        approval_id=request["pending_approval"]["approval_id"]
+        self.assertEqual(e.grant_approval(approval_id,"human:approver")["status"],"APPROVED")
+
+        result=e.submit_action("export_restricted",principal,target,params,approval_id)
+        self.assertEqual(result["decision"]["reason_code"],"ACTION_BINDING_MISMATCH")
+        self.assertFalse(result["decision"]["effect_allowed"])
+        self.assertEqual(result["event"]["upstream_delta"],0)
+        self.assertEqual(e.upstream_hits,0)
+
 
     def test_duplicate_raw_event_is_idempotent(self):
         e=mod.PocEngine()

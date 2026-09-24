@@ -13,11 +13,14 @@ class PolicyDecision:
     explanation:str
     def to_dict(self): return asdict(self)
 
-def _validate_approval(*,principal:str,target:str,parameters_digest:str|None,
+def _validate_approval(*,action:str,principal:str,target:str,parameters_digest:str|None,
                        approval:dict[str,Any]|None,consumed:set[str],now:float)->PolicyDecision|None:
     if approval is None:
         return PolicyDecision("REQUIRE_HITL","HUMAN_APPROVAL_REQUIRED",False,True,
             "Ação sensível exige aprovação humana vinculada.")
+    if action != approval.get("action"):
+        return PolicyDecision("DENY","ACTION_BINDING_MISMATCH",False,False,
+            "A ação atual não corresponde à ação aprovada.")
     if principal != approval.get("principal"):
         return PolicyDecision("DENY","IDENTITY_BINDING_MISMATCH",False,False,
             "A identidade atual não corresponde à identidade aprovada.")
@@ -56,7 +59,7 @@ def decide(*,action:str,incident:dict[str,Any]|None,principal:str,target:str,
             return PolicyDecision("DENY","OPEN_HIGH_RISK_INCIDENT",False,False,
                 "A identidade está ligada a incidente aberto de alto risco; escrita privilegiada é bloqueada.")
         approval_result=_validate_approval(
-            principal=principal,target=target,parameters_digest=parameters_digest,
+            action=action,principal=principal,target=target,parameters_digest=parameters_digest,
             approval=approval,consumed=consumed,now=now,
         )
         if approval_result is not None:
@@ -69,7 +72,7 @@ def decide(*,action:str,incident:dict[str,Any]|None,principal:str,target:str,
 
     if action=="export_restricted":
         approval_result=_validate_approval(
-            principal=principal,target=target,parameters_digest=parameters_digest,
+            action=action,principal=principal,target=target,parameters_digest=parameters_digest,
             approval=approval,consumed=consumed,now=now,
         )
         if approval_result is not None:

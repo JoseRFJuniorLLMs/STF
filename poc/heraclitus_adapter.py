@@ -64,7 +64,7 @@ class HeraclitusAdapter:
         try: return {"status":"PASS","data":self.get(path),"path":path}
         except Exception as e: return {"status":"UNAVAILABLE","error":str(e),"path":path}
     def snapshot(self):
-        out={"connected":True,"base_url":self.base_url,"surfaces":{},"incident_drilldown":{}}
+        out={"connected":False,"base_url":self.base_url,"surfaces":{},"incident_drilldown":{}}
         for key,path in STATIC_PATHS.items():
             out["surfaces"][key]=self._read(path)
         incidents=out["surfaces"].get("sentinel_incidents",{})
@@ -75,4 +75,9 @@ class HeraclitusAdapter:
                 safe=quote(ids[0],safe="")
                 for name,suffix in {"detail":"","evidence":"/evidence","why":"/why"}.items():
                     out["incident_drilldown"][name]=self._read(f"/sentinel/incidents/{safe}{suffix}")
+        results=[*out["surfaces"].values(),*out["incident_drilldown"].values()]
+        passed=sum(result.get("status")=="PASS" for result in results)
+        out["connected"]=passed>0
+        out["status"]="UNAVAILABLE" if not passed else "CONNECTED" if passed==len(results) else "DEGRADED"
+        out["surface_health"]={"passed":passed,"total":len(results)}
         return out
