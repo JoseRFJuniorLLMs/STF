@@ -21,6 +21,9 @@
   let processBusy = false;
   let processCheckedAt = 0;
   let stateBusy = false;
+  let demoEvents = [];
+  let demoCatalog = [];
+  let demoProfile = { DEFENDED: 60, BLOCKED: 30, TARGET_REACHED: 10 };
   let activeFilter = 'all';
   let initialized = false;
 
@@ -30,6 +33,57 @@
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return response.json();
+  }
+
+  async function loadDemo() {
+    try {
+      if (!demoCatalog.length) {
+        const [stf, hdb, profile] = await Promise.all([getJson('/api/stf-attacks'), getJson('/api/heraclitus-attacks'), getJson('/api/demo-profile')]);
+        demoCatalog = [...(stf.attacks || []), ...(hdb.attacks || [])];
+        demoProfile = profile.weights || demoProfile;
+      }
+      const ledger = await getJson('/api/heraclitus-events');
+      if (ledger.status === 'PASS') {
+        demoEvents = (ledger.data?.events || []).filter(event => event.campaign_id === 'STF-DEMO-SIMULATION');
+      }
+    } catch (_) {
+      // A aba continua a mostrar o incidente mesmo se a leitura do ledger falhar.
+    }
+  }
+
+  function renderDemo() {
+    const counts = { DEFENDED: 0, BLOCKED: 0, TARGET_REACHED: 0 };
+    const byEquipment = new Map();
+    for (const attack of demoCatalog) {
+      if (!byEquipment.has(attack.equipment_id)) {
+        byEquipment.set(attack.equipment_id, {
+          name: attack.equipment, total: 0, DEFENDED: 0, BLOCKED: 0, TARGET_REACHED: 0
+        });
+      }
+    }
+    for (const event of demoEvents) {
+      const kind = String(event.reason_code || '').replace(/^DEMO_/, '');
+      if (!(kind in counts)) continue;
+      counts[kind]++;
+      const attack = demoCatalog.find(item => String(event.attack_id || '').startsWith(`demo-${item.id.toLowerCase()}-`));
+      const equipment = attack && byEquipment.get(attack.equipment_id);
+      if (equipment) { equipment.total++; equipment[kind]++; }
+    }
+    const total = Object.values(counts).reduce((sum, value) => sum + value, 0);
+    const pct = value => total ? `${Math.round(value * 100 / total)}%` : '0%';
+    const rows = [...byEquipment.values()].sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+    return `<section class="inc360-section">
+      <div class="inc360-section-head"><div><span class="inc360-section-kicker">SIMULAÇÃO · HERACLITUSDB</span><h3>Ataques em todos os componentes</h3></div><span class="inc360-count">${total} tentativa(s)</span></div>
+      <p class="inc360-section-copy">Meta por componente: ${demoProfile.DEFENDED}% defendidos, ${demoProfile.BLOCKED}% bloqueados e ${demoProfile.TARGET_REACHED}% que chegaram ao alvo na simulação. Efeito real no alvo: zero. Execute “Simular rede” na aba Defesa cibernética.</p>
+      <div class="inc360-kpis">
+        <div><span>Defendidos</span><strong>${counts.DEFENDED}</strong><small>${pct(counts.DEFENDED)} · detectados e contidos</small></div>
+        <div><span>Bloqueados</span><strong>${counts.BLOCKED}</strong><small>${pct(counts.BLOCKED)} · barrados na entrada</small></div>
+        <div><span>Chegaram ao alvo</span><strong>${counts.TARGET_REACHED}</strong><small>${pct(counts.TARGET_REACHED)} · somente simulação</small></div>
+      </div>
+      <div class="table-wrap"><table class="simple-table"><thead><tr><th>Componente</th><th>Tent.</th><th>Def.</th><th>Bloq.</th><th>Alvo</th></tr></thead><tbody>
+        ${rows.map(row => `<tr><td>${escapeHtml(row.name)}</td><td>${row.total}</td><td>${row.DEFENDED}</td><td>${row.BLOCKED}</td><td>${row.TARGET_REACHED}</td></tr>`).join('')}
+      </tbody></table></div>
+    </section>`;
   }
 
   function processId(s) {
@@ -187,6 +241,7 @@
         <div><span>Decisões do gateway</span><strong>${policyCount}</strong><small>registradas no histórico</small></div>
         <div><span>Efeitos upstream</span><strong>${number(s.upstream_hits)}</strong><small>oráculo local da campanha</small></div>
       </div>
+      ${renderDemo()}
       <div class="inc360-grid">
         <div class="inc360-main">
           <section class="inc360-section"><div class="inc360-section-head"><div><span class="inc360-section-kicker">DETECÇÃO</span><h3>Por que o incidente foi aberto</h3></div><span class="inc360-badge ${incident ? 'verified' : 'uncertain'}">${incident ? 'CORRELACIONADO' : 'PENDENTE'}</span></div>
@@ -247,6 +302,7 @@
     try {
       snapshot = await getJson('/api/state');
       if (!root.hidden) {
+        await loadDemo();
         render();
         loadProcess();
       }

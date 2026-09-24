@@ -1492,6 +1492,7 @@ body.panel-fullscreen-active {
 :root {
   --chart-attempts: #c9182b; /* tentativa = vermelho */
   --chart-blocked: #2fa66a; /* bloqueado = não invadiu = verde */
+  --chart-defended: #177da8; /* simulação: detectado e contido */
   --chart-hitl: #d48a0c;
   --chart-pass: #7a3fbf; /* chegou ao alvo = invadiu = roxo */
   --chart-observed: #1f7fb8; /* paleta validada (CVD/normal) com validate_palette.js */
@@ -1689,7 +1690,7 @@ body.panel-fullscreen-active {
 .charts-panel .panel-head h2 { margin: 0; }
 .kpi-row {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   padding: 12px 16px 4px;
 }

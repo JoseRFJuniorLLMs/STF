@@ -248,4 +248,35 @@ class DesfechoUnicoTests(unittest.TestCase):
         self.assertFalse(mod.is_attack({"attack":False}))
         self.assertTrue(mod.is_attack({}))
 
+    def test_simulacao_grava_perfil_por_componente_sem_efeito_real(self):
+        class Adapter:
+            def __init__(self): self.events = []
+            def record_red_team_event(self, payload):
+                self.events.append(payload)
+                return {"accepted": True, "lsn": len(self.events)}
+
+        engine = mod.PocEngine()
+        adapter = Adapter()
+        engine.adapter = adapter
+        for attack_id in ("NET_WAF_01", "DB_ORA_01", "H01"):
+            results = [engine.simulate_attack(attack_id) for _ in range(10)]
+            eq_id = results[0]["attack"]["equipment_id"]
+            self.assertEqual(engine.demo_counts[eq_id], {
+                "DEFENDED": 6, "BLOCKED": 3, "TARGET_REACHED": 1
+            })
+            self.assertTrue(all(result["event"]["upstream_delta"] == 0 for result in results))
+        self.assertEqual(engine.upstream_hits, 0)
+        self.assertEqual(len(adapter.events), 30)
+        self.assertTrue(all(event["campaign_id"] == mod.DEMO_CAMPAIGN_ID for event in adapter.events))
+        self.assertEqual({event["reason_code"] for event in adapter.events}, {
+            "DEMO_DEFENDED", "DEMO_BLOCKED", "DEMO_TARGET_REACHED"
+        })
+
+    def test_simulacao_recusa_disparo_sem_banco(self):
+        engine = mod.PocEngine()
+        engine.adapter = None
+        with self.assertRaisesRegex(RuntimeError, "HeraclitusDB indisponível"):
+            engine.simulate_attack("NET_WAF_01")
+        self.assertEqual(sum(sum(counts.values()) for counts in engine.demo_counts.values()), 0)
+
 if __name__=="__main__": unittest.main()

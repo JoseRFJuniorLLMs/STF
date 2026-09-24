@@ -113,7 +113,11 @@ async function api(path, opts = {}) {
   const headers = { 'Content-Type': 'application/json', 'X-STF-POC': '1', ...(opts.headers || {}) };
   // Caminho relativo: funciona na raiz (local) e atrás do nginx em /stf/
   const r = await fetch(path.replace(/^\//, ''), { ...opts, headers });
-  if (!r.ok) throw new Error('HTTP ' + r.status);
+  if (!r.ok) {
+    let detail = '';
+    try { detail = (await r.json()).detail || ''; } catch (_) {}
+    throw new Error(detail || 'HTTP ' + r.status);
+  }
   return r.json();
 }
 
@@ -179,6 +183,26 @@ function showAttackHint(attack, ev, equipCounter) {
   const targetName = attack.target || attack.asset || '';
   const attempts = equipCounter ? equipCounter.attempts : (state?.equipment_counters?.[attack.equipment_id]?.attempts ?? 1);
   const blocked = equipCounter ? equipCounter.unauthorized_blocked : (state?.equipment_counters?.[attack.equipment_id]?.unauthorized_blocked ?? 0);
+
+  if (reasonCode.startsWith('DEMO_')) {
+    const label = {
+      DEMO_DEFENDED: 'DEFENDIDO — detectado e contido',
+      DEMO_BLOCKED: 'BLOQUEADO — barrado na entrada',
+      DEMO_TARGET_REACHED: 'CHEGOU AO ALVO — simulado'
+    }[reasonCode] || 'RESULTADO SIMULADO';
+    $('#hintTime').textContent = dt;
+    $('#hintAttackName').textContent = attack.title;
+    $('#hintInfraName').textContent = `${eqName} [Tentativas: ${attempts}]`;
+    $('#hintOutcome').textContent = label;
+    $('#hintOutcome').className = 'hint-outcome-badge ' + (reasonCode === 'DEMO_TARGET_REACHED' ? 'PASS' : 'DENY');
+    $('#hintUpstream').textContent = 'upstream real=0';
+    $('#hintBadge').textContent = 'SIMULAÇÃO · ' + label;
+    $('#hintDesc').textContent = `Resultado demonstrativo gravado no HeraclitusDB às ${dt}; nenhum efeito real no alvo.`;
+    h.className = 'attack-hint show ' + (reasonCode === 'DEMO_TARGET_REACHED' ? 'pass' : 'deny');
+    if (hintTimeout) clearTimeout(hintTimeout);
+    hintTimeout = setTimeout(() => h.classList.remove('show'), 6500);
+    return;
+  }
 
   const hintTime = $('#hintTime');
   if (hintTime) hintTime.textContent = dt;
@@ -1469,6 +1493,7 @@ let hdbCurrentPage = 1;
 let hdbPageSize = 15;
 let hdbAllEvents = [];
 let hdbLedgerLimit = 500;
+let demoProfile = { DEFENDED: 60, BLOCKED: 30, TARGET_REACHED: 10 };
 
 async function loadRealHeraclitusTrail() {
   const badge = $('#integrationBadge');
@@ -1554,7 +1579,16 @@ function renderHdbPage() {
     const decision = classifyDecision(ev);
     let badgeClass = 'PASS';
     let label = resUpper;
-    if (decision === 'PASS') {
+    if (ev.reason_code === 'DEMO_DEFENDED') {
+      badgeClass = 'OBSERVED';
+      label = 'SIMULADO · DEFENDIDO';
+    } else if (ev.reason_code === 'DEMO_BLOCKED') {
+      badgeClass = 'DENY';
+      label = 'SIMULADO · BLOQUEADO';
+    } else if (ev.reason_code === 'DEMO_TARGET_REACHED') {
+      badgeClass = 'PASS';
+      label = 'SIMULADO · CHEGOU AO ALVO';
+    } else if (decision === 'PASS') {
       badgeClass = 'PASS';
       label = 'CHEGOU AO ALVO';
     } else if (decision === 'DENY') {
@@ -1995,6 +2029,7 @@ async function loadAndRenderHdbAttacks() {
       `;
     }).join('');
     applyNodeFilter();
+    renderIncidentCharts();
   } catch (err) {
     container.innerHTML = `<div class="empty">Erro ao carregar catálogo do HeraclitusDB: ${esc(err.message)}</div>`;
   }
@@ -2175,6 +2210,7 @@ async function loadAndRenderStfAttacks() {
       }).join('');
     }
     applyNodeFilter();
+    renderIncidentCharts();
   } catch (err) {
     console.error('Erro ao carregar catálogo da infraestrutura STF:', err);
   }
@@ -2255,6 +2291,7 @@ let massiveLoopTimer = null;
 let massiveLoopActive = false;
 let currentMassiveMode = null;
 let massiveAttackCount = 0;
+let massiveTargetBag = [];
 
 const MASSIVE_TARGETS = {
   firewall: ['NET_WAF_01', 'NET_IAM_02', 'NET_LAN_04', 'NET_VDI_03'],
@@ -2300,6 +2337,7 @@ window.toggleMassiveAttack = function(mode) {
   currentMassiveMode = mode;
   massiveLoopActive = true;
   massiveAttackCount = 0;
+  massiveTargetBag = [];
 
   Object.values(MASSIVE_BUTTON_IDS).forEach(id => {
     const b = $(id);
@@ -2344,6 +2382,7 @@ window.stopAllMassiveAttacks = function(showToast = true) {
     toast(`Ataque massivo interrompido pelo operador. Total de ${massiveAttackCount} disparos auditados no HeraclitusDB.`);
   }
   currentMassiveMode = null;
+  massiveTargetBag = [];
   loadRealHeraclitusTrail();
 };
 
@@ -2351,7 +2390,14 @@ async function runMassiveCycle() {
   if (!massiveLoopActive || !currentMassiveMode) return;
 
   const targetList = MASSIVE_TARGETS[currentMassiveMode] || MASSIVE_TARGETS.random;
-  const attackId = targetList[Math.floor(Math.random() * targetList.length)];
+  if (!massiveTargetBag.length) {
+    massiveTargetBag = [...targetList];
+    for (let i = massiveTargetBag.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [massiveTargetBag[i], massiveTargetBag[j]] = [massiveTargetBag[j], massiveTargetBag[i]];
+    }
+  }
+  const attackId = massiveTargetBag.pop();
 
   try {
     massiveAttackCount++;
@@ -2360,18 +2406,35 @@ async function runMassiveCycle() {
       bannerText.textContent = `ATAQUE MASSIVO CONTÍNUO [${MODE_LABELS[currentMassiveMode] || currentMassiveMode.toUpperCase()}]: ${massiveAttackCount} disparos`;
     }
 
-    if (attackId.startsWith('H')) {
-      await executeHdbAttackSilent(attackId);
-    } else {
-      await executeStfAttackSilent(attackId);
-    }
+    await executeDemoAttackSilent(attackId);
   } catch (err) {
     console.warn('[MassiveLoop] Erro no disparo:', err);
+    stopAllMassiveAttacks(false);
+    toast(`Simulação interrompida: ${err.message}`);
   }
 
   if (massiveLoopActive) {
     massiveLoopTimer = setTimeout(runMassiveCycle, 650);
   }
+}
+
+async function executeDemoAttackSilent(attackId) {
+  const res = await api('/api/demo-simulate', {
+    method: 'POST', body: JSON.stringify({ attack_id: attackId })
+  });
+  if (res.state) {
+    state = res.state;
+    $('#riskValue').textContent = state.risk;
+    $('#upstreamHits').textContent = state.upstream_hits;
+    if (state.equipment_counters) renderEquipmentCounters(state.equipment_counters);
+    updateFocusCard(state);
+  }
+  const atk = res.attack;
+  const targetNodeId = findNodeIdForTarget(atk?.target) || 'asset:heraclitusdb';
+  markLiveAttackLsn(res.event?.lsn ?? res.lsn);
+  if (targetNodeId && atk) triggerNodeAttackPopup(targetNodeId, atk.id, atk.title, outcomeOf(res));
+  showMassiveAttackHint(res);
+  if (massiveAttackCount % 2 === 0) loadRealHeraclitusTrail();
 }
 
 // Hint do canto inferior direito durante o massivo: mesmo conteúdo dos ataques
@@ -2556,8 +2619,9 @@ window.clearNodeFilter = function() {
 // reteve (HITL não executa nada); tudo o resto INVADIU (roxo), inclusive a intrusão só
 // observada da fase 1. "inconclusive" sem bloqueio vem de testes externos sem veredito.
 const DECISION_CATS = [
+  { key: 'DEFENDED', label: 'Defendido (detectado e contido)', color: 'var(--chart-defended)' },
   { key: 'DENY', label: 'Bloqueado (não invadiu)', color: 'var(--chart-blocked)' },
-  { key: 'PASS', label: 'Chegou ao alvo (invadiu)', color: 'var(--chart-pass)' },
+  { key: 'PASS', label: 'Chegou ao alvo', color: 'var(--chart-pass)' },
   { key: 'OTHER', label: 'Inconclusivo (sem veredito)', color: 'var(--chart-other)' }
 ];
 const ATTEMPT_CAT = { key: 'ATTEMPT', label: 'Tentativas de ataque', color: 'var(--chart-attempts)' };
@@ -2575,6 +2639,10 @@ function isControlEvent(ev) {
 // null = não é tentativa de ataque (fica fora de todos os gráficos)
 function classifyDecision(ev) {
   if (isControlEvent(ev)) return null;
+  const reason = String(ev.reason_code || '');
+  if (reason === 'DEMO_DEFENDED') return 'DEFENDED';
+  if (reason === 'DEMO_BLOCKED') return 'DENY';
+  if (reason === 'DEMO_TARGET_REACHED') return 'PASS';
   const raw = String(ev.result || '');
   const r = raw.toUpperCase();
   if ((Number(ev.upstream_delta) || 0) > 0) return 'PASS';
@@ -2594,7 +2662,9 @@ const fmtInt = n => Number(n || 0).toLocaleString('pt-BR');
 const pctOf = (n, total) => (total ? `${Math.round((n / total) * 100)}%` : '');
 
 function renderIncidentCharts() {
-  const attacks = (hdbAllEvents || []).map(ev => ({ ev, k: classifyDecision(ev) })).filter(x => x.k);
+  const demoEvents = (hdbAllEvents || []).filter(ev => ev.campaign_id === 'STF-DEMO-SIMULATION');
+  const sourceEvents = demoEvents.length ? demoEvents : (hdbAllEvents || []);
+  const attacks = sourceEvents.map(ev => ({ ev, k: classifyDecision(ev) })).filter(x => x.k);
   const counters = state?.equipment_counters || {};
 
   // KPIs
@@ -2606,10 +2676,18 @@ function renderIncidentCharts() {
   }
   const total = attacks.length;
   const setText = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+  setText('#chartSourceLabel', demoEvents.length
+    ? `SIMULAÇÃO gravada no HeraclitusDB · meta ${demoProfile.DEFENDED}% / ${demoProfile.BLOCKED}% / ${demoProfile.TARGET_REACHED}% por componente · sem efeito real no alvo`
+    : 'resultados observados no ledger HeraclitusDB');
+  setText('#chartDecisionTitle', demoEvents.length ? 'Desfechos da simulação' : 'Decisões do gateway');
+  setText('#kpiInvadedLabel', demoEvents.length ? 'Chegou ao alvo (simulado)' : 'Invadiu (chegou ao alvo)');
   setText('#kpiEvents', fmtInt(total));
   // O servidor pede ao ledger no máximo hdbLedgerLimit entradas (/api/heraclitus-events)
   setText('#kpiEventsSub', (hdbAllEvents || []).length >= hdbLedgerLimit
-    ? `nas ${fmtInt(hdbLedgerLimit)} entradas mais recentes do ledger` : 'todas as do ledger');
+    ? `nas ${fmtInt(hdbLedgerLimit)} entradas mais recentes do ledger${demoEvents.length ? ' · simulação' : ''}`
+    : demoEvents.length ? 'eventos simulados gravados no ledger' : 'todas as do ledger');
+  setText('#kpiDefended', fmtInt(byDecision.DEFENDED));
+  setText('#kpiDefendedPct', total ? `${pctOf(byDecision.DEFENDED, total)} das tentativas` : '');
   setText('#kpiBlocked', fmtInt(byDecision.DENY));
   setText('#kpiBlockedPct', total ? `${pctOf(byDecision.DENY, total)} das tentativas` : '');
   setText('#kpiInvaded', fmtInt(byDecision.PASS));
@@ -2620,7 +2698,7 @@ function renderIncidentCharts() {
 
   renderActivityTimeline(attacks);
   renderDecisionDonut(byDecision, total);
-  renderEquipmentChart(counters);
+  renderEquipmentChart(counters, demoEvents);
   renderVectorChart(attacks.map(x => x.ev));
 }
 
@@ -2659,7 +2737,7 @@ function renderActivityTimeline(attacks) {
   if (!host) return;
   const timed = attacks.map(({ ev, k }) => ({ t: eventTimeMs(ev), k })).filter(e => e.t).sort((a, b) => a.t - b.t);
   if (legend) {
-    legend.innerHTML = [ATTEMPT_CAT, ...DECISION_CATS.slice(0, 2)].map(d =>
+    legend.innerHTML = [ATTEMPT_CAT, ...DECISION_CATS.slice(0, 3)].map(d =>
       `<span class="lg-item"><i class="lg-swatch" style="background:${d.color}"></i>${d.label}</span>`).join('');
   }
   if (!timed.length) {
@@ -2679,8 +2757,8 @@ function renderActivityTimeline(attacks) {
   // Diário: a linha é o dia da semana (Dom..Sáb), como no GitHub.
   const lastIdx = daily ? (cols - 1) * HEAT_ROWS + new Date(endB).getDay() : cols * HEAT_ROWS - 1;
   const startB = endB - lastIdx * step.ms;
-  const cells = Array.from({ length: lastIdx + 1 }, (_, i) => ({ t: startB + i * step.ms, n: 0, DENY: 0, PASS: 0, OTHER: 0 }));
-  const base = { n: 0, DENY: 0, PASS: 0, OTHER: 0 }; // tentativas anteriores à janela
+  const cells = Array.from({ length: lastIdx + 1 }, (_, i) => ({ t: startB + i * step.ms, n: 0, DEFENDED: 0, DENY: 0, PASS: 0, OTHER: 0 }));
+  const base = { n: 0, DEFENDED: 0, DENY: 0, PASS: 0, OTHER: 0 }; // tentativas anteriores à janela
   for (const e of timed) {
     const i = Math.round((heatBucket(e.t, step) - startB) / step.ms);
     const target = i < 0 ? base : cells[Math.min(i, lastIdx)];
@@ -2737,18 +2815,19 @@ function renderActivityTimeline(attacks) {
   // ------------------------------------------- avanço acumulado (linha do tempo)
   const LW = 1000, LH = 150, padL = 40, padR = 70, padT = 10, padB = 22;
   const plotW = LW - padL - padR, plotH = LH - padT - padB;
-  const acc = { n: base.n, DENY: base.DENY, PASS: base.PASS };
+  const acc = { n: base.n, DEFENDED: base.DEFENDED, DENY: base.DENY, PASS: base.PASS };
   const series = cells.map(c => {
-    acc.n += c.n; acc.DENY += c.DENY; acc.PASS += c.PASS;
-    return { t: c.t, n: acc.n, DENY: acc.DENY, PASS: acc.PASS };
+    acc.n += c.n; acc.DEFENDED += c.DEFENDED; acc.DENY += c.DENY; acc.PASS += c.PASS;
+    return { t: c.t, n: acc.n, DEFENDED: acc.DEFENDED, DENY: acc.DENY, PASS: acc.PASS };
   });
   const maxY = niceMax(acc.n);
   const xAt = i => padL + (series.length > 1 ? (i / (series.length - 1)) * plotW : plotW);
   const yAt = v => padT + plotH - (v / maxY) * plotH;
   const lines = [
     { key: 'n', color: ATTEMPT_CAT.color, label: 'tentativas' },
+    { key: 'DEFENDED', color: 'var(--chart-defended)', label: 'defendidos' },
     { key: 'DENY', color: 'var(--chart-blocked)', label: 'bloqueados' },
-    { key: 'PASS', color: 'var(--chart-pass)', label: 'invadiu' }
+    { key: 'PASS', color: 'var(--chart-pass)', label: 'chegou ao alvo' }
   ];
   const stepPath = key => series.map((p, i) =>
     i === 0 ? `M ${xAt(0)} ${yAt(p[key])}` : `H ${xAt(i)} V ${yAt(p[key])}`).join(' ');
@@ -2781,7 +2860,7 @@ function renderActivityTimeline(attacks) {
     ${ends}${ticks}${hits}</svg>`;
 
   host.innerHTML = `<div class="heatmap-wrap">${heatSvg}${heatFoot}</div>
-    <div class="timeline-sub">Avanço no tempo <small>tentativas, bloqueios e invasões acumulados</small></div>${lineSvg}`;
+    <div class="timeline-sub">Avanço no tempo <small>tentativas e desfechos acumulados</small></div>${lineSvg}`;
 }
 
 function renderDecisionDonut(byDecision, total) {
@@ -2819,41 +2898,61 @@ function renderDecisionDonut(byDecision, total) {
     </svg>
     <div class="donut-legend">
       <span class="lg-item"><span><i class="lg-swatch" style="background:${ATTEMPT_CAT.color}"></i> ${ATTEMPT_CAT.label}</span><b>${fmtInt(total)}</b></span>
-      ${DECISION_CATS.filter(d => byDecision[d.key] || d.key !== 'OTHER').map(d =>
+      ${DECISION_CATS.filter(d => byDecision[d.key] || d.key === 'DENY' || d.key === 'PASS').map(d =>
         `<span class="lg-item"><span><i class="lg-swatch" style="background:${d.color}"></i> ${d.label}</span><b>${fmtInt(byDecision[d.key])} · ${pctOf(byDecision[d.key], total) || '0%'}</b></span>`).join('')}
     </div></div>`;
 }
 
 // Barras horizontais: tentativas, bloqueios e invasões por equipamento (top 10) —
 // os mesmos contadores do grafo.
-function renderEquipmentChart(counters) {
+function renderEquipmentChart(counters, demoEvents = []) {
   const host = $('#chartEquipment');
   if (!host) return;
-  const rows = Object.values(counters).filter(eq => (eq.attempts || 0) > 0)
-    .sort((a, b) => (b.attempts || 0) - (a.attempts || 0)).slice(0, 10);
+  const byEquipment = Object.fromEntries(Object.values(counters).map(eq =>
+    [eq.id, { ...eq, attempts: 0, defended: 0, unauthorized_blocked: 0, reached: 0 }]));
+  if (demoEvents.length) {
+    const catalog = [...cachedStfAttacks, ...cachedHdbAttacks];
+    for (const ev of demoEvents) {
+      const atk = catalog.find(item => String(ev.attack_id || '').startsWith(`demo-${item.id.toLowerCase()}-`));
+      const row = atk && byEquipment[atk.equipment_id];
+      if (!row) continue;
+      row.attempts++;
+      const decision = classifyDecision(ev);
+      if (decision === 'DEFENDED') row.defended++;
+      else if (decision === 'DENY') row.unauthorized_blocked++;
+      else if (decision === 'PASS') row.reached++;
+    }
+  }
+  const rows = (demoEvents.length ? Object.values(byEquipment) : Object.values(counters))
+    .filter(eq => demoEvents.length || (eq.attempts || 0) > 0)
+    .sort((a, b) => (b.attempts || 0) - (a.attempts || 0));
   if (!rows.length) {
     host.innerHTML = '<div class="chart-empty">Nenhum equipamento atacado ainda.</div>';
     return;
   }
-  const maxV = niceMax(Math.max(...rows.map(r => r.attempts || 0)));
-  const W = 420, labelW = 130, valW = 34, rowH = 30, barH = 7;
+  const maxV = niceMax(Math.max(1, ...rows.map(r => r.attempts || 0)));
+  const W = 420, labelW = 130, valW = 34, rowH = 38, barH = 7;
   const plotW = W - labelW - valW;
   const H = rows.length * rowH + 4;
   const bar = (y, v, color) => (v ? `<rect class="mark" x="${labelW}" y="${y}" width="${Math.max(2, (v / maxV) * plotW)}" height="${barH}" rx="2" fill="${color}"/>` : '');
   const body = rows.map((eq, i) => {
     const y0 = i * rowH + 4;
-    const attempts = eq.attempts || 0, blocked = eq.unauthorized_blocked || 0, breached = Math.max(0, attempts - blocked);
+    const attempts = eq.attempts || 0, defended = eq.defended || 0;
+    const blocked = eq.unauthorized_blocked || 0;
+    const breached = demoEvents.length ? eq.reached || 0 : Math.max(0, attempts - blocked);
     const wA = Math.max(2, (attempts / maxV) * plotW);
     const tip = `<strong>${esc(eq.name)}</strong>` +
       `<div class="tt-row"><i class="lg-swatch" style="background:var(--chart-attempts)"></i>Tentativas<b>${fmtInt(attempts)}</b></div>` +
+      (demoEvents.length ? `<div class="tt-row"><i class="lg-swatch" style="background:var(--chart-defended)"></i>Defendidas<b>${fmtInt(defended)}</b></div>` : '') +
       `<div class="tt-row"><i class="lg-swatch" style="background:var(--chart-blocked)"></i>Bloqueadas<b>${fmtInt(blocked)}</b></div>` +
-      `<div class="tt-row"><i class="lg-swatch" style="background:var(--chart-pass)"></i>Invadiu<b>${fmtInt(breached)}</b></div>`;
+      `<div class="tt-row"><i class="lg-swatch" style="background:var(--chart-pass)"></i>Chegou ao alvo<b>${fmtInt(breached)}</b></div>`;
     return `<g class="bar-group" data-tip="${esc(tip)}">
       <rect class="hit" x="0" y="${y0 - 3}" width="${W}" height="${rowH}"/>
       <text class="label-text" x="${labelW - 8}" y="${y0 + barH + 1}" text-anchor="end" dominant-baseline="central">${esc(short(eq.name, 20))}</text>
       ${bar(y0, attempts, 'var(--chart-attempts)')}
-      ${bar(y0 + barH + 1, blocked, 'var(--chart-blocked)')}
-      ${bar(y0 + 2 * (barH + 1), breached, 'var(--chart-pass)')}
+      ${demoEvents.length ? bar(y0 + barH + 1, defended, 'var(--chart-defended)') : ''}
+      ${bar(y0 + (demoEvents.length ? 2 : 1) * (barH + 1), blocked, 'var(--chart-blocked)')}
+      ${bar(y0 + (demoEvents.length ? 3 : 2) * (barH + 1), breached, 'var(--chart-pass)')}
       <text class="value-text" x="${labelW + wA + 5}" y="${y0 + barH / 2}" dominant-baseline="central">${fmtInt(attempts)}</text>
     </g>`;
   }).join('');
@@ -2966,6 +3065,7 @@ function render(s) {
 async function init() {
   setupLeftPanelTabs();
   setupChartTooltip();
+  try { demoProfile = (await api('/api/demo-profile')).weights || demoProfile; } catch (_) {}
   const refreshTrailBtn = $('#refreshTrailBtn');
   if (refreshTrailBtn) refreshTrailBtn.onclick = () => loadRealHeraclitusTrail();
   try {

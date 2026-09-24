@@ -12,11 +12,13 @@ import hashlib
 import json
 import mimetypes
 import os
+import random
 import subprocess
 import sys
 import tempfile
 import threading
 import time
+import uuid
 from copy import deepcopy
 from functools import wraps
 from dataclasses import dataclass, field, asdict
@@ -46,6 +48,16 @@ COMPROMISED_PRINCIPAL = "service-account-17"
 # Janela do ledger para a grade e os gráficos. Com ataques massivos 200 enchia em
 # segundos; o Agent Black Box aceita até 1000 por pedido.
 LEDGER_EVENTS_LIMIT = 500
+DEMO_CAMPAIGN_ID = "STF-DEMO-SIMULATION"
+DEMO_OUTCOMES = ("DEFENDED", "BLOCKED", "TARGET_REACHED")
+
+def demo_weights() -> dict[str, int]:
+    """Percentuais configuráveis para os eventos sintéticos da apresentação."""
+    keys = ("STF_DEMO_DEFENDED_PCT", "STF_DEMO_BLOCKED_PCT", "STF_DEMO_TARGET_PCT")
+    values = [int(os.environ.get(key, default)) for key, default in zip(keys, (60, 30, 10))]
+    if any(value < 0 or value > 100 for value in values) or sum(values) != 100:
+        raise ValueError("STF_DEMO_*_PCT devem estar entre 0 e 100 e somar 100")
+    return dict(zip(DEMO_OUTCOMES, values))
 LOCAL_HOSTS={"127.0.0.1","localhost","::1"}
 
 EQUIPMENT_DEFINITIONS = [
@@ -723,6 +735,7 @@ class PocEngine:
                 }
                 for eq in EQUIPMENT_DEFINITIONS
             }
+            self.demo_counts = {eq["id"]: dict.fromkeys(DEMO_OUTCOMES, 0) for eq in EQUIPMENT_DEFINITIONS}
             self.tamper_status = "NOT_TESTED"
             self.offline_verify = "NOT_RUN"
             self.last_action = "Ambiente reiniciado"
@@ -1349,6 +1362,62 @@ class PocEngine:
                 "count": len(results),
                 "results": results,
                 "state": self.snapshot(message=f"Bateria completa de 9 ataques ao HeraclitusDB executada com sucesso!")
+            }
+
+    def simulate_attack(self, attack_id: str) -> dict[str, Any]:
+        """Grava um resultado de demonstração, sem executar efeito no alvo."""
+        with self.lock:
+            catalog = STF_TARGET_ATTACKS + HERACLITUS_ATTACKS
+            atk = next((item for item in catalog if item["id"].upper() == str(attack_id).upper()), None)
+            if atk is None:
+                raise ValueError(f"Ataque {attack_id} não encontrado")
+            if self.adapter is None:
+                raise RuntimeError("HeraclitusDB indisponível; simulação não foi gravada")
+
+            weights = demo_weights()
+            eq_id = atk["equipment_id"]
+            counts = self.demo_counts[eq_id]
+            next_total = sum(counts.values()) + 1
+            # Corrige o desvio a cada disparo; em blocos de dez por componente,
+            # 60/30/10 resulta exatamente em 6/3/1. Empates são sorteados.
+            priority = list(DEMO_OUTCOMES)
+            random.shuffle(priority)
+            outcome = max(priority, key=lambda key: next_total * weights[key] / 100 - counts[key])
+            reason = f"DEMO_{outcome}"
+            payload = {
+                "attack_id": f"demo-{atk['id'].lower()}-{uuid.uuid4().hex}",
+                "campaign_id": DEMO_CAMPAIGN_ID,
+                "vector": atk.get("vector") or atk["title"],
+                "target": atk["target"],
+                "phase": "synthetic-demo",
+                "result": "fail" if outcome == "TARGET_REACHED" else "pass",
+                "expected": "synthetic demonstration only; no real target effect",
+                "reason_code": reason,
+                "blocked": outcome != "TARGET_REACHED",
+                "upstream_delta": 0,
+                "sequence": len(self.events) + 1,
+            }
+            recorded = self.adapter.record_red_team_event(payload)
+            if not recorded.get("accepted"):
+                raise RuntimeError("HeraclitusDB recusou o evento de simulação")
+
+            counts[outcome] += 1
+            local_outcome = {"DEFENDED": "DETECTED", "BLOCKED": "DENY", "TARGET_REACHED": "PASS"}[outcome]
+            ev = self._append({
+                "phase": "DEMO", "source": atk["equipment"],
+                "type": f"demo.attack.{atk['id'].lower()}", "severity": "INFO",
+                "actor": "ai-attacker-synthetic", "asset": atk["target"],
+                "summary": f"Simulação {outcome}: {atk['title']}",
+                "outcome": local_outcome, "reason": reason, "upstream": 0,
+                "equipment_id": eq_id, "simulation": True,
+                "heraclitus_lsn": recorded.get("lsn"),
+            }, persist=False)
+            self._add_graph(ev)
+            self.last_action = f"Simulação {outcome} em {atk['equipment']}"
+            return {
+                "attack": atk, "event": asdict(ev), "simulation_outcome": outcome,
+                "lsn": recorded.get("lsn"), "counters": deepcopy(self.equipment_counters),
+                "state": self.snapshot(message=self.last_action),
             }
 
     def execute_target_attack(self, attack_id: str) -> dict[str, Any]:
@@ -2193,6 +2262,8 @@ class Handler(BaseHTTPRequestHandler):
         if path=="/api/health": return self._json({"status":"ok","mode":"loopback-only","campaign":CAMPAIGN_ID})
         if path=="/api/stf-attacks":
             return self._json({"attacks": STF_TARGET_ATTACKS})
+        if path=="/api/demo-profile":
+            return self._json({"campaign_id": DEMO_CAMPAIGN_ID, "weights": demo_weights(), "mode": "synthetic"})
         if path in ("/api/heraclitus-events", "/api/trail"):
             base=getattr(ENGINE, "heraclitus_url", None) or os.environ.get("HERACLITUS_URL", "http://127.0.0.1:8080")
             try:
@@ -2245,6 +2316,12 @@ class Handler(BaseHTTPRequestHandler):
         parsed=urlparse(self.path)
         path=parsed.path
         query=parse_qs(parsed.query)
+        if path=="/api/demo-simulate":
+            try:
+                body=self._read_json_body()
+                return self._json(ENGINE.simulate_attack(str(body.get("attack_id", ""))), 200)
+            except Exception as e:
+                return self._json({"error": "demo_simulation_failed", "detail": str(e)}, 400)
         if path=="/api/stf-attacks/execute":
             try:
                 body=self._read_json_body()

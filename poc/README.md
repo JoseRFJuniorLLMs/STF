@@ -47,6 +47,14 @@ python -m unittest discover -s tests -v
 
 O servidor recusa bind não-loopback. Não há scanner, exploit real, credencial real, subprocesso ofensivo ou chamada externa.
 
+## Simulação 60/30/10 da rede
+
+Os botões **Massivo** (inclusive **Simular rede**) registram tentativas sintéticas no HeraclitusDB. Por componente, cada bloco de dez tentativas produz 6 **defendidas** (detectadas e contidas), 3 **bloqueadas** na entrada e 1 que **chegou ao alvo na simulação**. O destino do modo de rede é sorteado entre os ataques disponíveis. Nenhuma tentativa sintética executa um efeito real no alvo (`upstream_delta=0`). Os testes individuais continuam registrando seus próprios vereditos.
+
+O servidor exige conexão com o HeraclitusDB para gravar a simulação; se o banco estiver indisponível, o disparo falha e o loop para. Os eventos usam a campanha `STF-DEMO-SIMULATION`, e o dashboard os separa dos testes reais. A aba **Incidente 360º** (`#incidente`) mostra os três resultados e todos os componentes. A janela do painel contém os 500 eventos mais recentes do ledger; os percentuais exibidos podem variar até completar blocos de dez por componente ou quando parte da janela contém outros eventos.
+
+Para ajustar os pesos antes de iniciar o servidor, defina `STF_DEMO_DEFENDED_PCT`, `STF_DEMO_BLOCKED_PCT` e `STF_DEMO_TARGET_PCT`. Os três valores devem ser inteiros entre 0 e 100 e somar 100; o padrão é `60`, `30`, `10`. Reiniciar o servidor zera apenas os contadores locais da sequência; os eventos já gravados no HeraclitusDB permanecem no ledger.
+
 ## Integração com HeraclitusDB real
 
 O adapter somente leitura aceita apenas loopback e foi preparado para superfícies reais como `/sentinel/status`, `/api/v1/agent/status` e `/api/v1/agent/red-team/events`.
