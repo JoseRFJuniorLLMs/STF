@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!python
 """Portable loopback HTTP smoke test for STF POC."""
 from __future__ import annotations
 import json, pathlib, subprocess, sys, time, urllib.request, urllib.error
