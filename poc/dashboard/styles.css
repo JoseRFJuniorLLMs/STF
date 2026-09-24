@@ -284,6 +284,8 @@ body::before {
   padding: 14px 18px 10px;
   border-bottom: 1px solid var(--gov-border-light);
   background: #fafcff;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 .section-kicker {
   font-size: 10px;
@@ -446,7 +448,23 @@ body::before {
 .head-right-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.head-right-actions .btn {
+  padding: 6px 11px;
+  font-size: 11px;
+}
+#graphStats {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--gov-muted);
+  background: #f0f4fa;
+  padding: 5px 9px;
+  border-radius: 5px;
+  border: 1px solid var(--gov-border-light);
+  white-space: nowrap;
 }
 #fullscreenGraphBtn {
   font-weight: 700;

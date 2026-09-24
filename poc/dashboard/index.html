@@ -39,13 +39,6 @@
         <span id="integrationBadge" class="tag-status wsl-status">CONECTANDO...</span>
       </div>
     </div>
-
-    <!-- Ações Rápidas -->
-    <div class="top-actions">
-      <button class="btn ghost" id="resetBtn">Reiniciar</button>
-      <button class="btn" id="stepBtn">Próximo Passo</button>
-      <button class="btn primary" id="runBtn">Executar Campanha Completa</button>
-    </div>
   </header>
 
   <!-- MAPA DE STATUS DA INFRAESTRUTURA DO STF -->
@@ -128,6 +121,9 @@
           <h2>CORRELAÇÃO — Grafo temporal</h2>
         </div>
         <div class="head-right-actions">
+          <button class="btn small ghost" id="resetBtn" title="Reiniciar Campanha de Ataques">Reiniciar</button>
+          <button class="btn small" id="stepBtn" title="Executar Próximo Passo">Próximo Passo</button>
+          <button class="btn small primary" id="runBtn" title="Executar Campanha Completa">Executar Campanha Completa</button>
           <span id="graphStats" class="mono">0 nós / 0 arestas</span>
           <button class="btn small" id="fullscreenGraphBtn" title="Maximizar Grafo em Tela Cheia">
             <span id="fsBtnIcon">⛶</span> <span id="fsBtnText">Tela Cheia</span>
