@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Portable loopback HTTP smoke test for STF POC."""
 from __future__ import annotations
-import json, pathlib, subprocess, sys, time, urllib.request
+import json, pathlib, subprocess, sys, time, urllib.request, urllib.error
 
 ROOT=pathlib.Path(__file__).resolve().parent
 sys.path.insert(0,str(ROOT))
@@ -20,6 +20,15 @@ def post(path,body=None):
     with urllib.request.urlopen(req,timeout=2) as r:
         return json.loads(r.read().decode())
 
+
+def post_untrusted(path,body=None,origin=None):
+    raw=json.dumps(body or {}).encode("utf-8")
+    headers={"Content-Type":"application/json"}
+    if origin: headers["Origin"]=origin
+    req=urllib.request.Request(BASE+path,data=raw,method="POST",headers=headers)
+    with urllib.request.urlopen(req,timeout=2) as r:
+        return json.loads(r.read().decode())
+
 def main():
     p=subprocess.Popen([sys.executable,str(ROOT/"server.py"),"--host","127.0.0.1","--port",str(PORT)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     try:
@@ -31,6 +40,13 @@ def main():
         else: raise RuntimeError("server did not become healthy")
 
         # Scripted route still works.
+        for origin in (None,"https://example.com"):
+            try:
+                post_untrusted("/api/reset",{},origin=origin)
+                raise RuntimeError("untrusted mutation unexpectedly accepted")
+            except urllib.error.HTTPError as e:
+                if e.code!=403: raise
+
         state=get("/api/state")
         if state["step"]!=0: raise RuntimeError("fresh state step != 0")
         stepped=post("/api/step")
