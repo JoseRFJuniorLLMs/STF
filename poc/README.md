@@ -150,6 +150,7 @@ Exemplo com dado reservado para documentação:
 ```bash
 curl -X POST "http://127.0.0.1:8787/api/telemetry?kind=firewall" \
   -H "Content-Type: application/json" \
+  -H "X-STF-POC: 1" \
   -d '{"event_id":"LAB-1","src_ip":"203.0.113.42","dst_service":"portal-synthetic","action":"OBSERVED","waf_score":71}'
 ```
 
