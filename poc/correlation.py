@@ -1,18 +1,24 @@
 """Deterministic cross-source correlation for the synthetic STF POC.
 
-This is intentionally explainable: signals are connected only when they share
-observable entities (principal, IP, host, resource, etc.). No ML black box.
+Signals connect only when they share typed observable entities and fall inside
+an explicit HLC/LSN window. This intentionally avoids a black-box score.
 """
 from __future__ import annotations
 from collections import defaultdict, deque
 from typing import Any
 
 SEVERITY_WEIGHT={"INFO":1,"LOW":2,"MEDIUM":4,"HIGH":7,"CRITICAL":10}
+DEFAULT_MAX_HLC_SPAN=20
 
 def _entities(signal:dict[str,Any])->set[str]:
     return {str(x) for x in signal.get("entities",[]) if x not in (None,"","unknown")}
 
-def components(signals:list[dict[str,Any]])->list[list[int]]:
+def _clock(signal:dict[str,Any])->int:
+    value=signal.get("hlc",signal.get("lsn",0))
+    try: return int(value)
+    except (TypeError,ValueError): return 0
+
+def components(signals:list[dict[str,Any]], max_hlc_span:int=DEFAULT_MAX_HLC_SPAN)->list[list[int]]:
     n=len(signals)
     if not n: return []
     entity_index=defaultdict(list)
@@ -21,7 +27,12 @@ def components(signals:list[dict[str,Any]])->list[list[int]]:
     adj=[set() for _ in range(n)]
     for ids in entity_index.values():
         for i in ids:
-            adj[i].update(j for j in ids if j!=i)
+            ti=_clock(signals[i])
+            for j in ids:
+                if i==j: continue
+                tj=_clock(signals[j])
+                if abs(ti-tj)<=max_hlc_span:
+                    adj[i].add(j)
     seen=set(); out=[]
     for start in range(n):
         if start in seen: continue
@@ -38,14 +49,13 @@ def score_component(signals:list[dict[str,Any]], ids:list[int])->dict[str,Any]:
     source_classes={s.get("source_class") or s.get("source") for s in subset}
     entities=set().union(*(_entities(s) for s in subset)) if subset else set()
     severity=sum(SEVERITY_WEIGHT.get(str(s.get("severity","INFO")).upper(),1) for s in subset)
-    # Score rewards corroboration, not raw event volume.
     score=min(100, len(subset)*7 + len(source_classes)*8 + min(severity,30))
     required={"IDENTITY","HOST","NETWORK"}
     has_core=required.issubset(source_classes)
     has_data=bool({"DATABASE","APPLICATION"}.intersection(source_classes))
     qualifies=len(subset)>=4 and len(source_classes)>=4 and has_core
-    # Once DB/App appears, confidence rises but incident can open before that.
     confidence="HIGH" if qualifies and has_data else "MEDIUM" if qualifies else "LOW"
+    clocks=[_clock(s) for s in subset]
     return {
         "signal_ids":[s.get("signal_id") for s in subset],
         "lsns":[s.get("lsn") for s in subset],
@@ -55,20 +65,25 @@ def score_component(signals:list[dict[str,Any]], ids:list[int])->dict[str,Any]:
         "confidence":confidence,
         "qualifies":qualifies,
         "has_data_plane_evidence":has_data,
+        "hlc_min":min(clocks) if clocks else 0,
+        "hlc_max":max(clocks) if clocks else 0,
     }
 
-def correlate(signals:list[dict[str,Any]])->dict[str,Any]:
-    ranked=[score_component(signals,ids) for ids in components(signals)]
+def correlate(signals:list[dict[str,Any]], max_hlc_span:int=DEFAULT_MAX_HLC_SPAN)->dict[str,Any]:
+    ranked=[score_component(signals,ids) for ids in components(signals,max_hlc_span=max_hlc_span)]
     ranked.sort(key=lambda x:(x["qualifies"],x["score"],len(x["signal_ids"])),reverse=True)
     best=ranked[0] if ranked else {
         "signal_ids":[],"lsns":[],"sources":[],"entities":[],"score":0,
         "confidence":"LOW","qualifies":False,"has_data_plane_evidence":False,
+        "hlc_min":0,"hlc_max":0,
     }
     return {
         "best":best,
         "components":ranked,
+        "window_hlc_span":max_hlc_span,
         "explanation":(
-            f"{len(best['signal_ids'])} sinais conectados por entidades observáveis em "
-            f"{len(best['sources'])} classes de fonte; confidence={best['confidence']}."
+            f"{len(best['signal_ids'])} sinais conectados por entidades tipadas em "
+            f"{len(best['sources'])} classes de fonte; confidence={best['confidence']}; "
+            f"window<={max_hlc_span}."
         ),
     }
