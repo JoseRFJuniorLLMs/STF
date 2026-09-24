@@ -2850,7 +2850,9 @@ function render(s) {
   updateInfraStatusBar(s);
   renderAttackList(s);
   if (s.equipment_counters) renderEquipmentCounters(s.equipment_counters);
-  renderGraph(s);
+  // Com a aba de processos aberta o grafo está escondido (tamanho 0): a
+  // simulação física desfazia o layout. mostrarView() redesenha ao voltar.
+  if (!$('#viewDefesa')?.hidden) renderGraph(s);
   renderTrail(s);
   updateFocusCard(s);
 }
