@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse, parse_qs
 from telemetry import sample_campaign, normalize
+from correlation import correlate
 
 ROOT = Path(__file__).resolve().parent
 DASHBOARD = ROOT / "dashboard"
@@ -158,20 +159,41 @@ class PocEngine:
             self.attack_graph["edges"].append({"from":eid,"to":iid,"type":"PART_OF_INCIDENT"})
 
     def _signal(self, ev: EvidenceEvent, reason: str) -> None:
+        raw=ev.details.get("raw_telemetry",{}) if isinstance(ev.details,dict) else {}
+        normalized=ev.details.get("normalized_telemetry",{}) if isinstance(ev.details,dict) else {}
+        entities={ev.actor,ev.asset}
+        for key in ("src_ip","source_ip","principal","host","src_host","dst_host","database","resource","dst_service"):
+            value=raw.get(key)
+            if value not in (None,"","unknown"): entities.add(str(value))
         self.signals.append({
             "signal_id":f"SIG-{len(self.signals)+1:03d}","lsn":ev.lsn,"source":ev.source,
+            "source_class":normalized.get("source_class",ev.source),
             "severity":ev.severity,"reason_code":reason,"actor":ev.actor,"asset":ev.asset,
+            "entities":sorted(entities),
             "campaign_id":CAMPAIGN_ID,"evidence_hash":ev.event_hash,
         })
 
     def _maybe_open_incident(self) -> None:
-        if self.incident is None and self.risk >= 60:
+        corr=correlate(self.signals)
+        best=corr["best"]
+        self.risk=max(self.risk,int(best.get("score",0)))
+        if self.incident is not None:
+            self.incident["risk_score"]=max(self.incident["risk_score"],best.get("score",0))
+            self.incident["severity"]="CRITICAL" if self.incident["risk_score"] >= 90 else "HIGH"
+            self.incident["evidence_lsns"]=best.get("lsns",[])
+            self.incident["correlation"]=best
+            self.incident["correlation_explanation"]=corr["explanation"]
+            return
+        if best.get("qualifies"):
             self.incident={
-                "incident_id":INCIDENT_ID,"campaign_id":CAMPAIGN_ID,"state":"OPEN","severity":"HIGH",
-                "risk_score":self.risk,"principal":COMPROMISED_PRINCIPAL,
-                "summary":"Campanha multi-fonte correlacionada no ambiente sintético",
+                "incident_id":INCIDENT_ID,"campaign_id":CAMPAIGN_ID,"state":"OPEN",
+                "severity":"CRITICAL" if best["score"] >= 90 else "HIGH",
+                "risk_score":best["score"],"principal":COMPROMISED_PRINCIPAL,
+                "summary":"Campanha multi-fonte correlacionada por entidades observáveis",
                 "policy_tags":["COMPROMISE_SUSPECTED","REQUIRE_STRONGER_APPROVAL"],
-                "evidence_lsns":[s["lsn"] for s in self.signals],
+                "evidence_lsns":best["lsns"],
+                "correlation":best,
+                "correlation_explanation":corr["explanation"],
             }
             self.last_action="Incidente correlacionado e aberto"
 
@@ -185,7 +207,7 @@ class PocEngine:
             self.risk += int(spec.get("risk",0))
             if spec.get("signal"): self._signal(ev,spec.get("reason","SECURITY_SIGNAL"))
             self._maybe_open_incident()
-            if self.incident and ev.incident_id is None and self.risk >= 60:
+            if self.incident and ev.incident_id is None:
                 ev.incident_id=INCIDENT_ID; ev.event_hash=sha256_hex(ev.material())
             if spec.get("approval"):
                 self.pending_approval={
