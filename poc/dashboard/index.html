@@ -140,6 +140,21 @@
       <div id="integrationSurfaces" class="integration-surfaces"></div>
     </section>
 
+    <section class="panel span-6">
+      <div class="panel-head"><div><span class="section-kicker">RESILIENCE</span><h3>Fault Injection</h3></div><div class="fault-controls"><select id="faultKind"><option value="policy_store_down">Policy store indisponível</option><option value="timeout_before_effect">Timeout antes do efeito</option><option value="timeout_after_effect">Timeout depois do efeito</option><option value="exporter_interrupted">Exporter interrompido</option><option value="clock_jump">Salto de relógio</option></select><button id="faultBtn" class="btn danger">Injetar falha</button></div></div>
+      <div id="faultResult" class="fault-result"><span>Escolha uma falha controlada.</span></div>
+    </section>
+
+    <section class="panel span-6">
+      <div class="panel-head"><div><span class="section-kicker">TRUTH MODEL</span><h3>O que este painel prova</h3></div><span class="badge">POC STANDALONE</span></div>
+      <div class="truth-grid">
+        <div><b>CALCULADO</b><span>normalização, regras, correlação, policy, hashes, Merkle, verifier</span></div>
+        <div><b>SINTÉTICO</b><span>ataque, identidades, hosts, banco, aplicação e telemetria de origem</span></div>
+        <div><b>BRIDGE</b><span>read-only para Sentinel/Agent APIs quando HeraclitusDB roda em localhost</span></div>
+        <div><b>NÃO CONFIGURADO</b><span>IAM/HSM/trust institucional, logs reais e infraestrutura do STF</span></div>
+      </div>
+    </section>
+
     <section class="panel span-12 qualification-panel">
       <div class="panel-head"><div><span class="section-kicker">QUALIFICATION</span><h3>Scorecard da POC</h3></div><span class="badge" id="qualificationBadge">EM EXECUÇÃO</span></div>
       <div id="qualification" class="qualification-grid"></div>
