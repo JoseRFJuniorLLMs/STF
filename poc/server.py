@@ -1298,6 +1298,19 @@ class PocEngine:
                     print(f"[WARN] Falha ao persistir no HeraclitusDB: {exc}", file=sys.stderr)
 
             # Criar EvidenceEvent com persistência real
+            details = {
+                "attack_id": red_team_payload["attack_id"],
+                "equipment_id": atk["equipment_id"],
+                "heraclitus_attack_id": atk["id"],
+                "oracle_verdict": oracle_verdict,
+                "oracle_reason": oracle_reason,
+                "status_code": status_code,
+            }
+            if real_hash:
+                details["heraclitus_record_hash"] = real_hash
+                details["heraclitus_persisted"] = True
+            if real_lsn:
+                details["heraclitus_lsn"] = real_lsn
             ev_spec = {
                 "phase": "HERACLITUS-REDTEAM",
                 "source": atk["equipment"],
@@ -1309,19 +1322,9 @@ class PocEngine:
                 "outcome": "DENY" if oracle_verdict in ("pass", "inconclusive") else "PASS",
                 "reason": f"ORACLE_{oracle_verdict.upper()}",
                 "upstream": 0,
-                "attack_id": red_team_payload["attack_id"],
-                "equipment_id": atk["equipment_id"],
-                "heraclitus_attack_id": atk["id"],
-                "oracle_verdict": oracle_verdict,
-                "oracle_reason": oracle_reason,
-                "status_code": status_code,
+                "details": details,
             }
             ev = self._append(ev_spec, persist=False)
-            if real_hash:
-                ev.details["heraclitus_record_hash"] = real_hash
-                ev.details["heraclitus_persisted"] = True
-            if real_lsn:
-                ev.details["heraclitus_lsn"] = real_lsn
             self._add_graph(ev)
             self.last_action = f"Ataque ao HeraclitusDB: {atk['title']} (LSN {ev.lsn})"
 
@@ -1397,7 +1400,17 @@ class PocEngine:
                 except Exception as exc:
                     print(f"[WARN] Falha ao persistir no HeraclitusDB: {exc}", file=sys.stderr)
 
-            # Criar EvidenceEvent com persistência real
+            details = {
+                "attack_id": red_team_payload["attack_id"],
+                "equipment_id": atk["equipment_id"],
+                "stf_attack_id": atk["id"],
+                "status_code": 403 if outcome == "DENY" else 202,
+            }
+            if real_hash:
+                details["heraclitus_record_hash"] = real_hash
+                details["heraclitus_persisted"] = True
+            if real_lsn:
+                details["heraclitus_lsn"] = real_lsn
             ev_spec = {
                 "phase": atk["phase"],
                 "source": atk["equipment"],
@@ -1409,17 +1422,9 @@ class PocEngine:
                 "outcome": outcome,
                 "reason": reason_code,
                 "upstream": 0,
-                "attack_id": red_team_payload["attack_id"],
-                "equipment_id": atk["equipment_id"],
-                "stf_attack_id": atk["id"],
-                "status_code": 403 if outcome == "DENY" else 202,
+                "details": details,
             }
             ev = self._append(ev_spec, persist=False)
-            if real_hash:
-                ev.details["heraclitus_record_hash"] = real_hash
-                ev.details["heraclitus_persisted"] = True
-            if real_lsn:
-                ev.details["heraclitus_lsn"] = real_lsn
             self._add_graph(ev)
             self.last_action = f"Ataque contra {atk['equipment']}: {atk['title']} (LSN {ev.lsn})"
 
@@ -1958,21 +1963,22 @@ class PocEngine:
             "details": payload,
         }
         ev = self._append(ev_spec, persist=True)
-        payload["lsn"] = ev.lsn
-        payload["hash"] = ev.event_hash
-        payload["hlc"] = ev.hlc
-        ev.details["certidao"] = payload
+        res_payload = dict(payload)
+        res_payload["lsn"] = ev.lsn
+        res_payload["hash"] = ev.event_hash
+        res_payload["hlc"] = ev.hlc
         self.last_action = f"Certidão emitida no HeraclitusDB: {cert_id} (LSN {ev.lsn})"
-        return payload
+        return res_payload
 
     @locked_method
     def list_certidoes(self) -> list[dict[str, Any]]:
         res = []
         for ev in self.events:
             if ev.event_type == "stf.resilience.certidao_indisponibilidade":
-                c = dict(ev.details.get("certidao") or ev.details)
+                c = dict(ev.details.get("details") or ev.details)
                 c["lsn"] = ev.lsn
                 c["hash"] = ev.event_hash
+                c["hlc"] = ev.hlc
                 res.append(c)
         if not res:
             res.append({
