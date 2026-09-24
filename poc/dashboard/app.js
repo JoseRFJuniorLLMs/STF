@@ -1038,6 +1038,22 @@ const LEGEND = { attack: '#c9182b', blocked: '#2fa66a', blockedText: '#1d7a4a', 
 
 function renderGraph(s) {
   const e = $('#graph');
+  if (!e) return;
+
+  // Sincroniza os contadores reais de ataques/bloqueios do servidor para pintar os nós
+  syncNodeAttackCountsFromState(s);
+
+  // Se chegou novo evento de ataque (vindo de agente externo/script), aciona animação de pulso e cor
+  if (s?.events && s.events.length > 0) {
+    const lastEv = s.events[s.events.length - 1];
+    if (lastEv && lastEv.lsn && lastEv.lsn !== window._lastSeenLsn) {
+      window._lastSeenLsn = lastEv.lsn;
+      const targetNodeId = findNodeIdForTarget(lastEv.asset) || 'asset:heraclitusdb';
+      const outcome = String(lastEv.outcome || lastEv.result || 'DENY').toUpperCase();
+      triggerNodeAttackPopup(targetNodeId, lastEv.lsn, lastEv.event_type || 'Ataque Externo', outcome);
+    }
+  }
+
   const dyn = buildDynamicGraph(s);
   const rawNodes = dyn.nodes;
   const rawEdges = dyn.edges;
@@ -2854,8 +2870,14 @@ async function init() {
   loadRealHeraclitusTrail();
   loadAndRenderStfAttacks();
   loadAndRenderHdbAttacks();
-  // Atualização contínua leve da trilha real do HeraclitusDB
-  setInterval(loadRealHeraclitusTrail, 4000);
+  // Atualização contínua leve da trilha real do HeraclitusDB e do grafo/estado
+  setInterval(async () => {
+    loadRealHeraclitusTrail();
+    try {
+      const s = await api('/api/state');
+      render(s);
+    } catch (_) {}
+  }, 3000);
 }
 
 init();
