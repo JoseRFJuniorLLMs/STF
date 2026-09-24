@@ -16,7 +16,7 @@ def get(path):
 
 def post(path,body=None):
     raw=json.dumps(body or {}).encode("utf-8")
-    req=urllib.request.Request(BASE+path,data=raw,method="POST",headers={"Content-Type":"application/json"})
+    req=urllib.request.Request(BASE+path,data=raw,method="POST",headers={"Content-Type":"application/json","X-STF-POC":"1"})
     with urllib.request.urlopen(req,timeout=2) as r:
         return json.loads(r.read().decode())
 
