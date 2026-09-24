@@ -53,6 +53,21 @@ O adapter somente leitura aceita apenas loopback e foi preparado para superfíci
 
 Defina `HERACLITUS_URL=http://127.0.0.1:<porta>` para habilitar a leitura. O dashboard standalone continua funcional sem essa integração.
 
+## Acompanhamento processual
+
+A aba **Acompanhamento processual** mostra só o log de processos fictícios — protocolo, andamentos, deslocamentos e petições — no formato do Acompanhamento Processual do portal do STF e da API pública do DataJud (códigos da Tabela Processual Unificada de movimentos do CNJ; número único da Resolução CNJ 65/2008).
+
+Cada linha é um evento imutável gravado no **núcleo** do HeraclitusDB (gRPC `Append`, encadeado ao anterior por `parents`, com chave de idempotência) e lido de volta por GQL, inclusive `AS OF LSN`.
+
+| Variável | Uso | Padrão |
+| --- | --- | --- |
+| `HERACLITUS_CORE_ADDR` | núcleo gRPC (só loopback); também `--heraclitus-core` | `127.0.0.1:17474` |
+| `STF_HERACLITUS_CORE_TOKEN_FILE` / `STF_HERACLITUS_CORE_TOKEN` | token Bearer quando o núcleo exige RBAC (papel `writer`) | sem token |
+
+O `grpcio` é opcional: sem ele, a aba mostra o HeraclitusDB como indisponível e o resto do painel continua a funcionar. As variáveis `HERACLITUS_TOKEN(_FILE)` **não** são lidas, de propósito, para não enviar a credencial de outra instância.
+
+Endpoints: `GET /api/processos[?as_of=LSN]`, `GET /api/processos/detalhe?id=RE-000001[&as_of=LSN]`, `POST /api/processos/protocolar`, `POST /api/processos/tramitar` (`{"id": "..."}` opcional).
+
 
 ## Dashboard atual
 
