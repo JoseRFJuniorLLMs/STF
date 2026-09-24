@@ -388,6 +388,24 @@ class PocEngine:
         verification=self.verify_bundle(bundle)
         return {"kind":kind,"status":"DETECTED" if verification["overall"]=="FAIL" else "MISSED","verification":verification}
 
+
+    def compare_as_of(self, from_lsn: int, to_lsn: int) -> dict[str, Any]:
+        left=self.as_of(from_lsn); right=self.as_of(to_lsn)
+        def incident_state(x): return x["incident"]["state"] if x.get("incident") else "NONE"
+        return {
+            "from":left,
+            "to":right,
+            "delta":{
+                "events":right["event_count"]-left["event_count"],
+                "risk":right["risk"]-left["risk"],
+                "upstream_hits":right["upstream_hits"]-left["upstream_hits"],
+                "incident":incident_state(left)+" -> "+incident_state(right),
+                "approval":left["approval_state"]+" -> "+right["approval_state"],
+                "tamper":left["tamper_status"]+" -> "+right["tamper_status"],
+                "case_effect":left["case_state"]["last_effect"]+" -> "+right["case_state"]["last_effect"],
+            }
+        }
+
     def incident_report(self) -> dict[str, Any]:
         why=self.why_incident()
         return {
@@ -458,6 +476,12 @@ class Handler(BaseHTTPRequestHandler):
             try: lsn=int(query.get("lsn",["0"])[0])
             except ValueError: return self._json({"error":"invalid_lsn"},400)
             return self._json(ENGINE.as_of(lsn))
+        if path=="/api/compare":
+            try:
+                from_lsn=int(query.get("from",["0"])[0]); to_lsn=int(query.get("to",["0"])[0])
+            except ValueError:
+                return self._json({"error":"invalid_lsn"},400)
+            return self._json(ENGINE.compare_as_of(from_lsn,to_lsn))
         if path=="/api/evidence/object":
             try: lsn=int(query.get("lsn",["0"])[0])
             except ValueError: return self._json({"error":"invalid_lsn"},400)
@@ -469,6 +493,14 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type","application/json; charset=utf-8")
             self.send_header("Content-Disposition",'attachment; filename="evidence-stf-poc-001.json"')
+            self.send_header("Content-Length",str(len(raw)))
+            self.end_headers(); self.wfile.write(raw); return
+        if path=="/api/report/download":
+            report=ENGINE.incident_report()
+            raw=json.dumps(report,ensure_ascii=False,indent=2).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type","application/json; charset=utf-8")
+            self.send_header("Content-Disposition",'attachment; filename="incident-report-stf-poc-001.json"')
             self.send_header("Content-Length",str(len(raw)))
             self.end_headers(); self.wfile.write(raw); return
         if path=="/api/health": return self._json({"status":"ok","mode":"loopback-only","campaign":CAMPAIGN_ID})
