@@ -81,13 +81,13 @@
     <section class="panel span-4">
       <div class="panel-head"><div><span class="section-kicker">HRKL</span><h3>Integridade e rastreabilidade</h3></div></div>
       <div class="integrity-orbit"><div><span>LSN</span><b id="lastLsn">0</b></div><div><span>Eventos</span><b id="eventCount">0</b></div><div><span>Merkle</span><b id="merkleState">—</b></div></div>
-      <div class="hash-box"><span>Raiz Merkle atual</span><code id="merkleRoot">—</code></div>
+      <div class="hash-box"><span>Raiz Merkle dos eventos</span><code id="merkleRoot">—</code><span>Package root</span><code id="packageRoot">—</code></div>
       <div class="tamper-controls"><select id="tamperKind"><option value="modify">Modificar evento</option><option value="delete">Apagar evento</option><option value="reorder">Reordenar eventos</option><option value="truncate">Truncar histórico</option></select><button id="tamperBtn" class="btn danger">Executar sabotagem</button></div><div id="tamperResult" class="mini-result">A sabotagem altera uma cópia do bundle e verifica se a prova quebra.</div>
     </section>
 
     <section class="panel span-4">
       <div class="panel-head"><div><span class="section-kicker">EVIDENCE</span><h3>Pacote verificável</h3></div></div>
-      <div class="evidence-stack"><div><span>Hash-chain</span><b id="chainVerify">NOT RUN</b></div><div><span>Merkle</span><b id="merkleVerify">NOT RUN</b></div><div><span>Timestamp externo</span><b class="warn">NOT CONFIGURED</b></div><div><span>Assinatura institucional</span><b class="warn">NOT CONFIGURED</b></div></div>
+      <div class="evidence-stack"><div><span>Hash-chain</span><b id="chainVerify">NOT RUN</b></div><div><span>Merkle eventos</span><b id="merkleVerify">NOT RUN</b></div><div><span>Manifest</span><b id="manifestVerify">NOT RUN</b></div><div><span>Package root</span><b id="packageVerify">NOT RUN</b></div><div><span>Timestamp externo</span><b class="warn">NOT CONFIGURED</b></div><div><span>Assinatura institucional</span><b class="warn">NOT CONFIGURED</b></div></div>
       <div class="evidence-actions"><button id="exportBtn" class="btn success">Gerar Evidence Bundle</button><button id="downloadBtn" class="btn">Baixar JSON</button></div><div id="exportResult" class="mini-result">Bundle ainda não exportado.</div>
     </section>
 
