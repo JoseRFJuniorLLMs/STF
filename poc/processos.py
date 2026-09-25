@@ -433,10 +433,39 @@ class ProcessLedger:
         if proc is None:
             return None
         eventos = self._eventos(processo_id, as_of)
-        todos_lsns = [e["lsn"] for e in (self._eventos(processo_id) if as_of is not None else eventos)]
+        todos = self._eventos(processo_id) if as_of is not None else eventos
+        todos_lsns = [e["lsn"] for e in todos]
+
+        def _fmt_dh(e: dict[str, Any]) -> str:
+            dh = e.get("conteudo", {}).get("dataHora")
+            if dh:
+                try:
+                    dt = datetime.fromisoformat(str(dh).replace("Z", "+00:00"))
+                    return dt.strftime("%d/%m/%Y às %H:%M:%S")
+                except Exception:
+                    return str(dh)
+            if e.get("ts_ms"):
+                try:
+                    return datetime.fromtimestamp(e["ts_ms"] / 1000).strftime("%d/%m/%Y às %H:%M:%S")
+                except Exception:
+                    pass
+            return ""
+
+        passos_timeline = [
+            {
+                "lsn": e["lsn"],
+                "dataHora": _fmt_dh(e),
+                "nome": e.get("conteudo", {}).get("nome") or e.get("tipo") or f"LSN {e['lsn']}",
+                "tipo": e.get("tipo") or "andamento",
+                "seq": e.get("seq", 0),
+            }
+            for e in todos
+        ]
+
         return {
             "processo": self._resumo(proc, eventos), "eventos": eventos,
             "integridade": verificar_cadeia(eventos), "lsns": todos_lsns, "as_of_lsn": as_of,
+            "passos_timeline": passos_timeline,
         }
 
     # -------------------------------------------------------------- escrita

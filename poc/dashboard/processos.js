@@ -317,6 +317,115 @@ function renderProcessHeatmap(eventos) {
   `;
 }
 
+function renderProcessTimelineScrubber(d, idxAtual, lsns, historico) {
+  const passos = d.passos_timeline || (d.lsns || []).map((lsn, i) => {
+    const ev = (d.eventos || []).find(e => e.lsn === lsn);
+    let dh = ev?.conteudo?.dataHora || '';
+    if (dh) {
+      try {
+        const dt = new Date(dh);
+        if (!isNaN(dt.getTime())) dh = dt.toLocaleString('pt-BR');
+      } catch (_) {}
+    }
+    return {
+      lsn,
+      dataHora: dh || `Evento ${i + 1}`,
+      nome: ev?.conteudo?.nome || ev?.tipo || `Passo ${i + 1}`,
+      tipo: ev?.tipo || 'andamento',
+      seq: i
+    };
+  });
+
+  const totalSteps = lsns.length;
+  const currentStep = passos[idxAtual] || passos[passos.length - 1] || {};
+  const progressPct = totalSteps > 1 ? (idxAtual / (totalSteps - 1)) * 100 : 100;
+
+  const dotsHtml = passos.map((p, i) => {
+    const dotPct = totalSteps > 1 ? (i / (totalSteps - 1)) * 100 : 0;
+    let statusClass = 'future';
+    if (i < idxAtual) statusClass = 'passed';
+    else if (i === idxAtual) statusClass = 'current';
+
+    return `
+      <div class="scrubber-dot ${statusClass}"
+        style="left: ${dotPct}%;"
+        data-index="${i}"
+        data-lsn="${p.lsn}"
+        data-date="${esc(p.dataHora || '')}"
+        data-title="${esc(p.nome || '')}"
+        data-seq="${i + 1}"
+        role="button"
+        tabindex="0"
+        aria-label="Ir para evento ${i + 1}: ${esc(p.nome)} (${esc(p.dataHora)})">
+        <span class="dot-core"></span>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="proc-timeline-scrubber ${historico ? 'historical-active' : ''}" id="procTimelineScrubber">
+      <div class="scrubber-header">
+        <div class="scrubber-title-wrap">
+          <span class="scrubber-icon">⏱️</span>
+          <div class="scrubber-titles">
+            <strong>Linha do Tempo Criptográfica</strong>
+            <small>Reconstrução Temporal AS OF LSN • Imutabilidade HeraclitusDB</small>
+          </div>
+        </div>
+
+        <div class="scrubber-header-actions">
+          <div class="scrubber-status-badge ${historico ? 'is-historical' : 'is-current'}">
+            <span class="status-dot"></span>
+            <span id="procAsOfLabel" class="status-text mono">
+              ${historico ? `AS OF LSN ${procAsOf} · Passo ${idxAtual + 1} de ${totalSteps}` : `Estado Atual · LSN ${lsns[totalSteps - 1] ?? '—'}`}
+            </span>
+          </div>
+          <button class="btn tiny ghost scrubber-reset-btn" id="procAsOfNow" ${historico ? '' : 'disabled'} title="Restaurar visualização para o momento atual">
+            ↺ Voltar ao atual
+          </button>
+        </div>
+      </div>
+
+      <div class="scrubber-track-container" id="scrubberTrackContainer">
+        <!-- Floating Tooltip (Grok / Google Fotos) -->
+        <div class="scrubber-floating-tooltip" id="scrubberTooltip">
+          <div class="st-date"><span id="stDateText">—</span></div>
+          <div class="st-title" id="stTitleText">—</div>
+          <div class="st-meta">LSN <span id="stLsnText">—</span> • Passo <span id="stStepText">—</span> de ${totalSteps}</div>
+          <div class="st-arrow"></div>
+        </div>
+
+        <div class="scrubber-track-rail">
+          <div class="scrubber-track-progress" id="scrubberTrackProgress" style="width: ${progressPct}%;"></div>
+        </div>
+
+        <div class="scrubber-dots-layer" id="scrubberDotsLayer">
+          ${dotsHtml}
+        </div>
+
+        <div class="scrubber-thumb" id="scrubberThumb" style="left: ${progressPct}%;">
+          <div class="scrubber-thumb-handle"></div>
+          <div class="scrubber-thumb-ring"></div>
+        </div>
+
+        <input type="range" class="scrubber-range-overlay" id="procAsOfRange"
+          min="0" max="${Math.max(0, totalSteps - 1)}" value="${idxAtual}"
+          ${totalSteps < 2 ? 'disabled' : ''} aria-label="Reconstruir estado do processo ao longo do tempo" />
+      </div>
+
+      <div class="scrubber-footer">
+        <button class="btn tiny ghost" id="procStepPrev" ${idxAtual <= 0 ? 'disabled' : ''} title="Retroceder um evento">◀ Anterior</button>
+        <div class="scrubber-current-info" id="scrubberCurrentInfo">
+          <span class="sci-date" id="sciDateText">${esc(currentStep.dataHora || '—')}</span>
+          <span class="sci-sep">•</span>
+          <span class="sci-name" id="sciNameText">${esc(currentStep.nome || 'Andamento')}</span>
+        </div>
+        <button class="btn tiny ghost" id="procStepNext" ${idxAtual >= totalSteps - 1 ? 'disabled' : ''} title="Avançar um evento">Próximo ▶</button>
+      </div>
+    </div>
+  `;
+}
+
 // ----------------------------------------------------------------- detalhe
 function renderDetalhe() {
   const d = procDetalhe;
@@ -369,12 +478,7 @@ function renderDetalhe() {
       </div>
     </div>
 
-    <div class="proc-asof ${historico ? 'active' : ''}">
-      <label for="procAsOfRange">Reconstruir como estava em</label>
-      <input type="range" id="procAsOfRange" min="0" max="${Math.max(0, lsns.length - 1)}" value="${idxAtual}" ${lsns.length < 2 ? 'disabled' : ''} />
-      <span id="procAsOfLabel" class="mono">${historico ? `AS OF LSN ${procAsOf} — evento ${idxAtual + 1} de ${lsns.length}` : `LSN ${lsns[lsns.length - 1] ?? '—'} — estado atual`}</span>
-      <button class="btn tiny ghost" id="procAsOfNow" ${historico ? '' : 'disabled'}>Voltar ao atual</button>
-    </div>
+    ${renderProcessTimelineScrubber(d, idxAtual, lsns, historico)}
 
     ${renderProcessHeatmap(eventos)}
 
@@ -630,21 +734,132 @@ function setupProcessos() {
     if (e.target.closest('#procAsOfNow')) {
       procAsOf = null;
       carregarDetalhe();
+      return;
+    }
+    if (e.target.closest('#procStepPrev')) {
+      if (!procDetalhe) return;
+      const lsns = procDetalhe.lsns || [];
+      const curIdx = procAsOf === null ? lsns.length - 1 : Math.max(0, lsns.indexOf(procAsOf));
+      if (curIdx > 0) {
+        const newIdx = curIdx - 1;
+        procAsOf = newIdx === lsns.length - 1 ? null : lsns[newIdx];
+        carregarDetalhe();
+      }
+      return;
+    }
+    if (e.target.closest('#procStepNext')) {
+      if (!procDetalhe) return;
+      const lsns = procDetalhe.lsns || [];
+      const curIdx = procAsOf === null ? lsns.length - 1 : Math.max(0, lsns.indexOf(procAsOf));
+      if (curIdx < lsns.length - 1) {
+        const newIdx = curIdx + 1;
+        procAsOf = newIdx === lsns.length - 1 ? null : lsns[newIdx];
+        carregarDetalhe();
+      }
+      return;
+    }
+    const dot = e.target.closest('.scrubber-dot');
+    if (dot && procDetalhe) {
+      const i = Number(dot.dataset.index);
+      const lsns = procDetalhe.lsns || [];
+      procAsOf = i === lsns.length - 1 ? null : lsns[i];
+      carregarDetalhe();
+      return;
     }
   });
+
   detalhe.addEventListener('input', e => {
     if (e.target.id !== 'procAsOfRange' || !procDetalhe) return;
-    const lsns = procDetalhe.lsns;
+    const lsns = procDetalhe.lsns || [];
+    const passos = procDetalhe.passos_timeline || [];
     const i = Number(e.target.value);
-    $('#procAsOfLabel').textContent = i === lsns.length - 1 ? `LSN ${lsns[i]} — estado atual` : `AS OF LSN ${lsns[i]} — evento ${i + 1} de ${lsns.length}`;
+    const totalSteps = lsns.length;
+    const pct = totalSteps > 1 ? (i / (totalSteps - 1)) * 100 : 100;
+    const step = passos[i] || {};
+
+    const progress = $('#scrubberTrackProgress');
+    if (progress) progress.style.width = `${pct}%`;
+    const thumb = $('#scrubberThumb');
+    if (thumb) thumb.style.left = `${pct}%`;
+
+    const dots = detalhe.querySelectorAll('.scrubber-dot');
+    dots.forEach((d, idx) => {
+      d.classList.remove('passed', 'current', 'future');
+      if (idx < i) d.classList.add('passed');
+      else if (idx === i) d.classList.add('current');
+      else d.classList.add('future');
+    });
+
+    const lbl = $('#procAsOfLabel');
+    if (lbl) {
+      lbl.textContent = i === totalSteps - 1
+        ? `Estado Atual · LSN ${lsns[i] ?? '—'}`
+        : `AS OF LSN ${lsns[i]} · Passo ${i + 1} de ${totalSteps}`;
+    }
+
+    const dtText = $('#sciDateText');
+    if (dtText && step.dataHora) dtText.textContent = step.dataHora;
+    const nmText = $('#sciNameText');
+    if (nmText && step.nome) nmText.textContent = step.nome;
+
+    const tt = $('#scrubberTooltip');
+    if (tt) {
+      const dtEl = $('#stDateText');
+      if (dtEl) dtEl.textContent = step.dataHora ? `📅 ${step.dataHora}` : `Evento ${i + 1}`;
+      const tiEl = $('#stTitleText');
+      if (tiEl) tiEl.textContent = step.nome || 'Andamento';
+      const lsnEl = $('#stLsnText');
+      if (lsnEl) lsnEl.textContent = lsns[i] ?? '—';
+      const stEl = $('#stStepText');
+      if (stEl) stEl.textContent = i + 1;
+      tt.style.left = `${pct}%`;
+      tt.classList.add('show');
+    }
   });
+
   detalhe.addEventListener('change', e => {
     if (e.target.id !== 'procAsOfRange' || !procDetalhe) return;
-    const lsns = procDetalhe.lsns;
+    const lsns = procDetalhe.lsns || [];
     const i = Number(e.target.value);
     procAsOf = i === lsns.length - 1 ? null : lsns[i];
+    const tt = $('#scrubberTooltip');
+    if (tt) tt.classList.remove('show');
     carregarDetalhe();
   });
+
+  detalhe.addEventListener('mousemove', e => {
+    const track = e.target.closest('#scrubberTrackContainer');
+    if (!track || !procDetalhe) return;
+    const lsns = procDetalhe.lsns || [];
+    const passos = procDetalhe.passos_timeline || [];
+    if (!lsns.length) return;
+
+    const rect = track.getBoundingClientRect();
+    const mouseX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+    const pct = rect.width > 0 ? (mouseX / rect.width) : 0;
+    const closestIdx = Math.max(0, Math.min(Math.round(pct * (lsns.length - 1)), lsns.length - 1));
+    const step = passos[closestIdx] || {};
+
+    const tt = $('#scrubberTooltip');
+    if (tt) {
+      const dtEl = $('#stDateText');
+      if (dtEl) dtEl.textContent = step.dataHora ? `📅 ${step.dataHora}` : `Evento ${closestIdx + 1}`;
+      const tiEl = $('#stTitleText');
+      if (tiEl) tiEl.textContent = step.nome || 'Andamento';
+      const lsnEl = $('#stLsnText');
+      if (lsnEl) lsnEl.textContent = lsns[closestIdx] ?? '—';
+      const stEl = $('#stStepText');
+      if (stEl) stEl.textContent = closestIdx + 1;
+      const dotPct = lsns.length > 1 ? (closestIdx / (lsns.length - 1)) * 100 : 50;
+      tt.style.left = `${dotPct}%`;
+      tt.classList.add('show');
+    }
+  });
+
+  detalhe.addEventListener('mouseleave', e => {
+    const tt = $('#scrubberTooltip');
+    if (tt) tt.classList.remove('show');
+  }, true);
   const viewProc = $('#viewProcessos');
   const tt = $('#chartTooltip');
   if (viewProc && tt) {
