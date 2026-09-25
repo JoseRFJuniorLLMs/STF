@@ -39,60 +39,7 @@
           </p>
         </header>
 
-        <!-- 3. SEPARAÇÃO FORMAL: FATO REAL VS CENÁRIO SINTÉTICO -->
-        <section class="zanin-facts-grid">
-          <div class="zanin-facts-card public">
-            <h3 class="zanin-facts-title blue">
-              <span>📰 Incidente Publicamente Relatado</span>
-              <small style="font-size: 10px; font-weight: normal; color: #64748b;">(O Globo · 25/09/2026)</small>
-            </h3>
-            <ul class="zanin-facts-list" id="factsListPublic">
-              <li>Tentativa de prompt injection em peça processual protocolada no STF.</li>
-              <li>Comandos ocultos inseridos em duas páginas do documento.</li>
-              <li>Uso de letras brancas e tamanho reduzido, imperceptíveis na leitura convencional.</li>
-              <li>Fragmentação atípica de palavras para dificultar filtros de segurança.</li>
-              <li>Detecção pelo Núcleo de Inteligência Artificial da SGTI/STF.</li>
-              <li>Sem efeito prático: gabinete de relatoria não utiliza IA para fundamentar decisões judiciais.</li>
-            </ul>
-          </div>
-
-          <div class="zanin-facts-card synthetic">
-            <h3 class="zanin-facts-title purple">
-              <span>🔬 Cenário Sintético da POC</span>
-              <small style="font-size: 10px; font-weight: normal; color: #64748b;">(Laboratório Controlado)</small>
-            </h3>
-            <ul class="zanin-facts-list">
-              <li><strong>Dados Sintéticos:</strong> Identificadores como <code>ARE-SINTETICO-001</code> e números de OAB são fictícios.</li>
-              <li><strong>Payload Simulado:</strong> Comandos de teste criados em laboratório isolado loopback.</li>
-              <li><strong>Nenhuma Chamada Externa:</strong> Sem conexão com ChatGPT, Claude, Gemini ou sistemas reais do STF.</li>
-              <li><strong>Arquitetura HeraclitusDB:</strong> Prova de preservação de bytes, evidência forense e bloqueio no Policy Gateway.</li>
-            </ul>
-          </div>
-        </section>
-
-        <!-- 3.1 BANNER DE HINT: ONDE E COMO O HERACLITUSDB ATUA -->
-        <div class="zanin-heraclitus-hint-banner">
-          <div class="zanin-hint-badge">💡 HINT ARQUITETURAL: ATUAÇÃO DO HERACLITUSDB NA DEFESA ZANIN</div>
-          <h4 class="zanin-hint-title">Por que o HeraclitusDB é o pilar de proteção contra Injeção de Prompt?</h4>
-          <div class="zanin-hint-grid">
-            <div class="zanin-hint-col">
-              <strong>1. Heraclitus Policy Gateway (Bloqueio Fail-Closed & upstream_delta = 0)</strong>
-              <p>
-                No caso real, o Ministro Zanin não usava IA para minutas. Mas se o STF estivesse utilizando IA autônoma para triagem processual, o documento teria induzido o modelo a tentar fraudar a repercussão geral.
-                O <strong>Heraclitus Policy Gateway</strong> barra essa mutação na raiz: nenhuma IA tem autoridade direta no banco judicial sem assinatura humana digital (HITL), garantindo <code>upstream_delta = 0</code>.
-              </p>
-            </div>
-            <div class="zanin-hint-col">
-              <strong>2. Heraclitus LSN Ledger (Cadeia de Custódia Inviolável para MPF e OAB)</strong>
-              <p>
-                Para punir o infrator por má-fé processual (CPC) e crime perante o MPF/OAB, a prova técnica não pode ser contestada.
-                O <strong>HeraclitusDB</strong> grava em livro-razão imutável <i>append-only</i> (com LSN e carimbo de tempo) os hashes SHA-256 de todas as camadas (bytes originais, texto legível e comandos ocultos). Ninguém consegue adulterar os registros.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <!-- 4. SELETOR DE CENÁRIOS DE LABORATÓRIO -->
+        <!-- 2. SELETOR DE CENÁRIOS DE LABORATÓRIO -->
         <section class="zanin-scenarios-bar">
           <div class="zanin-scenarios-head">
             <span class="zanin-scenarios-title">Selecione o Cenário de Avaliação:</span>
