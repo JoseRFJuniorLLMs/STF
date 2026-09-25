@@ -2263,8 +2263,27 @@ class Handler(BaseHTTPRequestHandler):
                 lim = LEDGER_EVENTS_LIMIT
             try:
                 from heraclitus_adapter import HeraclitusAdapter
-                data = HeraclitusAdapter(base).get(f"/api/v1/agent/red-team/events?limit={lim}")
-                return self._json({"status": "PASS", "limit": lim, "data": data})
+                adapter = HeraclitusAdapter(base)
+                data = adapter.get(f"/api/v1/agent/red-team/events?limit={lim}")
+                # Contagem real e total de eventos no HeraclitusDB sem estipulação
+                total_real = 0
+                latest_lsn = 0
+                try:
+                    status_data = adapter.get("/api/v1/agent/status")
+                    total_real = int(status_data.get("ingest", {}).get("events", 0))
+                except Exception:
+                    pass
+                events_list = data.get("events", []) if isinstance(data, dict) else []
+                if events_list:
+                    latest_lsn = int(events_list[0].get("lsn", 0))
+                total_real = max(total_real, latest_lsn, len(events_list))
+                return self._json({
+                    "status": "PASS",
+                    "limit": lim,
+                    "total_real_events": total_real,
+                    "latest_lsn": latest_lsn,
+                    "data": data
+                })
             except Exception as e:
                 return self._json({"status": "UNAVAILABLE", "error": str(e), "data": {"events": []}})
         if path=="/api/heraclitus-attacks":

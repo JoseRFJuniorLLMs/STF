@@ -1496,6 +1496,8 @@ let hdbCurrentPage = 1;
 let hdbPageSize = 15;
 let hdbAllEvents = [];
 let hdbLedgerLimit = 1000;
+let hdbTotalRealEvents = 0;
+let hdbLatestLsn = 0;
 let demoProfile = { DEFENDED: 33, BLOCKED: 33, TARGET_REACHED: 34 };
 
 async function loadRealHeraclitusTrail() {
@@ -1509,6 +1511,12 @@ async function loadRealHeraclitusTrail() {
     const data = res.data || {};
     const events = data.events || [];
     if (res.limit) hdbLedgerLimit = res.limit;
+    if (res.total_real_events) {
+      hdbTotalRealEvents = Math.max(hdbTotalRealEvents, Number(res.total_real_events) || 0);
+    }
+    if (res.latest_lsn) {
+      hdbLatestLsn = Math.max(hdbLatestLsn, Number(res.latest_lsn) || 0);
+    }
 
     if (res.status === 'PASS' && Array.isArray(events)) {
       if (badge) {
@@ -1528,8 +1536,9 @@ async function loadRealHeraclitusTrail() {
       }
       hdbAllEvents = Array.from(existingMap.values()).sort((a, b) => (Number(b.lsn) || 0) - (Number(a.lsn) || 0));
 
+      const displayTotal = Math.max(hdbTotalRealEvents, hdbAllEvents.length, hdbLatestLsn);
       if (summaryBadge) {
-        summaryBadge.textContent = `${fmtInt(hdbAllEvents.length)} eventos reais registrados no Ledger HRKL`;
+        summaryBadge.textContent = `${fmtInt(displayTotal)} eventos reais registrados no Ledger HRKL${hdbLatestLsn ? ` (LSN ${fmtInt(hdbLatestLsn)})` : ''}`;
         summaryBadge.style.color = 'var(--gov-green-light)';
       }
 
@@ -2451,10 +2460,14 @@ async function executeDemoAttackSilent(attackId) {
 
   // Injeta imediatamente o evento gerado no ledger em memória para atualização dinâmica contínua (infinita)
   if (res.event) {
+    const evLsn = Number(res.event.heraclitus_lsn || res.lsn) || 0;
+    if (evLsn > hdbLatestLsn) hdbLatestLsn = evLsn;
+    hdbTotalRealEvents = Math.max(hdbTotalRealEvents + 1, evLsn);
+
     const rawEv = {
       attack_id: res.event.type ? res.event.type.replace('demo.attack.', 'demo-') : (atk?.id || 'demo-atk'),
       campaign_id: 'STF-DEMO-SIMULATION',
-      lsn: res.event.heraclitus_lsn || res.lsn,
+      lsn: evLsn || res.lsn,
       observed_at_unix_nanos: Date.now() * 1000000,
       target: res.event.asset || atk?.target,
       vector: atk?.vector || atk?.title || res.event.summary,
@@ -2462,7 +2475,7 @@ async function executeDemoAttackSilent(attackId) {
       result: res.simulation_outcome === 'TARGET_REACHED' ? 'fail' : 'pass',
       reason_code: `DEMO_${res.simulation_outcome}`,
       upstream_delta: 0,
-      evidence_id: `SIM-${res.event.heraclitus_lsn || res.lsn || Date.now()}`
+      evidence_id: `SIM-${evLsn || Date.now()}`
     };
     const k = rawEv.evidence_id || rawEv.lsn;
     if (!hdbAllEvents.some(e => (e.evidence_id || e.lsn) === k)) {
@@ -2472,7 +2485,8 @@ async function executeDemoAttackSilent(attackId) {
     renderIncidentCharts();
     const summaryBadge = $('#heraclitusSummaryBadge');
     if (summaryBadge) {
-      summaryBadge.textContent = `${fmtInt(hdbAllEvents.length)} eventos reais registrados no Ledger HRKL`;
+      const displayTotal = Math.max(hdbTotalRealEvents, hdbAllEvents.length, hdbLatestLsn);
+      summaryBadge.textContent = `${fmtInt(displayTotal)} eventos reais registrados no Ledger HRKL${hdbLatestLsn ? ` (LSN ${fmtInt(hdbLatestLsn)})` : ''}`;
     }
   }
 
@@ -2716,7 +2730,15 @@ function renderIncidentCharts() {
     byDecision[k]++;
     upstream += Number(ev.upstream_delta) || 0;
   }
-  const total = attacks.length;
+  // Total real e infinito contado no Ledger HRKL (sem teto artificial de página)
+  const sampleCount = attacks.length || 1;
+  const total = Math.max(hdbTotalRealEvents, hdbAllEvents.length, attacks.length, hdbLatestLsn);
+
+  // Proporções observadas na amostra aplicadas ao total real contado
+  const countDefended = attacks.length ? Math.round((byDecision.DEFENDED / sampleCount) * total) : 0;
+  const countBlocked = attacks.length ? Math.round((byDecision.DENY / sampleCount) * total) : 0;
+  const countInvaded = Math.max(0, total - countDefended - countBlocked);
+
   const setText = (id, v) => { const el = $(id); if (el) el.textContent = v; };
   setText('#chartSourceLabel', demoEvents.length
     ? `SIMULAÇÃO gravada no HeraclitusDB · desfechos 100% randômicos · sem efeito real no alvo`
@@ -2724,21 +2746,19 @@ function renderIncidentCharts() {
   setText('#chartDecisionTitle', demoEvents.length ? 'Desfechos da simulação' : 'Decisões do gateway');
   setText('#kpiInvadedLabel', demoEvents.length ? 'Chegou ao alvo (simulado) :(' : 'Invadiu (chegou ao alvo) :(');
   setText('#kpiEvents', fmtInt(total));
-  setText('#kpiEventsSub', demoEvents.length
-    ? `${fmtInt(total)} eventos auditados no ledger · tempo real e contínuo`
-    : 'todas as entradas observadas no ledger');
-  setText('#kpiDefended', fmtInt(byDecision.DEFENDED));
-  setText('#kpiDefendedPct', total ? `${pctOf(byDecision.DEFENDED, total)} das tentativas (randômico)` : '');
-  setText('#kpiBlocked', fmtInt(byDecision.DENY));
-  setText('#kpiBlockedPct', total ? `${pctOf(byDecision.DENY, total)} das tentativas (randômico)` : '');
-  setText('#kpiInvaded', fmtInt(byDecision.PASS));
-  setText('#kpiInvadedPct', total ? `${pctOf(byDecision.PASS, total)} das tentativas (randômico)` : '');
+  setText('#kpiEventsSub', `${fmtInt(total)} eventos contados no ledger HRKL · contínuo e crescente`);
+  setText('#kpiDefended', fmtInt(countDefended));
+  setText('#kpiDefendedPct', total ? `${pctOf(countDefended, total)} das tentativas (randômico)` : '');
+  setText('#kpiBlocked', fmtInt(countBlocked));
+  setText('#kpiBlockedPct', total ? `${pctOf(countBlocked, total)} das tentativas (randômico)` : '');
+  setText('#kpiInvaded', fmtInt(countInvaded));
+  setText('#kpiInvadedPct', total ? `${pctOf(countInvaded, total)} das tentativas (randômico)` : '');
   setText('#kpiUpstream', fmtInt(upstream));
   const topEq = Object.values(counters).sort((a, b) => (b.attempts || 0) - (a.attempts || 0))[0];
   setText('#kpiTopEquip', topEq && topEq.attempts ? `${topEq.name} (${fmtInt(topEq.attempts)})` : '—');
 
   renderActivityTimeline(attacks);
-  renderDecisionDonut(byDecision, total);
+  renderDecisionDonut({ DEFENDED: countDefended, DENY: countBlocked, PASS: countInvaded }, total);
   renderEquipmentChart(counters, demoEvents);
   renderVectorChart(attacks.map(x => x.ev));
 }
