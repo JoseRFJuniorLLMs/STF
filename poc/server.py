@@ -2431,7 +2431,8 @@ class Handler(BaseHTTPRequestHandler):
         if path=="/api/reset": ENGINE.reset(); return self._json(ENGINE.snapshot("Ambiente reiniciado"))
         if path=="/api/zanin/run-pipeline":
             try:
-                body = self._read_json_body() if self.headers.get("content-length") else {}
+                cl = int(self.headers.get("content-length", "0") or 0)
+                body = self._read_json_body() if cl > 0 else {}
                 scen_id = body.get("scenario_id") or "scenario_zanin_stego"
                 custom_text = body.get("custom_text")
                 pipe = DefensePipelineSimulator.run_pipeline(scen_id, custom_text=custom_text)
@@ -2479,7 +2480,8 @@ class Handler(BaseHTTPRequestHandler):
 
         if path=="/api/zanin/verify-bundle":
             try:
-                body = self._read_json_body() if self.headers.get("content-length") else {}
+                cl = int(self.headers.get("content-length", "0") or 0)
+                body = self._read_json_body() if cl > 0 else {}
                 bundle = body.get("bundle")
                 if not bundle:
                     pipe = DefensePipelineSimulator.run_pipeline("scenario_zanin_stego")
@@ -2491,7 +2493,8 @@ class Handler(BaseHTTPRequestHandler):
 
         if path in ("/api/zanin/inspect", "/api/zanin/replicate-attack"):
             try:
-                body = self._read_json_body() if self.headers.get("content-length") else {}
+                cl = int(self.headers.get("content-length", "0") or 0)
+                body = self._read_json_body() if cl > 0 else {}
                 scen_id = body.get("scenario_id") or "scenario_zanin_stego"
                 pipe = DefensePipelineSimulator.run_pipeline(scen_id)
                 bundle = EvidenceBundleManager.build_bundle(pipe)
