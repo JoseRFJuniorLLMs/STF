@@ -2433,9 +2433,9 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 cl = int(self.headers.get("content-length", "0") or 0)
                 body = self._read_json_body() if cl > 0 else {}
-                scen_id = body.get("scenario_id") or "scenario_zanin_stego"
+                scen_id = body.get("scenario_id") or "dynamic_fuzzer"
                 custom_text = body.get("custom_text")
-                pipe = DefensePipelineSimulator.run_pipeline(scen_id, custom_text=custom_text)
+                pipe = DefensePipelineSimulator.run_pipeline(scen_id, custom_text=custom_text, custom_params=body)
 
                 base = getattr(ENGINE, "heraclitus_url", None) or os.environ.get("HERACLITUS_URL", "http://127.0.0.1:8080")
                 event_lsn = 10550
