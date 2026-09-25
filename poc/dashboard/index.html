@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="auditoria.css" />
   <link rel="stylesheet" href="resiliencia.css" />
   <link rel="stylesheet" href="interoperabilidade.css" />
+  <link rel="stylesheet" href="zanin.css" />
 </head>
 <body>
 <div class="shell">
@@ -78,6 +79,7 @@
       ⚖️ Acompanhamento processual
       <span class="main-tab-badge" id="procNovosBadge" title="Andamentos novos desde a última visita" hidden>0</span>
     </button>
+    <button class="main-tab" id="tabZanin" role="tab" aria-selected="false" aria-controls="viewZanin" data-view="zanin">🏛️ Defesa Zanin</button>
     <button class="main-tab" id="tabIncidente" role="tab" aria-selected="false" aria-controls="viewIncidente" data-view="incidente">🔍 Incidente 360º</button>
     <button class="main-tab" id="tabAuditoria" role="tab" aria-selected="false" aria-controls="viewAuditoria" data-view="auditoria">📜 Auditoria e Evidências</button>
     <button class="main-tab" id="tabResiliencia" role="tab" aria-selected="false" aria-controls="viewResiliencia" data-view="resiliencia">🔄 Resiliência e Continuidade</button>
@@ -430,6 +432,9 @@
     </section>
   </div>
 
+  <!-- DEFESA ZANIN (PROMPT INJECTION & FRAUDE POR IA) -->
+  <div class="view" id="viewZanin" role="tabpanel" aria-labelledby="tabZanin" hidden></div>
+
   <!-- INCIDENTE 360º -->
   <div class="view" id="viewIncidente" role="tabpanel" aria-labelledby="tabIncidente" hidden></div>
 
@@ -450,6 +455,7 @@
 <div id="toast" class="toast"></div>
 <script src="app.js?v=20260924-demo"></script>
 <script src="processos.js"></script>
+<script src="zanin.js"></script>
 <script src="incidente.js?v=20260924-demo"></script>
 <script src="auditoria.js"></script>
 <script src="resiliencia.js"></script>

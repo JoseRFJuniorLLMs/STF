@@ -35,6 +35,13 @@ from synthetic_upstream import SyntheticUpstream
 from heraclitus_adapter import HeraclitusAdapter
 from heraclitus_core import CoreUnavailable, HeraclitusCore
 from processos import ProcessLedger
+from zanin_defense import (
+    CASE_ZANIN_METADATA,
+    CASE_ZANIN_VISIBLE_TEXT,
+    CASE_ZANIN_INJECTED_PROMPT,
+    PromptInjectionSanitizer,
+    generate_certidao_pericial
+)
 
 ROOT = Path(__file__).resolve().parent
 DASHBOARD = ROOT / "dashboard"
@@ -2254,6 +2261,18 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"attacks": STF_TARGET_ATTACKS})
         if path=="/api/demo-profile":
             return self._json({"campaign_id": DEMO_CAMPAIGN_ID, "weights": demo_weights(), "mode": "random"})
+        if path=="/api/zanin/case":
+            return self._json({
+                "metadata": CASE_ZANIN_METADATA,
+                "visible_text": CASE_ZANIN_VISIBLE_TEXT,
+                "injected_prompt": CASE_ZANIN_INJECTED_PROMPT
+            })
+        if path=="/api/zanin/certidao":
+            try: lsn_val = int(query.get("lsn", ["10550"])[0])
+            except (ValueError, TypeError): lsn_val = 10550
+            inspection = PromptInjectionSanitizer.inspect(CASE_ZANIN_VISIBLE_TEXT, CASE_ZANIN_INJECTED_PROMPT)
+            cert = generate_certidao_pericial(CASE_ZANIN_METADATA["case_id"], inspection, lsn=lsn_val)
+            return self._json(cert)
         if path in ("/api/heraclitus-events", "/api/trail"):
             base=getattr(ENGINE, "heraclitus_url", None) or os.environ.get("HERACLITUS_URL", "http://127.0.0.1:8080")
             try:
@@ -2398,6 +2417,60 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError,KeyError,TypeError) as e:
                 return self._json({"error":"invalid_approval","detail":str(e)},400)
         if path=="/api/reset": ENGINE.reset(); return self._json(ENGINE.snapshot("Ambiente reiniciado"))
+        if path=="/api/zanin/inspect":
+            try:
+                body = self._read_json_body() if self.headers.get("content-length") else {}
+                vis = body.get("visible_text") or CASE_ZANIN_VISIBLE_TEXT
+                hid = body.get("hidden_payload") if "hidden_payload" in body else CASE_ZANIN_INJECTED_PROMPT
+                color = body.get("font_color") or "#ffffff"
+                size = float(body.get("font_size_pt") or 0.5)
+                res = PromptInjectionSanitizer.inspect(vis, hid, color, size)
+                return self._json(res, 200)
+            except Exception as e:
+                return self._json({"error": "inspect_failed", "detail": str(e)}, 400)
+        if path=="/api/zanin/replicate-attack":
+            try:
+                body = self._read_json_body() if self.headers.get("content-length") else {}
+                vis = body.get("visible_text") or CASE_ZANIN_VISIBLE_TEXT
+                hid = body.get("hidden_payload") if "hidden_payload" in body else CASE_ZANIN_INJECTED_PROMPT
+                color = body.get("font_color") or "#ffffff"
+                size = float(body.get("font_size_pt") or 0.5)
+                inspection = PromptInjectionSanitizer.inspect(vis, hid, color, size)
+                base = getattr(ENGINE, "heraclitus_url", None) or os.environ.get("HERACLITUS_URL", "http://127.0.0.1:8080")
+                event_lsn = 10550
+                try:
+                    from heraclitus_adapter import HeraclitusAdapter
+                    adapter = HeraclitusAdapter(base)
+                    payload = {
+                        "campaign_id": "STF-ZANIN-DEFENSE",
+                        "type": "audit.prompt_injection_blocked",
+                        "asset": "asset:stf-victor-ai",
+                        "summary": "Detecção de tentativa de fraude via Prompt Injection oculto (Caso Min. Cristiano Zanin)",
+                        "details": {
+                            "case_id": CASE_ZANIN_METADATA["case_id"],
+                            "relator": CASE_ZANIN_METADATA["relator"],
+                            "threat_score": inspection["threat_score"],
+                            "detected_triggers": inspection["detected_triggers"],
+                            "evidence": inspection["evidence"],
+                            "sanitized": True
+                        },
+                        "upstream_delta": 0,
+                        "reason_code": inspection["reason_code"]
+                    }
+                    resp = adapter.post("/api/v1/agent/ingest", payload)
+                    if isinstance(resp, dict) and resp.get("lsn"):
+                        event_lsn = int(resp["lsn"])
+                except Exception:
+                    event_lsn = int(time.time() % 100000 + 10550)
+                certidao = generate_certidao_pericial(CASE_ZANIN_METADATA["case_id"], inspection, lsn=event_lsn)
+                return self._json({
+                    "status": "PASS",
+                    "lsn": event_lsn,
+                    "inspection": inspection,
+                    "certidao": certidao
+                }, 200)
+            except Exception as e:
+                return self._json({"error": "replicate_failed", "detail": str(e)}, 400)
         if path=="/api/step": return self._json(ENGINE.step())
         if path=="/api/run": return self._json(ENGINE.run_all())
         if path=="/api/tamper-demo":

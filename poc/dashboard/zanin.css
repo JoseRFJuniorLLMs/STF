@@ -1,0 +1,422 @@
+/* Defesa Zanin — Módulo de Defesa contra Prompt Injection e Fraude por IA */
+
+.zanin-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 10px 0 40px 0;
+  color: var(--gov-text, #1e293b);
+}
+
+/* Header Banner do Caso Real */
+.zanin-hero {
+  background: linear-gradient(135deg, #0b1f3d 0%, #15325b 60%, #1e427b 100%);
+  border-radius: 12px;
+  padding: 24px 28px;
+  color: #ffffff;
+  box-shadow: 0 4px 16px rgba(11, 31, 61, 0.15);
+  border-left: 6px solid #eab308;
+  position: relative;
+  overflow: hidden;
+}
+
+.zanin-hero::after {
+  content: "STF · 25/09/2026";
+  position: absolute;
+  right: 24px;
+  bottom: 16px;
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.35);
+  font-weight: 700;
+}
+
+.zanin-hero-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: #facc15;
+  margin-bottom: 8px;
+}
+
+.zanin-hero-title {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0 0 10px 0;
+  line-height: 1.3;
+}
+
+.zanin-hero-desc {
+  font-size: 14px;
+  line-height: 1.6;
+  max-width: 960px;
+  color: #e2e8f0;
+  margin: 0;
+}
+
+.zanin-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.zanin-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.zanin-meta-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #94a3b8;
+}
+
+.zanin-meta-val {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+/* Painel de Trabalho Dividido em 2 Colunas */
+.zanin-workspace-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 1024px) {
+  .zanin-workspace-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.zanin-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.zanin-card-head {
+  padding: 16px 20px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.zanin-card-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+/* Controles de Visualização Forense da Peça */
+.zanin-view-toggle {
+  display: flex;
+  background: #e2e8f0;
+  padding: 3px;
+  border-radius: 6px;
+  gap: 2px;
+}
+
+.zanin-toggle-btn {
+  border: none;
+  background: transparent;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #475569;
+  transition: all 0.2s ease;
+}
+
+.zanin-toggle-btn.active {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.zanin-toggle-btn.danger.active {
+  background: #dc2626;
+  color: #ffffff;
+}
+
+/* Área de Visualização do Documento (Estilo Papel Judicial) */
+.zanin-doc-viewport {
+  padding: 24px;
+  background: #fdfdfd;
+  min-height: 380px;
+  font-family: "Georgia", "Times New Roman", serif;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #1e293b;
+  position: relative;
+  overflow-y: auto;
+  max-height: 520px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.zanin-doc-viewport.forensic-mode {
+  background: #0f172a;
+  color: #94a3b8;
+}
+
+.zanin-doc-viewport.forensic-mode .doc-visible-text {
+  opacity: 0.65;
+}
+
+/* Payload Oculto no Modo Normal vs Modo Forense */
+.doc-hidden-payload {
+  display: inline;
+  transition: all 0.3s ease;
+}
+
+/* Modo convencional: invisível (letras brancas e tamanho mínimo) */
+.zanin-doc-viewport:not(.forensic-mode) .doc-hidden-payload {
+  color: #ffffff !important;
+  font-size: 1px !important;
+  line-height: 0 !important;
+  user-select: text;
+}
+
+/* Modo forense: revela o prompt em neon vermelho pulsante */
+.zanin-doc-viewport.forensic-mode .doc-hidden-payload {
+  display: block;
+  margin: 18px 0;
+  padding: 14px 18px;
+  background: rgba(220, 38, 38, 0.18);
+  border: 1px solid #ef4444;
+  border-left: 4px solid #ef4444;
+  color: #fca5a5 !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  font-size: 13px !important;
+  line-height: 1.5 !important;
+  border-radius: 6px;
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.25);
+  animation: glowPulse 2s infinite alternate;
+}
+
+@keyframes glowPulse {
+  0% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.2); }
+  100% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.45); }
+}
+
+.forensic-callout {
+  display: none;
+  font-weight: 700;
+  color: #f87171;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+
+.zanin-doc-viewport.forensic-mode .forensic-callout {
+  display: block;
+}
+
+/* Barra de Ações do Documento */
+.zanin-card-actions {
+  padding: 14px 20px;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* Painel da Direita: Diagnóstico e Oráculo */
+.zanin-diag-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.zanin-score-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  border-left: 5px solid #64748b;
+}
+
+.zanin-score-box.threat-high {
+  background: #fef2f2;
+  border-left-color: #dc2626;
+}
+
+.zanin-score-box.threat-none {
+  background: #f0fdf4;
+  border-left-color: #16a34a;
+}
+
+.zanin-score-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #475569;
+}
+
+.zanin-score-value {
+  font-size: 28px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.zanin-score-box.threat-high .zanin-score-value {
+  color: #dc2626;
+}
+
+.zanin-score-box.threat-none .zanin-score-value {
+  color: #16a34a;
+}
+
+/* Lista de Triggers Detectados */
+.zanin-trigger-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.zanin-trigger-item {
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.zanin-trigger-item.sev-critical {
+  border-left: 3px solid #dc2626;
+  background: #fff1f2;
+}
+
+.zanin-trigger-type {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #b91c1c;
+}
+
+.zanin-trigger-detail {
+  font-size: 13px;
+  color: #334155;
+  line-height: 1.4;
+}
+
+/* Prova Criptográfica Hashes */
+.zanin-crypto-proof {
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 8px;
+  padding: 14px 16px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.zanin-crypto-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  word-break: break-all;
+}
+
+.zanin-crypto-label {
+  color: #94a3b8;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Caixa da Certidão Pericial */
+.zanin-certidao-card {
+  margin-top: 10px;
+  background: #ffffff;
+  border: 2px solid #0b1f3d;
+  border-radius: 10px;
+  padding: 24px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.zanin-certidao-header {
+  text-align: center;
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 16px;
+  margin-bottom: 20px;
+}
+
+.zanin-certidao-brasao {
+  font-size: 26px;
+  margin-bottom: 6px;
+}
+
+.zanin-certidao-tribunal {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: #0b1f3d;
+  text-transform: uppercase;
+}
+
+.zanin-certidao-sub {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.zanin-certidao-body {
+  font-size: 14px;
+  line-height: 1.7;
+  color: #1e293b;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.zanin-certidao-destinos {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 14px;
+  margin-top: 8px;
+}
+
+.zanin-certidao-seal {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px dashed #cbd5e1;
+  font-size: 12px;
+  color: #475569;
+}

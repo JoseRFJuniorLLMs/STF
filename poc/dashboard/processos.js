@@ -39,7 +39,7 @@ const procData = iso => (iso ? procDataFmt.format(new Date(iso)) : '—');
 const procDataHora = iso => (iso ? procDataHoraFmt.format(new Date(iso)) : '—');
 const procHora = ms => (ms ? procDataHoraFmt.format(new Date(ms)) : '—');
 
-const ALL_VIEWS = ['defesa', 'processos', 'incidente', 'auditoria', 'resiliencia', 'interoperabilidade'];
+const ALL_VIEWS = ['defesa', 'processos', 'zanin', 'incidente', 'auditoria', 'resiliencia', 'interoperabilidade'];
 
 function procViewAtiva() {
   return !$('#viewProcessos').hidden;
@@ -75,6 +75,8 @@ function mostrarView(view, atualizarHash = true) {
     if (procSelecionado) procNovos.delete(procSelecionado);
     atualizarBadgeNovos();
     carregarProcessos();
+  } else if (view === 'zanin' && typeof refreshDefesaZanin === 'function') {
+    refreshDefesaZanin();
   } else if (view === 'incidente' && typeof refreshIncidente360 === 'function') {
     refreshIncidente360();
   } else if (view === 'auditoria' && typeof refreshAuditoria === 'function') {
