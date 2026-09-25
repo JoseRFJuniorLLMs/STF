@@ -41,7 +41,7 @@
         </div>
         <div class="badge-item">
           <span class="badge-label">HERACLITUS</span>
-          <span id="integrationBadge" class="tag-status wsl-status">CONECTANDO...</span>
+          <span id="integrationBadge" class="tag-status hdb-status">CONECTANDO...</span>
         </div>
       </div>
     </div>
@@ -292,10 +292,10 @@
     </section>
   </main>
 
-  <!-- GRADE COM DADOS REAIS DO HERACLITUSDB (WSL Linux — 127.0.0.1:8080) -->
+  <!-- GRADE COM DADOS REAIS DO HERACLITUSDB (127.0.0.1:8080) -->
   <section class="panel bottom-trail-panel">
     <div class="panel-head trail-header">
-      <h2>Ledger HeraclitusDB <small class="head-hint">WSL Linux — 127.0.0.1:8080 • dados reais</small></h2>
+      <h2>Ledger HeraclitusDB <small class="head-hint">127.0.0.1:8080 • dados reais</small></h2>
       <div class="trail-meta-info">
         <span id="heraclitusSummaryBadge" class="badge">Carregando eventos reais do HeraclitusDB...</span>
       </div>
@@ -305,19 +305,19 @@
       <table class="simple-table trail-real-table">
         <thead>
           <tr>
-            <th style="width: 75px;">LSN</th>
-            <th style="width: 155px;">Data / Hora</th>
-            <th style="width: 175px;">Attack ID</th>
-            <th>Vetor de Ataque / Ação</th>
-            <th style="width: 200px;">Alvo / Equipamento</th>
-            <th style="width: 135px;">Decisão / Resultado</th>
-            <th style="width: 75px; text-align: center;">Upstream</th>
-            <th style="width: 140px;">Hash Resumo</th>
-            <th style="width: 170px;">Evidence ID</th>
+            <th style="width: 75px;" title="LSN (Log Sequence Number): Número de sequência monotônico estritamente crescente e imutável gravado no Ledger HRKL do HeraclitusDB. Garante a ordenação temporal estrita e a integridade de cada evento.">LSN <span class="th-help">ⓘ</span></th>
+            <th style="width: 155px;" title="Data e Hora: Carimbo de tempo em nanossegundos UTC da observação e registro do evento no núcleo criptográfico.">Data / Hora <span class="th-help">ⓘ</span></th>
+            <th style="width: 175px;" title="Attack ID: Identificador único da tentativa ou execução de ataque simulado/real auditado no ledger.">Attack ID <span class="th-help">ⓘ</span></th>
+            <th title="Vetor de Ataque: Descrição técnica do método de intrusão, exploração de vulnerabilidade ou ação executada contra a infraestrutura do STF.">Vetor de Ataque / Ação <span class="th-help">ⓘ</span></th>
+            <th style="width: 200px;" title="Alvo / Equipamento: Componente ou subsistema de destino no STF (ex: WAF, VDI, BD Judicial, HPC, MNI).">Alvo / Equipamento <span class="th-help">ⓘ</span></th>
+            <th style="width: 135px;" title="Decisão / Resultado: Desfecho da inspeção de segurança. DETECTED/DEFENDED (contido), BLOCKED/DENY (bloqueado na borda) ou PASS (simulação chegou ao alvo).">Decisão / Resultado <span class="th-help">ⓘ</span></th>
+            <th style="width: 75px; text-align: center;" title="Upstream: Efeito ou impacto propagado aos sistemas reais em produção. Na simulação é sempre 0 (zero), garantindo isolamento total (sem efeito real no alvo).">Upstream <span class="th-help">ⓘ</span></th>
+            <th style="width: 140px;" title="Hash Resumo: Hash SHA-256 criptográfico imutável do registro no ledger, garantindo integridade contra adulteração.">Hash Resumo <span class="th-help">ⓘ</span></th>
+            <th style="width: 170px;" title="Evidence ID: Identificador do objeto de prova digital (Evidence Object) emitido para auditoria e cadeia de custódia judicial.">Evidence ID <span class="th-help">ⓘ</span></th>
           </tr>
         </thead>
         <tbody id="heraclitusEventRows">
-          <tr><td colspan="9" class="empty">Conectando ao HeraclitusDB no WSL (127.0.0.1:8080)...</td></tr>
+          <tr><td colspan="9" class="empty">Conectando ao HeraclitusDB (127.0.0.1:8080)...</td></tr>
         </tbody>
       </table>
     </div>
@@ -404,7 +404,7 @@
       <div class="panel-head">
         <h2>Acompanhamento processual <small class="head-hint">log gravado no HeraclitusDB • núcleo <span id="procAddr" class="mono">127.0.0.1:17474</span></small></h2>
         <div class="proc-head-actions">
-          <span id="procStatus" class="tag-status wsl-status">CONECTANDO...</span>
+          <span id="procStatus" class="tag-status hdb-status">CONECTANDO...</span>
           <label class="proc-auto" title="Acrescenta um andamento a um processo a cada 6 segundos">
             <input type="checkbox" id="procAutoToggle" /> Tramitação automática
           </label>

@@ -1,6 +1,12 @@
 <p align="center">
   <img src="assets/poc-integrada-stf-heraclitusdb.svg" alt="POC integrada STF, agente de IA atacante e HeraclitusDB alertando" width="100%" />
 </p>
+<p align="center">
+  <img src="img/01.png" alt="POC" width="100%" />
+</p>
+<p align="center">
+  <img src="img/02.png" alt="POC" width="100%" />
+</p>
 
 # STF — POC HeraclitusDB
 

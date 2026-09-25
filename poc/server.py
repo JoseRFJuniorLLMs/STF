@@ -45,19 +45,14 @@ CAMPAIGN_ID = "STF-POC-CAMPAIGN-001"
 INCIDENT_ID = "STF-POC-INCIDENT-001"
 SYNTHETIC_CASE = "case://SYNTHETIC/RE-000001"
 COMPROMISED_PRINCIPAL = "service-account-17"
-# Janela do ledger para a grade e os gráficos. Com ataques massivos 200 enchia em
-# segundos; o Agent Black Box aceita até 1000 por pedido.
-LEDGER_EVENTS_LIMIT = 500
+# Janela do ledger para a grade e os gráficos. O Agent Black Box aceita até 1000 por pedido.
+LEDGER_EVENTS_LIMIT = 1000
 DEMO_CAMPAIGN_ID = "STF-DEMO-SIMULATION"
 DEMO_OUTCOMES = ("DEFENDED", "BLOCKED", "TARGET_REACHED")
 
 def demo_weights() -> dict[str, int]:
-    """Percentuais configuráveis para os eventos sintéticos da apresentação."""
-    keys = ("STF_DEMO_DEFENDED_PCT", "STF_DEMO_BLOCKED_PCT", "STF_DEMO_TARGET_PCT")
-    values = [int(os.environ.get(key, default)) for key, default in zip(keys, (60, 30, 10))]
-    if any(value < 0 or value > 100 for value in values) or sum(values) != 100:
-        raise ValueError("STF_DEMO_*_PCT devem estar entre 0 e 100 e somar 100")
-    return dict(zip(DEMO_OUTCOMES, values))
+    """Distribuição para os eventos sintéticos da apresentação (randômico)."""
+    return {k: 33 for k in DEMO_OUTCOMES}
 LOCAL_HOSTS={"127.0.0.1","localhost","::1"}
 
 EQUIPMENT_DEFINITIONS = [
@@ -1374,15 +1369,10 @@ class PocEngine:
             if self.adapter is None:
                 raise RuntimeError("HeraclitusDB indisponível; simulação não foi gravada")
 
-            weights = demo_weights()
             eq_id = atk["equipment_id"]
             counts = self.demo_counts[eq_id]
-            next_total = sum(counts.values()) + 1
-            # Corrige o desvio a cada disparo; em blocos de dez por componente,
-            # 60/30/10 resulta exatamente em 6/3/1. Empates são sorteados.
-            priority = list(DEMO_OUTCOMES)
-            random.shuffle(priority)
-            outcome = max(priority, key=lambda key: next_total * weights[key] / 100 - counts[key])
+            # Desfecho 100% livre e randômico por ataque (sem quotas/metas percentuais)
+            outcome = random.choice(DEMO_OUTCOMES)
             reason = f"DEMO_{outcome}"
             payload = {
                 "attack_id": f"demo-{atk['id'].lower()}-{uuid.uuid4().hex}",
@@ -2263,13 +2253,18 @@ class Handler(BaseHTTPRequestHandler):
         if path=="/api/stf-attacks":
             return self._json({"attacks": STF_TARGET_ATTACKS})
         if path=="/api/demo-profile":
-            return self._json({"campaign_id": DEMO_CAMPAIGN_ID, "weights": demo_weights(), "mode": "synthetic"})
+            return self._json({"campaign_id": DEMO_CAMPAIGN_ID, "weights": demo_weights(), "mode": "random"})
         if path in ("/api/heraclitus-events", "/api/trail"):
             base=getattr(ENGINE, "heraclitus_url", None) or os.environ.get("HERACLITUS_URL", "http://127.0.0.1:8080")
             try:
+                raw_lim = query.get("limit", [str(LEDGER_EVENTS_LIMIT)])[0]
+                lim = min(1000, max(1, int(raw_lim))) if raw_lim else LEDGER_EVENTS_LIMIT
+            except (ValueError, TypeError):
+                lim = LEDGER_EVENTS_LIMIT
+            try:
                 from heraclitus_adapter import HeraclitusAdapter
-                data = HeraclitusAdapter(base).get(f"/api/v1/agent/red-team/events?limit={LEDGER_EVENTS_LIMIT}")
-                return self._json({"status": "PASS", "limit": LEDGER_EVENTS_LIMIT, "data": data})
+                data = HeraclitusAdapter(base).get(f"/api/v1/agent/red-team/events?limit={lim}")
+                return self._json({"status": "PASS", "limit": lim, "data": data})
             except Exception as e:
                 return self._json({"status": "UNAVAILABLE", "error": str(e), "data": {"events": []}})
         if path=="/api/heraclitus-attacks":

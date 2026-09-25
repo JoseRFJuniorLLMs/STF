@@ -401,8 +401,8 @@ const NODE_DESCRIPTIONS = {
     title: 'HeraclitusDB (Escudo Verde-Amarelo • Ledger HRKL)',
     icon: '🛡️',
     layerBadge: 'AUDITORIA IMUTÁVEL • LIVRO-RAZÃO CRIPTOGRÁFICO',
-    role: 'Ledger com LSN Monotônico, Provas Merkle e OTLP (WSL 8080)',
-    ledgerSync: 'CONEXÃO ATIVA WSL UBUNTU',
+    role: 'Ledger com LSN Monotônico, Provas Merkle e OTLP (Porta 8080)',
+    ledgerSync: 'CONEXÃO ATIVA HERACLITUSDB',
     desc: 'Motor central de governança cibernética e auditoria imutável do STF, sob o Escudo Verde e Amarelo de proteção criptográfica. Registra cada transação, decisão de segurança do Gateway e chamada de ferramentas em uma cadeia de blocos inviolável com provas Merkle independentes.'
   }
 };
@@ -1324,10 +1324,10 @@ function renderGraph(s) {
           ${esc(short(n.friendlyName, 22))}
         </text>
 
-        <!-- SUBRÓTULO: TENTATIVAS (VERMELHO) · BLOQUEADOS (VERDE ✓) · INVADIU (ROXO) -->
+        <!-- SUBRÓTULO: TENTATIVAS (VERMELHO) · BLOQUEADOS (VERDE ✓) · INVADIU (ROXO :() -->
         ${hasBeenAttacked ? `
           <text x="0" y="${n.r + 26}" text-anchor="middle" font-size="9.5" font-weight="900" class="attack-count-sublabel">
-            <tspan fill="${LEGEND.attack}">${attackCount} ${attackCount === 1 ? 'ataque' : 'ataques'}</tspan>${outcomes.blocked ? `<tspan fill="${LEGEND.blockedText}"> · ✓${outcomes.blocked} bloq.</tspan>` : ''}${wasBreached ? `<tspan fill="${LEGEND.breached}"> · ${outcomes.passed} invadiu</tspan>` : ''}
+            <tspan fill="${LEGEND.attack}">${attackCount} ${attackCount === 1 ? 'ataque' : 'ataques'}</tspan>${outcomes.blocked ? `<tspan fill="${LEGEND.blockedText}"> · ✓${outcomes.blocked} bloq.</tspan>` : ''}${wasBreached ? `<tspan fill="${LEGEND.breached}"> · :(${outcomes.passed} invadiu</tspan>` : ''}
           </text>
         ` : ''}
 
@@ -1351,13 +1351,16 @@ function renderGraph(s) {
             <text x="0" y="0" text-anchor="middle" dominant-baseline="central" fill="#ffffff" font-size="11" font-weight="900" font-family="ui-monospace, Consolas, monospace">${bStr}</text>
           </g>`;
         })() : ''}
-        ${wasBreached ? `
+        ${wasBreached ? (() => {
+          const pStr = `:(${outcomes.passed}`;
+          const pW = Math.max(28, pStr.length * 7.5 + 10);
+          return `
           <g class="node-breached-badge" transform="translate(${n.r * 0.72}, ${n.r * 0.72})">
-            <title>${outcomes.passed} chegaram ao alvo — invadiu</title>
-            <rect x="-12" y="-10" width="24" height="20" rx="10" fill="${LEGEND.breached}" stroke="#ffffff" stroke-width="2" />
-            <text x="0" y="0" text-anchor="middle" dominant-baseline="central" fill="#ffffff" font-size="11" font-weight="900" font-family="ui-monospace, Consolas, monospace">${outcomes.passed}</text>
-          </g>
-        ` : ''}
+            <title>${outcomes.passed} chegaram ao alvo — invadiu :(</title>
+            <rect x="${-pW / 2}" y="-10" width="${pW}" height="20" rx="10" fill="${LEGEND.breached}" stroke="#ffffff" stroke-width="2" />
+            <text x="0" y="0" text-anchor="middle" dominant-baseline="central" fill="#ffffff" font-size="10.5" font-weight="900" font-family="ui-monospace, Consolas, monospace">${pStr}</text>
+          </g>`;
+        })() : ''}
 
         <!-- POPUP DO ATAQUE: APARECE NO NÓ SOB ATAQUE -->
         ${hasActiveAttack ? `
@@ -1381,7 +1384,7 @@ function renderGraph(s) {
     <div class="graph-legend" aria-label="Legenda do grafo">
       <span class="lg-item"><span class="lg-dot" style="background:${LEGEND.attack}">☠</span>tentativas de ataque</span>
       <span class="lg-item"><span class="lg-dot" style="background:${LEGEND.blocked}">✓</span>bloqueado — não invadiu</span>
-      <span class="lg-item"><span class="lg-dot" style="background:${LEGEND.breached}">2</span>chegou ao alvo — invadiu</span>
+      <span class="lg-item"><span class="lg-dot" style="background:${LEGEND.breached}">:(</span>chegou ao alvo — invadiu</span>
     </div>
   `;
 
@@ -1492,8 +1495,8 @@ function updateFocusCard(s) {
 let hdbCurrentPage = 1;
 let hdbPageSize = 15;
 let hdbAllEvents = [];
-let hdbLedgerLimit = 500;
-let demoProfile = { DEFENDED: 60, BLOCKED: 30, TARGET_REACHED: 10 };
+let hdbLedgerLimit = 1000;
+let demoProfile = { DEFENDED: 33, BLOCKED: 33, TARGET_REACHED: 34 };
 
 async function loadRealHeraclitusTrail() {
   const badge = $('#integrationBadge');
@@ -1502,34 +1505,45 @@ async function loadRealHeraclitusTrail() {
   if (!rows) return;
 
   try {
-    const res = await api('/api/heraclitus-events');
+    const res = await api('/api/heraclitus-events?limit=1000');
     const data = res.data || {};
     const events = data.events || [];
     if (res.limit) hdbLedgerLimit = res.limit;
 
     if (res.status === 'PASS' && Array.isArray(events)) {
       if (badge) {
-        badge.textContent = 'CONECTADO (WSL 8080)';
+        badge.textContent = 'CONECTADO (8080)';
         badge.className = 'tag-status normal';
       }
+
+      // Mesclagem com retenção cumulativa: preserva eventos já acumulados para contagem infinita
+      const existingMap = new Map();
+      for (const ev of hdbAllEvents) {
+        const k = ev.evidence_id || ev.lsn || ev.attack_id;
+        if (k) existingMap.set(k, ev);
+      }
+      for (const ev of events) {
+        const k = ev.evidence_id || ev.lsn || ev.attack_id;
+        if (k) existingMap.set(k, ev);
+      }
+      hdbAllEvents = Array.from(existingMap.values()).sort((a, b) => (Number(b.lsn) || 0) - (Number(a.lsn) || 0));
+
       if (summaryBadge) {
-        summaryBadge.textContent = `${events.length} eventos reais registrados no Ledger HRKL`;
+        summaryBadge.textContent = `${fmtInt(hdbAllEvents.length)} eventos reais registrados no Ledger HRKL`;
         summaryBadge.style.color = 'var(--gov-green-light)';
       }
 
-      // Ordena por LSN decrescente para os mais recentes ficarem no topo
-      hdbAllEvents = [...events].sort((a, b) => (Number(b.lsn) || 0) - (Number(a.lsn) || 0));
       renderHdbPage();
       renderIncidentCharts();
     } else {
       if (badge) {
-        badge.textContent = 'OFFLINE (WSL 8080)';
+        badge.textContent = 'OFFLINE (8080)';
         badge.className = 'tag-status';
       }
       if (summaryBadge) {
         summaryBadge.textContent = 'HeraclitusDB local indisponível';
       }
-      rows.innerHTML = `<tr><td colspan="9" class="empty">HeraclitusDB não respondeu na porta 8080 do WSL (${esc(res.error || 'Indisponível')}).</td></tr>`;
+      rows.innerHTML = `<tr><td colspan="9" class="empty">HeraclitusDB não respondeu na porta 8080 (${esc(res.error || 'Indisponível')}).</td></tr>`;
       updateHdbPaginationControls(0, 0, 0);
     }
   } catch (err) {
@@ -1938,7 +1952,7 @@ function updateInfraStatusBar(s) {
       statusHdb.style.color = 'var(--gov-gold)';
     } else {
       nodeHdb.className = 'infra-node-item';
-      statusHdb.textContent = 'LEDGER HRKL (WSL 8080)';
+      statusHdb.textContent = 'LEDGER HRKL (Porta 8080)';
       statusHdb.style.color = 'var(--gov-green)';
     }
   }
@@ -2319,7 +2333,7 @@ const MASSIVE_BUTTON_IDS = {
 const MODE_LABELS = {
   firewall: 'WAF / Firewall de Borda',
   database: 'Banco de Dados Oracle RAC',
-  heraclitus: 'HeraclitusDB (WSL 8080)',
+  heraclitus: 'HeraclitusDB (Porta 8080)',
   dw: 'Data Warehouse & Analytics',
   random: 'Randômico (Toda a Infraestrutura)'
 };
@@ -2434,7 +2448,35 @@ async function executeDemoAttackSilent(attackId) {
   markLiveAttackLsn(res.event?.lsn ?? res.lsn);
   if (targetNodeId && atk) triggerNodeAttackPopup(targetNodeId, atk.id, atk.title, outcomeOf(res));
   showMassiveAttackHint(res);
-  if (massiveAttackCount % 2 === 0) loadRealHeraclitusTrail();
+
+  // Injeta imediatamente o evento gerado no ledger em memória para atualização dinâmica contínua (infinita)
+  if (res.event) {
+    const rawEv = {
+      attack_id: res.event.type ? res.event.type.replace('demo.attack.', 'demo-') : (atk?.id || 'demo-atk'),
+      campaign_id: 'STF-DEMO-SIMULATION',
+      lsn: res.event.heraclitus_lsn || res.lsn,
+      observed_at_unix_nanos: Date.now() * 1000000,
+      target: res.event.asset || atk?.target,
+      vector: atk?.vector || atk?.title || res.event.summary,
+      blocked: res.simulation_outcome !== 'TARGET_REACHED',
+      result: res.simulation_outcome === 'TARGET_REACHED' ? 'fail' : 'pass',
+      reason_code: `DEMO_${res.simulation_outcome}`,
+      upstream_delta: 0,
+      evidence_id: `SIM-${res.event.heraclitus_lsn || res.lsn || Date.now()}`
+    };
+    const k = rawEv.evidence_id || rawEv.lsn;
+    if (!hdbAllEvents.some(e => (e.evidence_id || e.lsn) === k)) {
+      hdbAllEvents.unshift(rawEv);
+      hdbAllEvents.sort((a, b) => (Number(b.lsn) || 0) - (Number(a.lsn) || 0));
+    }
+    renderIncidentCharts();
+    const summaryBadge = $('#heraclitusSummaryBadge');
+    if (summaryBadge) {
+      summaryBadge.textContent = `${fmtInt(hdbAllEvents.length)} eventos reais registrados no Ledger HRKL`;
+    }
+  }
+
+  if (massiveAttackCount % 5 === 0) loadRealHeraclitusTrail();
 }
 
 // Hint do canto inferior direito durante o massivo: mesmo conteúdo dos ataques
@@ -2677,21 +2719,20 @@ function renderIncidentCharts() {
   const total = attacks.length;
   const setText = (id, v) => { const el = $(id); if (el) el.textContent = v; };
   setText('#chartSourceLabel', demoEvents.length
-    ? `SIMULAÇÃO gravada no HeraclitusDB · meta ${demoProfile.DEFENDED}% / ${demoProfile.BLOCKED}% / ${demoProfile.TARGET_REACHED}% por componente · sem efeito real no alvo`
+    ? `SIMULAÇÃO gravada no HeraclitusDB · desfechos 100% randômicos · sem efeito real no alvo`
     : 'resultados observados no ledger HeraclitusDB');
   setText('#chartDecisionTitle', demoEvents.length ? 'Desfechos da simulação' : 'Decisões do gateway');
-  setText('#kpiInvadedLabel', demoEvents.length ? 'Chegou ao alvo (simulado)' : 'Invadiu (chegou ao alvo)');
+  setText('#kpiInvadedLabel', demoEvents.length ? 'Chegou ao alvo (simulado) :(' : 'Invadiu (chegou ao alvo) :(');
   setText('#kpiEvents', fmtInt(total));
-  // O servidor pede ao ledger no máximo hdbLedgerLimit entradas (/api/heraclitus-events)
-  setText('#kpiEventsSub', (hdbAllEvents || []).length >= hdbLedgerLimit
-    ? `nas ${fmtInt(hdbLedgerLimit)} entradas mais recentes do ledger${demoEvents.length ? ' · simulação' : ''}`
-    : demoEvents.length ? 'eventos simulados gravados no ledger' : 'todas as do ledger');
+  setText('#kpiEventsSub', demoEvents.length
+    ? `${fmtInt(total)} eventos auditados no ledger · tempo real e contínuo`
+    : 'todas as entradas observadas no ledger');
   setText('#kpiDefended', fmtInt(byDecision.DEFENDED));
-  setText('#kpiDefendedPct', total ? `${pctOf(byDecision.DEFENDED, total)} das tentativas` : '');
+  setText('#kpiDefendedPct', total ? `${pctOf(byDecision.DEFENDED, total)} das tentativas (randômico)` : '');
   setText('#kpiBlocked', fmtInt(byDecision.DENY));
-  setText('#kpiBlockedPct', total ? `${pctOf(byDecision.DENY, total)} das tentativas` : '');
+  setText('#kpiBlockedPct', total ? `${pctOf(byDecision.DENY, total)} das tentativas (randômico)` : '');
   setText('#kpiInvaded', fmtInt(byDecision.PASS));
-  setText('#kpiInvadedPct', total ? `${pctOf(byDecision.PASS, total)} das tentativas` : '');
+  setText('#kpiInvadedPct', total ? `${pctOf(byDecision.PASS, total)} das tentativas (randômico)` : '');
   setText('#kpiUpstream', fmtInt(upstream));
   const topEq = Object.values(counters).sort((a, b) => (b.attempts || 0) - (a.attempts || 0))[0];
   setText('#kpiTopEquip', topEq && topEq.attempts ? `${topEq.name} (${fmtInt(topEq.attempts)})` : '—');

@@ -146,7 +146,8 @@ body::before {
 }
 .tag-status.normal { background: var(--gov-green-bg); color: var(--gov-green); border: 1px solid #94d9a3; }
 .tag-status.critical { background: var(--gov-red-bg); color: var(--gov-red); border: 1px solid #f8a8b1; }
-.tag-status.wsl-status { background: #eaf1fb; color: var(--gov-blue-light); border: 1px solid #a8cbf7; }
+.tag-status.wsl-status,
+.tag-status.hdb-status { background: #eaf1fb; color: var(--gov-blue-light); border: 1px solid #a8cbf7; }
 
 /* Botões Oficiais */
 .top-actions {
@@ -827,6 +828,22 @@ body.panel-fullscreen-active {
   top: 0;
   border-bottom: 1px solid var(--gov-border);
   z-index: 10;
+}
+.simple-table th[title] {
+  cursor: help;
+}
+.simple-table th .th-help {
+  display: inline-block;
+  font-size: 10px;
+  color: var(--gov-blue-primary);
+  opacity: 0.65;
+  margin-left: 2px;
+  vertical-align: baseline;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.simple-table th[title]:hover .th-help {
+  opacity: 1;
+  transform: scale(1.15);
 }
 .simple-table td {
   padding: 9px 12px;

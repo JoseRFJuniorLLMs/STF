@@ -42,7 +42,7 @@
         demoCatalog = [...(stf.attacks || []), ...(hdb.attacks || [])];
         demoProfile = profile.weights || demoProfile;
       }
-      const ledger = await getJson('/api/heraclitus-events');
+      const ledger = await getJson('/api/heraclitus-events?limit=1000');
       if (ledger.status === 'PASS') {
         demoEvents = (ledger.data?.events || []).filter(event => event.campaign_id === 'STF-DEMO-SIMULATION');
       }
@@ -74,11 +74,11 @@
     const rows = [...byEquipment.values()].sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
     return `<section class="inc360-section">
       <div class="inc360-section-head"><div><span class="inc360-section-kicker">SIMULAÇÃO · HERACLITUSDB</span><h3>Ataques em todos os componentes</h3></div><span class="inc360-count">${total} tentativa(s)</span></div>
-      <p class="inc360-section-copy">Meta por componente: ${demoProfile.DEFENDED}% defendidos, ${demoProfile.BLOCKED}% bloqueados e ${demoProfile.TARGET_REACHED}% que chegaram ao alvo na simulação. Efeito real no alvo: zero. Execute “Simular rede” na aba Defesa cibernética.</p>
+      <p class="inc360-section-copy">Desfechos 100% randômicos gravados no HeraclitusDB. Efeito real no alvo: zero (isolamento sandbox). Execute “Simular rede” na aba Defesa cibernética.</p>
       <div class="inc360-kpis">
         <div><span>Defendidos</span><strong>${counts.DEFENDED}</strong><small>${pct(counts.DEFENDED)} · detectados e contidos</small></div>
         <div><span>Bloqueados</span><strong>${counts.BLOCKED}</strong><small>${pct(counts.BLOCKED)} · barrados na entrada</small></div>
-        <div><span>Chegaram ao alvo</span><strong>${counts.TARGET_REACHED}</strong><small>${pct(counts.TARGET_REACHED)} · somente simulação</small></div>
+        <div><span>Chegaram ao alvo</span><strong>${counts.TARGET_REACHED}</strong><small>${pct(counts.TARGET_REACHED)} · :( somente simulação</small></div>
       </div>
       <div class="table-wrap"><table class="simple-table"><thead><tr><th>Componente</th><th>Tent.</th><th>Def.</th><th>Bloq.</th><th>Alvo</th></tr></thead><tbody>
         ${rows.map(row => `<tr><td>${escapeHtml(row.name)}</td><td>${row.total}</td><td>${row.DEFENDED}</td><td>${row.BLOCKED}</td><td>${row.TARGET_REACHED}</td></tr>`).join('')}

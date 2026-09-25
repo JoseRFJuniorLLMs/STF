@@ -71,7 +71,7 @@
     const totalEventos = (snapshot?.events?.length || 0) + (processData?.eventos || 0);
     const headLsn = processData?.head_lsn || snapshot?.events?.at(-1)?.lsn || 1;
     const merkleRoot = snapshot?.merkle_root || 'b4c731e892d4710fae120194857321e0';
-    const isLive = snapshot?.heraclitus_connected ? 'CONECTADO (WSL 8080 / LOOPBACK)' : 'EMULADO / LOOPBACK SEGURO';
+    const isLive = snapshot?.heraclitus_connected ? 'CONECTADO (8080 / LOOPBACK)' : 'EMULADO / LOOPBACK SEGURO';
 
     root.innerHTML = `
       <section class="panel resil-panel">
