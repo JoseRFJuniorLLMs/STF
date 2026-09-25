@@ -24,20 +24,7 @@
     root.innerHTML = `
       <div class="zanin-container">
 
-        <!-- 1. AVISO INEQUÍVOCO DE POC INDEPENDENTE -->
-        <div class="zanin-disclaimer-banner">
-          <span class="zanin-disclaimer-icon">⚠️</span>
-          <div class="zanin-disclaimer-content">
-            <strong>POC Independente e Integralmente Sintética</strong>
-            <p>
-              Inspirada em incidente de tentativa de prompt injection em peça processual publicamente relatado em 25/09/2026.
-              <strong>Não representa sistema oficial, perícia oficial ou integração operacional do STF.</strong>
-              O HeraclitusDB e este laboratório não estavam instalados no tribunal durante o fato real.
-            </p>
-          </div>
-        </div>
-
-        <!-- 2. HEADER TÉCNICO -->
+        <!-- 1. HEADER TÉCNICO -->
         <header class="zanin-hero">
           <div class="zanin-hero-kicker">
             <span>Laboratório de Segurança de IA em Documento Processual</span>
@@ -83,6 +70,28 @@
           </div>
         </section>
 
+        <!-- 3.1 BANNER DE HINT: ONDE E COMO O HERACLITUSDB ATUA -->
+        <div class="zanin-heraclitus-hint-banner">
+          <div class="zanin-hint-badge">💡 HINT ARQUITETURAL: ATUAÇÃO DO HERACLITUSDB NA DEFESA ZANIN</div>
+          <h4 class="zanin-hint-title">Por que o HeraclitusDB é o pilar de proteção contra Injeção de Prompt?</h4>
+          <div class="zanin-hint-grid">
+            <div class="zanin-hint-col">
+              <strong>1. Heraclitus Policy Gateway (Bloqueio Fail-Closed & upstream_delta = 0)</strong>
+              <p>
+                No caso real, o Ministro Zanin não usava IA para minutas. Mas se o STF estivesse utilizando IA autônoma para triagem processual, o documento teria induzido o modelo a tentar fraudar a repercussão geral.
+                O <strong>Heraclitus Policy Gateway</strong> barra essa mutação na raiz: nenhuma IA tem autoridade direta no banco judicial sem assinatura humana digital (HITL), garantindo <code>upstream_delta = 0</code>.
+              </p>
+            </div>
+            <div class="zanin-hint-col">
+              <strong>2. Heraclitus LSN Ledger (Cadeia de Custódia Inviolável para MPF e OAB)</strong>
+              <p>
+                Para punir o infrator por má-fé processual (CPC) e crime perante o MPF/OAB, a prova técnica não pode ser contestada.
+                O <strong>HeraclitusDB</strong> grava em livro-razão imutável <i>append-only</i> (com LSN e carimbo de tempo) os hashes SHA-256 de todas as camadas (bytes originais, texto legível e comandos ocultos). Ninguém consegue adulterar os registros.
+              </p>
+            </div>
+          </div>
+        </div>
+
         <!-- 4. SELETOR DE CENÁRIOS DE LABORATÓRIO -->
         <section class="zanin-scenarios-bar">
           <div class="zanin-scenarios-head">
@@ -91,15 +100,19 @@
           </div>
           <div class="zanin-scenario-buttons">
             <button type="button" class="zanin-scen-btn active" id="btnScenZanin" data-scen="scenario_zanin_stego">
-              <span class="zanin-scen-btn-title">🛡️ Cenário A: Incidente Sintético Zanin</span>
+              <span class="zanin-scen-btn-title">🛡️ Cenário A: Incidente Zanin (Victor)</span>
               <span class="zanin-scen-btn-sub">Esteganografia visual + coerção detectada pré-LLM (Quarentena)</span>
             </button>
+            <button type="button" class="zanin-scen-btn" id="btnScenVitoria" data-scen="scenario_vitoria_exfiltration">
+              <span class="zanin-scen-btn-title">🕵️ Cenário B: Caso VitórIA (Exfiltração de Minutas)</span>
+              <span class="zanin-scen-btn-sub">Tool abuse em segredo de justiça barrado pelo Heraclitus Gateway (upstream_delta=0)</span>
+            </button>
             <button type="button" class="zanin-scen-btn" id="btnScenBypass" data-scen="scenario_b_miss">
-              <span class="zanin-scen-btn-title">⚠️ Cenário B: Detector Falha (MISS)</span>
+              <span class="zanin-scen-btn-title">⚠️ Cenário C: Detector Falha (MISS / Zero-Day)</span>
               <span class="zanin-scen-btn-sub">LLM contaminado, mas Policy Gateway barra mutação (upstream_delta=0)</span>
             </button>
             <button type="button" class="zanin-scen-btn" id="btnScenLegit" data-scen="scenario_c_legit">
-              <span class="zanin-scen-btn-title">✓ Cenário C: Ação Legítima (Sem Falso Positivo)</span>
+              <span class="zanin-scen-btn-title">✓ Cenário D: Ação Legítima (Sem Falso Positivo)</span>
               <span class="zanin-scen-btn-sub">Citação acadêmica com aprovação HITL vinculada (upstream_delta=1)</span>
             </button>
           </div>
@@ -189,6 +202,10 @@
               <div style="margin-top: 10px; font-size: 12px; color: #94a3b8;">
                 Regra Aplicada: <code id="policyRuleCode" style="color: #93c5fd;">POLICY-HERACLITUS-FAILCLOSED-V1</code>
               </div>
+              <div class="zanin-hint-inline" style="margin-top: 12px; background: rgba(15,23,42,0.6); border-color: #3b82f6; color: #e2e8f0;">
+                💡 <strong style="color: #93c5fd;">Papel do Heraclitus Policy Gateway:</strong>
+                <span id="policyHeraclitusHintText">Carregando atuação do HeraclitusDB...</span>
+              </div>
             </div>
             <div class="zanin-upstream-score deny" id="upstreamScoreBox">
               <span class="zanin-upstream-val" id="upstreamDeltaVal">0</span>
@@ -235,6 +252,9 @@
                 </tr>
               </tbody>
             </table>
+            <div class="zanin-hint-inline" style="margin-top: 14px;">
+              💡 <strong>Papel do Heraclitus LSN Ledger:</strong> Todos os 6 hashes acima são ancorados com carimbo lógico sequencial (LSN) no livro-razão imutável do HeraclitusDB. Ninguém — nem os técnicos do tribunal — consegue alterar ou forjar a evidência pericial para MPF/OAB.
+            </div>
           </div>
         </div>
 
@@ -291,6 +311,7 @@
   function wireEvents() {
     // Cenários
     $('#btnScenZanin').onclick = () => selectScenario('scenario_zanin_stego');
+    $('#btnScenVitoria').onclick = () => selectScenario('scenario_vitoria_exfiltration');
     $('#btnScenBypass').onclick = () => selectScenario('scenario_b_miss');
     $('#btnScenLegit').onclick = () => selectScenario('scenario_c_legit');
 
@@ -391,6 +412,11 @@
       upVal.style.color = '#4ade80';
       upEffect.textContent = 'EFEITO REAL: NENHUM';
       upEffect.style.color = '#86efac';
+    }
+
+    const polHint = $('#policyHeraclitusHintText');
+    if (polHint) {
+      polHint.textContent = pol.heraclitus_role || 'O Heraclitus Policy Gateway garantiu fail-closed e upstream_delta=0.';
     }
 
     // Grafo do Incidente

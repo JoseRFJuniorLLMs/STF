@@ -135,5 +135,30 @@ class ComprehensiveZaninDefenseTests(unittest.TestCase):
         self.assertEqual(cab["aviso_legal"], "NÃO EMITIDO PELO SUPREMO TRIBUNAL FEDERAL")
         self.assertEqual(report["enforcement_politica"]["upstream_delta"], 0)
 
+    def test_vitoria_data_exfiltration_blocked_with_zero_upstream(self):
+        """Cenário VitórIA: Tentativa de exfiltração de minutas sigilosas é barrada com upstream_delta=0."""
+        result = DefensePipelineSimulator.run_pipeline("scenario_vitoria_exfiltration")
+
+        # 1. Detector identifica esteganografia e tentativa de tool abuse / exfiltração
+        det = result["detection"]
+        self.assertEqual(det["verdict"], "QUARANTINED")
+        rules = [f["regra_disparada"] for f in det["findings"]]
+        self.assertIn("DOC-STEG-001", rules)
+        self.assertIn("DOC-TOOL-001", rules)
+
+        # 2. Policy Gateway barra com upstream_delta=0
+        pol = result["policy_decision"]
+        self.assertEqual(pol["decision"], "QUARANTINED_PRE_LLM")
+        self.assertEqual(pol["policy_rule"], "POLICY-HERACLITUS-SIGILO-V1")
+        self.assertEqual(pol["upstream_delta"], 0)
+        self.assertEqual(pol["real_effect"], "NENHUM (ACESSO A SEGREDO DE JUSTIÇA NEGADO)")
+        self.assertIn("Heraclitus", pol["heraclitus_role"])
+
+        # 3. Incident Graph contém os nós do Heraclitus
+        node_labels = [n["label"] for n in result["incident_graph"]["nodes"]]
+        self.assertIn("Heraclitus Policy Gateway", node_labels)
+        self.assertIn("Heraclitus LSN Ledger", node_labels)
+
 if __name__ == '__main__':
     unittest.main()
+
