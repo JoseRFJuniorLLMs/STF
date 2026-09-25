@@ -2215,6 +2215,10 @@ async function loadAndRenderStfAttacks() {
       const atks = grouped[cat] || [];
       container.innerHTML = atks.map(atk => {
         const riskClass = atk.risk === 'CRÍTICO' ? 'critical' : atk.risk === 'ELEVADO' ? 'warning' : 'normal';
+        const isAiOrForensic = atk.category === 'IA' || atk.id === 'IA_ZAN_05' || atk.id === 'IA_VIT_03' || atk.id === 'IA_VIC_01' || atk.forensic_case_id;
+        const forensicBtn = isAiOrForensic ? `
+          <button class="attack-btn secondary" style="background: #1e3a8a; color: #ffffff; border: 1px solid #3b82f6; font-size: 11px; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-weight: 700; white-space: nowrap;" onclick="event.stopPropagation(); window.goToDefesaZanin('${atk.id}')">🔬 Ver Perícia na Defesa Zanin ➔</button>
+        ` : '';
         return `
           <div class="attack-card stf-infra-card" id="stf-atk-${atk.id}"${attackCardAttrs(atk.target, `Alvo: ${atk.target} • Vetor: ${atk.vector}\n${atk.hypothesis || ''}`)}>
             <div class="attack-card-main">
@@ -2227,7 +2231,10 @@ async function loadAndRenderStfAttacks() {
               <div class="attack-target">Alvo: <code>${esc(atk.target)}</code> • Vetor: <strong>${esc(atk.vector)}</strong></div>
               <small class="hdb-hypo-text">${esc(atk.hypothesis)}</small>
             </div>
-            <button class="attack-btn" onclick="executeStfAttack('${atk.id}')">⚡ Disparar</button>
+            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+              <button class="attack-btn" onclick="executeStfAttack('${atk.id}')">⚡ Disparar</button>
+              ${forensicBtn}
+            </div>
           </div>
         `;
       }).join('');
@@ -2238,6 +2245,33 @@ async function loadAndRenderStfAttacks() {
     console.error('Erro ao carregar catálogo da infraestrutura STF:', err);
   }
 }
+
+// NAVEGAÇÃO DIRETA PARA A CÂMARA PERICIAL (DEFESA ZANIN)
+window.goToDefesaZanin = function(attackId) {
+  const caseMap = {
+    'IA_ZAN_05': 'vector_stego_coercion',
+    'IA_VIT_03': 'vector_tool_exfil',
+    'IA_VIC_01': 'vector_zeroday_bypass',
+    'IA_MAR_02': 'vector_zeroday_bypass',
+    'IA_RAF_04': 'vector_zeroday_bypass',
+    'H09': 'vector_zeroday_bypass'
+  };
+  const targetCase = caseMap[attackId] || 'vector_stego_coercion';
+
+  // Alterna para a view Zanin
+  if (typeof mostrarView === 'function') {
+    mostrarView('zanin');
+  } else {
+    const tabZ = document.getElementById('tabZanin');
+    if (tabZ) tabZ.click();
+  }
+
+  // Carrega o caso pericial específico
+  if (typeof window.loadDefesaZaninCase === 'function') {
+    window.loadDefesaZaninCase(targetCase, attackId);
+  }
+  toast(`Auditoria Forense: Inspecionando evidência do ataque ${attackId} na Câmara Defesa Zanin.`);
+};
 
 // EXECUÇÃO DE ATAQUE DA INFRAESTRUTURA INDIVIDUAL
 window.executeStfAttack = async function(attackId) {
@@ -2265,6 +2299,13 @@ window.executeStfAttack = async function(attackId) {
     showAttackHint(atk, ev, eqCounter);
     toast(`Ataque ${attackId} auditado no HeraclitusDB (LSN real ${res.lsn})`);
     loadRealHeraclitusTrail();
+
+    // Se for ataque de IA/Documental, avisa que está disponível na Defesa Zanin
+    if (atk && (atk.category === 'IA' || atk.id === 'IA_ZAN_05' || atk.id === 'IA_VIT_03')) {
+      setTimeout(() => {
+        toast(`🔍 Ataque ${attackId} registrado! Para ver a análise pericial completa, acesse a aba Defesa Zanin.`);
+      }, 1200);
+    }
   } catch (err) {
     toast('Falha ao disparar ataque: ' + err.message);
   } finally {
