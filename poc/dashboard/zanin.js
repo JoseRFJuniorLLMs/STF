@@ -1,6 +1,6 @@
 // ========================================================
-// DEFESA ZANIN — FRAUDE PROCESSUAL VIA IA & PROMPT INJECTION
-// Caso Real STF (25/09/2026) · Relatoria Min. Cristiano Zanin
+// DEFESA ZANIN — LABORATÓRIO FORENSE DE PROMPT INJECTION
+// POC INDEPENDENTE E SINTÉTICA (HeraclitusDB / STF)
 // ========================================================
 (() => {
   'use strict';
@@ -13,353 +13,575 @@
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[c]));
 
-  let caseData = null;
-  let inspectionData = null;
-  let certidaoData = null;
-  let forensicMode = false;
-  let loading = false;
+  let currentScenario = 'scenario_zanin_stego';
+  let currentMode = 'human'; // 'human', 'structural', 'forensic', 'sanitized'
+  let pipelineState = null;
+  let bundleState = null;
+  let verificationState = null;
+  let factsState = null;
 
   function renderSkeleton() {
     root.innerHTML = `
       <div class="zanin-container">
-        <!-- Hero Banner Caso Real -->
-        <header class="zanin-hero">
-          <div class="zanin-hero-kicker">
-            <span>⚖️ Supremo Tribunal Federal</span>
-            <span>•</span>
-            <span>Primeira Turma</span>
-            <span>•</span>
-            <span>Caso de Repercussão Nacional</span>
-          </div>
-          <h1 class="zanin-hero-title">Defesa Zanin — Fraude Processual via IA e Prompt Injection</h1>
-          <p class="zanin-hero-desc">
-            Em 25 de setembro de 2026, a Secretaria-Geral de Tecnologia do STF detectou a primeira tentativa inédita de fraude processual por <strong>Prompt Injection Esteganográfico</strong> em recurso relatado pelo <strong>Ministro Cristiano Zanin</strong>. A peça continha comandos ocultos em letras brancas e fonte microscópica para forçar a IA de gabinete a emitir minuta favorável. Esta aba demonstra o ataque, a blindagem pelo Gateway e a prova imutável gerada no HeraclitusDB Ledger para remessa ao MPF e à OAB.
-          </p>
 
-          <div class="zanin-meta-grid" id="zaninMetaGrid">
-            <div class="zanin-meta-item">
-              <span class="zanin-meta-label">Processo</span>
-              <span class="zanin-meta-val" id="metaProcesso">ARE-1488204-MG</span>
-            </div>
-            <div class="zanin-meta-item">
-              <span class="zanin-meta-label">Relator</span>
-              <span class="zanin-meta-val" id="metaRelator">Ministro Cristiano Zanin</span>
-            </div>
-            <div class="zanin-meta-item">
-              <span class="zanin-meta-label">Vetor de Ataque</span>
-              <span class="zanin-meta-val" id="metaVetor">Esteganografia & Injeção de Prompt</span>
-            </div>
-            <div class="zanin-meta-item">
-              <span class="zanin-meta-label">Gabinete / Alvo</span>
-              <span class="zanin-meta-val" id="metaAlvo">IA de Triagem e Sumarização (Victor)</span>
-            </div>
-          </div>
-        </header>
-
-        <!-- Área Principal de Comparação e Diagnóstico -->
-        <div class="zanin-workspace-grid">
-          <!-- Coluna Esquerda: Peça Processual Periciada -->
-          <div class="zanin-card">
-            <div class="zanin-card-head">
-              <h3 class="zanin-card-title">
-                <span>📄 Petição Periciada</span>
-                <span class="tag-status" id="badgeModo">Visão Convencional</span>
-              </h3>
-              <div class="zanin-view-toggle">
-                <button type="button" class="zanin-toggle-btn active" id="btnModoNormal">Normal (Humana)</button>
-                <button type="button" class="zanin-toggle-btn danger" id="btnModoForense">🔬 Revelar Oculto</button>
-              </div>
-            </div>
-
-            <!-- Viewport do Documento -->
-            <div class="zanin-doc-viewport" id="docViewport">
-              <div class="doc-visible-text" id="docVisibleText">Carregando petição...</div>
-              <div class="doc-hidden-payload" id="docHiddenPayload">
-                <div class="forensic-callout">⚠️ CAMADA ESTEGANOGRÁFICA OCULTA DETECTADA (LETRAS BRANCAS / 0.5pt):</div>
-                <span id="docInjectedText"></span>
-              </div>
-            </div>
-
-            <div class="zanin-card-actions">
-              <button type="button" class="btn small ghost" id="btnEditarPayload">✏️ Personalizar Prompt Injetado</button>
-              <button type="button" class="btn small primary" id="btnReplicarBloqueio">🛡️ Replicar Bloqueio no HeraclitusDB</button>
-            </div>
-          </div>
-
-          <!-- Coluna Direita: Análise do Gateway & Oráculo Criptográfico -->
-          <div class="zanin-card">
-            <div class="zanin-card-head">
-              <h3 class="zanin-card-title">
-                <span>🛡️ Diagnóstico do Gateway Anti-Fraude</span>
-              </h3>
-              <span class="tag-status normal" id="zaninGatewayBadge">ANALISANDO</span>
-            </div>
-
-            <div class="zanin-diag-body">
-              <!-- Score de Ameaça -->
-              <div class="zanin-score-box threat-high" id="scoreBox">
-                <div>
-                  <div class="zanin-score-label">Grau de Risco de Fraude Processual</div>
-                  <small style="color: #64748b;">Detecção esteganográfica + comandos de coerção</small>
-                </div>
-                <div class="zanin-score-value" id="threatScoreVal">95 / 100</div>
-              </div>
-
-              <!-- Triggers Detectados -->
-              <div>
-                <strong style="font-size: 13px; color: #0f172a; display: block; margin-bottom: 8px;">Evidências Técnicas Levantadas:</strong>
-                <div class="zanin-trigger-list" id="triggerList">
-                  <!-- Inserido dinamicamente -->
-                </div>
-              </div>
-
-              <!-- Prova Criptográfica Hashes -->
-              <div>
-                <strong style="font-size: 13px; color: #0f172a; display: block; margin-bottom: 8px;">Cadeia de Custódia e Hashes SHA-256:</strong>
-                <div class="zanin-crypto-proof" id="cryptoProof">
-                  <div class="zanin-crypto-row">
-                    <span class="zanin-crypto-label">SHA-256 (Documento Bruto):</span>
-                    <span id="hashDocBruto">Calculando...</span>
-                  </div>
-                  <div class="zanin-crypto-row">
-                    <span class="zanin-crypto-label">SHA-256 (Camada Invisível):</span>
-                    <span id="hashDocOculto">Calculando...</span>
-                  </div>
-                  <div class="zanin-crypto-row">
-                    <span class="zanin-crypto-label">SHA-256 (Petição Sanitizada):</span>
-                    <span id="hashDocSanitizado">Calculando...</span>
-                  </div>
-                  <div class="zanin-crypto-row">
-                    <span class="zanin-crypto-label">Efeito Upstream no Banco STF:</span>
-                    <span style="color: #4ade80;">0 (Bloqueio estrito — sem contaminação)</span>
-                  </div>
-                </div>
-              </div>
-            </div>
+        <!-- 1. AVISO INEQUÍVOCO DE POC INDEPENDENTE -->
+        <div class="zanin-disclaimer-banner">
+          <span class="zanin-disclaimer-icon">⚠️</span>
+          <div class="zanin-disclaimer-content">
+            <strong>POC Independente e Integralmente Sintética</strong>
+            <p>
+              Inspirada em incidente de tentativa de prompt injection em peça processual publicamente relatado em 25/09/2026.
+              <strong>Não representa sistema oficial, perícia oficial ou integração operacional do STF.</strong>
+              O HeraclitusDB e este laboratório não estavam instalados no tribunal durante o fato real.
+            </p>
           </div>
         </div>
 
-        <!-- Seção: Certidão Pericial Criptográfica (Para MPF e OAB) -->
-        <div class="zanin-certidao-card" id="certidaoCard">
-          <div class="zanin-certidao-header">
-            <div class="zanin-certidao-brasao">🏛️</div>
-            <div class="zanin-certidao-tribunal">SUPREMO TRIBUNAL FEDERAL</div>
-            <div class="zanin-certidao-sub">Secretaria-Geral de Tecnologia e Inovação • Gabinete do Ministro Cristiano Zanin</div>
-            <strong style="display:block; margin-top: 10px; font-size: 15px; color: #b91c1c;">
-              CERTIDÃO PERICIAL DE TENTATIVA DE FRAUDE PROCESSUAL VIA INTELIGÊNCIA ARTIFICIAL
-            </strong>
+        <!-- 2. HEADER TÉCNICO -->
+        <header class="zanin-hero">
+          <div class="zanin-hero-kicker">
+            <span>Laboratório de Segurança de IA em Documento Processual</span>
+            <span>•</span>
+            <span>Ambiente Forense Standalone</span>
+          </div>
+          <h1 class="zanin-hero-title">Defesa Zanin — Análise Forense & Duas Barreiras de Defesa</h1>
+          <p class="zanin-hero-desc">
+            Demonstração técnica de como documentos processuais adversariais contendo <em>Indirect Prompt Injection</em>
+            são periciados em múltiplas camadas. A demonstração comprova que, <strong>mesmo que a detecção de prompt falhe (MISS)</strong>,
+            o texto do documento não adquire autoridade operacional sobre os bancos protegidos, mantendo <strong>upstream_delta = 0</strong> via Policy Gateway.
+          </p>
+        </header>
+
+        <!-- 3. SEPARAÇÃO FORMAL: FATO REAL VS CENÁRIO SINTÉTICO -->
+        <section class="zanin-facts-grid">
+          <div class="zanin-facts-card public">
+            <h3 class="zanin-facts-title blue">
+              <span>📰 Incidente Publicamente Relatado</span>
+              <small style="font-size: 10px; font-weight: normal; color: #64748b;">(O Globo · 25/09/2026)</small>
+            </h3>
+            <ul class="zanin-facts-list" id="factsListPublic">
+              <li>Tentativa de prompt injection em peça processual protocolada no STF.</li>
+              <li>Comandos ocultos inseridos em duas páginas do documento.</li>
+              <li>Uso de letras brancas e tamanho reduzido, imperceptíveis na leitura convencional.</li>
+              <li>Fragmentação atípica de palavras para dificultar filtros de segurança.</li>
+              <li>Detecção pelo Núcleo de Inteligência Artificial da SGTI/STF.</li>
+              <li>Sem efeito prático: gabinete de relatoria não utiliza IA para fundamentar decisões judiciais.</li>
+            </ul>
           </div>
 
-          <div class="zanin-certidao-body">
-            <p>
-              Certifico, para os devidos fins de instrução processual e remessa aos órgãos de persecução e disciplinares, que o sistema de segurança cibernética do STF identificou e neutralizou tentativa deliberada de direcionamento indevido de sistemas automatizados de inteligência artificial da corte na peça processual cadastrada nos autos do <strong>ARE-1488204-MG</strong>.
-            </p>
-            <p id="certidaoConclusao">
-              A manobra consistiu na inserção de camada esteganográfica com comandos imperceptíveis a olho nu para usurpar a triagem e forçar juízo de admissibilidade e provimento indevido. A fraude foi ineficaz perante o magistrado relator e selada de forma imutável no HeraclitusDB Ledger.
-            </p>
+          <div class="zanin-facts-card synthetic">
+            <h3 class="zanin-facts-title purple">
+              <span>🔬 Cenário Sintético da POC</span>
+              <small style="font-size: 10px; font-weight: normal; color: #64748b;">(Laboratório Controlado)</small>
+            </h3>
+            <ul class="zanin-facts-list">
+              <li><strong>Dados Sintéticos:</strong> Identificadores como <code>ARE-SINTETICO-001</code> e números de OAB são fictícios.</li>
+              <li><strong>Payload Simulado:</strong> Comandos de teste criados em laboratório isolado loopback.</li>
+              <li><strong>Nenhuma Chamada Externa:</strong> Sem conexão com ChatGPT, Claude, Gemini ou sistemas reais do STF.</li>
+              <li><strong>Arquitetura HeraclitusDB:</strong> Prova de preservação de bytes, evidência forense e bloqueio no Policy Gateway.</li>
+            </ul>
+          </div>
+        </section>
 
-            <div class="zanin-certidao-destinos">
-              <strong style="color: #0f172a; display: block; margin-bottom: 6px;">Destinatários Oficiais Determinados pelo Ministro Relator:</strong>
-              <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #334155;">
-                <li><strong>Ministério Público Federal (MPF):</strong> Apuração de crime de fraude processual e atentado contra a administração da Justiça.</li>
-                <li><strong>Ordem dos Advogados do Brasil (OAB):</strong> Apuração ético-disciplinar por violação dos deveres de probidade e lealdade processual (arts. 77 e 81 do CPC).</li>
-              </ul>
-            </div>
+        <!-- 4. SELETOR DE CENÁRIOS DE LABORATÓRIO -->
+        <section class="zanin-scenarios-bar">
+          <div class="zanin-scenarios-head">
+            <span class="zanin-scenarios-title">Selecione o Cenário de Avaliação:</span>
+            <span class="tag-status" id="badgeScenarioStatus">Cenário Ativo</span>
+          </div>
+          <div class="zanin-scenario-buttons">
+            <button type="button" class="zanin-scen-btn active" id="btnScenZanin" data-scen="scenario_zanin_stego">
+              <span class="zanin-scen-btn-title">🛡️ Cenário A: Incidente Sintético Zanin</span>
+              <span class="zanin-scen-btn-sub">Esteganografia visual + coerção detectada pré-LLM (Quarentena)</span>
+            </button>
+            <button type="button" class="zanin-scen-btn" id="btnScenBypass" data-scen="scenario_b_miss">
+              <span class="zanin-scen-btn-title">⚠️ Cenário B: Detector Falha (MISS)</span>
+              <span class="zanin-scen-btn-sub">LLM contaminado, mas Policy Gateway barra mutação (upstream_delta=0)</span>
+            </button>
+            <button type="button" class="zanin-scen-btn" id="btnScenLegit" data-scen="scenario_c_legit">
+              <span class="zanin-scen-btn-title">✓ Cenário C: Ação Legítima (Sem Falso Positivo)</span>
+              <span class="zanin-scen-btn-sub">Citação acadêmica com aprovação HITL vinculada (upstream_delta=1)</span>
+            </button>
+          </div>
+        </section>
 
-            <div class="zanin-certidao-seal">
-              <div>
-                <span>ID da Certidão: <strong id="certidaoId">—</strong></span><br/>
-                <span>Registro Ledger HRKL: <strong id="certidaoLsn" style="color: #1d4ed8;">LSN —</strong></span>
-              </div>
-              <div style="text-align: right;">
-                <span>Hash Pericial: <code id="certidaoHash" style="font-size: 11px;">—</code></span><br/>
-                <span style="color: #16a34a; font-weight: 600;">✓ Integridade Criptográfica Selada no HeraclitusDB</span>
+        <!-- 5. PAINEL PRINCIPAL DO LABORATÓRIO FORENSE -->
+        <div class="zanin-card">
+          <div class="zanin-card-head">
+            <h3 class="zanin-card-title">
+              <span>📄 Documento sob Análise Pericial:</span>
+              <code id="docFilename" style="font-size: 13px; color: #1d4ed8;">documento.pdf</code>
+            </h3>
+
+            <!-- 4 Modos de Visualização -->
+            <div class="zanin-mode-tabs">
+              <button type="button" class="zanin-mode-btn active" id="btnModeHuman">Visão Humana</button>
+              <button type="button" class="zanin-mode-btn" id="btnModeStructural">Visão Estrutural</button>
+              <button type="button" class="zanin-mode-btn forensic" id="btnModeForensic">🔬 Visão Forense</button>
+              <button type="button" class="zanin-mode-btn sanitized" id="btnModeSanitized">✓ Sanitizado</button>
+            </div>
+          </div>
+
+          <!-- Viewport do Documento -->
+          <div class="zanin-doc-viewport mode-human" id="docViewport">
+            Carregando documento...
+          </div>
+
+          <!-- Forensic Diff: Antes vs Depois da Sanitização -->
+          <div class="zanin-diff-grid">
+            <div class="zanin-diff-col">
+              <span class="zanin-diff-label">Antes da Sanitização (Camada Extraída Bruta):</span>
+              <div class="zanin-diff-box" id="diffBefore">Carregando...</div>
+            </div>
+            <div class="zanin-diff-col">
+              <span class="zanin-diff-label">Depois da Sanitização (Cópia Segura para IA):</span>
+              <div class="zanin-diff-box" id="diffAfter" style="background: #f0fdf4;">Carregando...</div>
+            </div>
+          </div>
+
+          <!-- Badges de Preservação e Imutabilidade -->
+          <div class="zanin-integrity-badges">
+            <span class="zanin-integrity-pill ok">✓ Bytes Originais Preservados: SIM</span>
+            <span class="zanin-integrity-pill ok">✓ Documento Original Alterado: NÃO</span>
+            <span class="zanin-integrity-pill ok">✓ Cópia Sanitizada Isolada: SIM</span>
+            <span class="zanin-integrity-pill">SHA-256 Original: <code id="lblOriginalSha256" style="font-size: 11px;">—</code></span>
+          </div>
+
+          <!-- Findings Explicáveis -->
+          <div class="zanin-findings-container">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <strong style="font-size: 14px; text-transform: uppercase; color: #0f172a;">
+                Achados Forenses Explicáveis (<span id="findingsCount">0</span>):
+              </strong>
+              <button type="button" class="btn small primary" id="btnWhyBlocked">❓ Por que foi bloqueado?</button>
+            </div>
+            <div id="findingsList">Carregando achados...</div>
+          </div>
+        </div>
+
+        <!-- 6. DUAS BARREIRAS DE DEFESA & UPSTREAM_DELTA -->
+        <section class="zanin-pipeline-box">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <span class="section-kicker" style="font-size: 11px; font-weight: 700; color: #2563eb; text-transform: uppercase;">
+                Arquitetura de Defesa em Profundidade
+              </span>
+              <h3 style="margin: 3px 0 0 0; font-size: 16px; font-weight: 800; color: #0f172a;">
+                Fluxo de Execução: Barreira 1 (Scanner) ➔ Barreira 2 (Policy Gateway)
+              </h3>
+            </div>
+            <button type="button" class="btn small ghost" id="btnReexecutar">🔄 Reexecutar Pipeline</button>
+          </div>
+
+          <!-- Grafo do Incidente -->
+          <div class="zanin-nodes-flow" id="pipelineFlowGraph">
+            <!-- Renderizado dinamicamente -->
+          </div>
+
+          <!-- Card Gigante do Upstream Delta -->
+          <div class="zanin-upstream-hero">
+            <div class="zanin-upstream-desc">
+              <span class="zanin-upstream-title" id="policyTitleLabel">DECISÃO DO POLICY GATEWAY: DENY</span>
+              <p style="margin: 0; font-size: 13px; color: #cbd5e1; line-height: 1.5;" id="policyDescText">
+                O acesso aos sistemas protegidos foi bloqueado por ausência de autorização formal humana.
+                Nenhum comando malicioso contido em documento processual adquire autoridade operacional.
+              </p>
+              <div style="margin-top: 10px; font-size: 12px; color: #94a3b8;">
+                Regra Aplicada: <code id="policyRuleCode" style="color: #93c5fd;">POLICY-HERACLITUS-FAILCLOSED-V1</code>
               </div>
             </div>
+            <div class="zanin-upstream-score deny" id="upstreamScoreBox">
+              <span class="zanin-upstream-val" id="upstreamDeltaVal">0</span>
+              <span class="zanin-upstream-sub">upstream_delta</span>
+              <strong style="font-size: 11px; margin-top: 4px; color: #86efac;" id="upstreamRealEffectLabel">EFEITO REAL: NENHUM</strong>
+            </div>
+          </div>
+        </section>
+
+        <!-- 7. CADEIA DE CUSTÓDIA E HASHES MULTI-CAMADA -->
+        <div class="zanin-card">
+          <div class="zanin-card-head">
+            <h3 class="zanin-card-title">
+              <span>🔐 Cadeia de Custódia Digital & Hashes de Todas as Camadas</span>
+            </h3>
+            <span class="tag-status normal" id="ledgerStatusBadge">HARNESS LOCAL</span>
+          </div>
+          <div style="padding: 16px 20px;">
+            <table class="zanin-hashes-table">
+              <tbody>
+                <tr>
+                  <td class="zanin-hash-key">1. SHA-256 (Bytes Originais do Arquivo):</td>
+                  <td class="zanin-hash-val"><code id="hashOriginalBytes">—</code></td>
+                </tr>
+                <tr>
+                  <td class="zanin-hash-key">2. SHA-256 (Texto Renderizado - Visão Humana):</td>
+                  <td class="zanin-hash-val"><code id="hashRenderedText">—</code></td>
+                </tr>
+                <tr>
+                  <td class="zanin-hash-key">3. SHA-256 (Texto Bruto Estrutural Completo):</td>
+                  <td class="zanin-hash-val"><code id="hashRawExtracted">—</code></td>
+                </tr>
+                <tr>
+                  <td class="zanin-hash-key">4. SHA-256 (Camada Invisível / Oculta Isolada):</td>
+                  <td class="zanin-hash-val"><code id="hashHiddenContent">—</code></td>
+                </tr>
+                <tr>
+                  <td class="zanin-hash-key">5. SHA-256 (Texto Normalizado):</td>
+                  <td class="zanin-hash-val"><code id="hashNormalizedText">—</code></td>
+                </tr>
+                <tr>
+                  <td class="zanin-hash-key">6. SHA-256 (Cópia Sanitizada para IA):</td>
+                  <td class="zanin-hash-val"><code id="hashSanitizedText">—</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 8. RELATÓRIO TÉCNICO SINTÉTICO & OFFLINE VERIFIER -->
+        <div class="zanin-report-card">
+          <div class="zanin-report-header">
+            <span class="zanin-report-disclaimer-tag">ARTEFATO SINTÉTICO DE DEMONSTRAÇÃO · NÃO EMITIDO PELO STF</span>
+            <h2 class="zanin-report-title" style="margin-top: 8px;">RELATÓRIO TÉCNICO SINTÉTICO DA POC</h2>
+            <div style="font-size: 12px; color: #64748b; margin-top: 4px;">
+              Harness HeraclitusDB / STF • Módulo Forense de Injeção de Prompt • ID: <span id="lblReportId">—</span>
+            </div>
+          </div>
+
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <strong style="font-size: 13px; text-transform: uppercase; color: #0f172a;">
+              Verificação Offline do Evidence Bundle:
+            </strong>
+            <button type="button" class="btn small primary" id="btnVerifyBundle">⚡ Rodar Offline Verifier</button>
+          </div>
+
+          <table class="zanin-verifier-table">
+            <thead>
+              <tr>
+                <th>Item Verificado</th>
+                <th>Status</th>
+                <th>Detalhes Técnicos</th>
+              </tr>
+            </thead>
+            <tbody id="verifierTableBody">
+              <tr><td colspan="3" style="text-align: center; color: #64748b;">Clique em "Rodar Offline Verifier" para testar o bundle.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+
+      <!-- MODAL "POR QUE FOI BLOQUEADO?" -->
+      <div id="modalWhyBlocked" class="zanin-why-modal" style="display: none;">
+        <div class="zanin-why-content">
+          <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">
+            <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #0f172a;">❓ Por que foi bloqueado? (Análise Explicável)</h3>
+            <button type="button" class="btn tiny ghost" id="btnCloseWhyModal">✕ Fechar</button>
+          </div>
+          <div id="modalWhyBody" style="font-size: 13px; line-height: 1.6; color: #334155;">
+            Carregando justificativa técnica...
           </div>
         </div>
       </div>
     `;
 
-    // Conectar eventos
-    $('#btnModoNormal').onclick = () => setForensicMode(false);
-    $('#btnModoForense').onclick = () => setForensicMode(true);
-    $('#btnReplicarBloqueio').onclick = () => replicarBloqueio();
-    $('#btnEditarPayload').onclick = () => promptCustomPayload();
+    wireEvents();
   }
 
-  function setForensicMode(active) {
-    forensicMode = active;
-    const vp = $('#docViewport');
-    const bNormal = $('#btnModoNormal');
-    const bForense = $('#btnModoForense');
-    const badge = $('#badgeModo');
+  function wireEvents() {
+    // Cenários
+    $('#btnScenZanin').onclick = () => selectScenario('scenario_zanin_stego');
+    $('#btnScenBypass').onclick = () => selectScenario('scenario_b_miss');
+    $('#btnScenLegit').onclick = () => selectScenario('scenario_c_legit');
 
-    if (active) {
-      vp.classList.add('forensic-mode');
-      bNormal.classList.remove('active');
-      bForense.classList.add('active');
-      badge.textContent = 'Modo Forense (Oculto Revelado)';
-      badge.className = 'tag-status';
-      badge.style.background = '#dc2626';
-      badge.style.color = '#ffffff';
-    } else {
-      vp.classList.remove('forensic-mode');
-      bNormal.classList.add('active');
-      bForense.classList.remove('active');
-      badge.textContent = 'Visão Convencional (Humana)';
-      badge.className = 'tag-status normal';
-      badge.style.background = '';
-      badge.style.color = '';
-    }
+    // Modos de visualização
+    $('#btnModeHuman').onclick = () => setViewMode('human');
+    $('#btnModeStructural').onclick = () => setViewMode('structural');
+    $('#btnModeForensic').onclick = () => setViewMode('forensic');
+    $('#btnModeSanitized').onclick = () => setViewMode('sanitized');
+
+    // Botões de ação
+    $('#btnWhyBlocked').onclick = () => openWhyModal();
+    $('#btnCloseWhyModal').onclick = () => closeWhyModal();
+    $('#btnReexecutar').onclick = () => runPipelineCurrentScenario();
+    $('#btnVerifyBundle').onclick = () => runOfflineVerifier();
   }
 
-  async function loadCaseData() {
+  async function selectScenario(scenId) {
+    currentScenario = scenId;
+    document.querySelectorAll('.zanin-scen-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.scen === scenId);
+    });
+    await runPipelineCurrentScenario();
+  }
+
+  async function runPipelineCurrentScenario() {
     try {
-      const res = await api('/api/zanin/case');
-      caseData = res;
-      if (res.metadata) {
-        $('#metaProcesso').textContent = res.metadata.case_id;
-        $('#metaRelator').textContent = res.metadata.relator;
-        $('#metaVetor').textContent = res.metadata.tipo_fraude;
-        $('#metaAlvo').textContent = res.metadata.alvo;
-      }
-      $('#docVisibleText').textContent = res.visible_text;
-      $('#docInjectedText').textContent = res.injected_prompt;
-
-      // Realiza a inspeção automática inicial
-      await inspecionarPeca(res.visible_text, res.injected_prompt);
-    } catch (e) {
-      console.error('Erro ao carregar dados do Caso Zanin:', e);
-    }
-  }
-
-  async function inspecionarPeca(vis, hid) {
-    try {
-      const res = await api('/api/zanin/inspect', {
+      const res = await api('/api/zanin/run-pipeline', {
         method: 'POST',
-        body: JSON.stringify({
-          visible_text: vis,
-          hidden_payload: hid,
-          font_color: '#ffffff',
-          font_size_pt: 0.5
-        })
-      });
-      inspectionData = res;
-      renderDiagnostico(res);
-    } catch (e) {
-      console.error('Erro ao inspecionar:', e);
-    }
-  }
-
-  function renderDiagnostico(diag) {
-    const sBox = $('#scoreBox');
-    const sVal = $('#threatScoreVal');
-    const gBadge = $('#zaninGatewayBadge');
-    const tList = $('#triggerList');
-
-    sVal.textContent = `${diag.threat_score} / 100`;
-    if (diag.blocked) {
-      sBox.className = 'zanin-score-box threat-high';
-      gBadge.textContent = '🛡️ BLOQUEADO — FRAUDE DETECTADA';
-      gBadge.className = 'tag-status';
-      gBadge.style.background = '#dc2626';
-      gBadge.style.color = '#ffffff';
-    } else {
-      sBox.className = 'zanin-score-box threat-none';
-      gBadge.textContent = '✓ DOCUMENTO AUTÊNTICO';
-      gBadge.className = 'tag-status normal';
-      gBadge.style.background = '#16a34a';
-      gBadge.style.color = '#ffffff';
-    }
-
-    tList.innerHTML = (diag.detected_triggers || []).map(tr => `
-      <div class="zanin-trigger-item sev-critical">
-        <span class="zanin-trigger-type">🚨 ${esc(tr.type)}</span>
-        <span class="zanin-trigger-detail">${esc(tr.detail)}</span>
-      </div>
-    `).join('') || '<div class="zanin-trigger-item"><span>Nenhum gatilho de injeção detectado.</span></div>';
-
-    if (diag.evidence) {
-      $('#hashDocBruto').textContent = diag.evidence.sha256_full_document || '—';
-      $('#hashDocOculto').textContent = diag.evidence.sha256_hidden || '—';
-      $('#hashDocSanitizado').textContent = diag.evidence.sha256_sanitized || '—';
-    }
-
-    // Carregar certidão correspondente
-    loadCertidao(10550);
-  }
-
-  async function loadCertidao(lsn) {
-    try {
-      const cert = await api(`/api/zanin/certidao?lsn=${lsn}`);
-      certidaoData = cert;
-      $('#certidaoId').textContent = cert.certidao_id;
-      $('#certidaoLsn').textContent = `LSN ${cert.lsn_heraclitusdb}`;
-      $('#certidaoHash').textContent = cert.hash_certidao_pericial ? cert.hash_certidao_pericial.slice(0, 24) + '…' : '—';
-      if (cert.conclusao_tecnica) {
-        $('#certidaoConclusao').textContent = cert.conclusao_tecnica;
-      }
-    } catch (e) {
-      console.error('Erro ao carregar certidão:', e);
-    }
-  }
-
-  async function replicarBloqueio() {
-    const btn = $('#btnReplicarBloqueio');
-    btn.disabled = true;
-    btn.textContent = 'Gravando no Ledger HRKL...';
-    try {
-      const vis = caseData ? caseData.visible_text : '';
-      const hid = caseData ? caseData.injected_prompt : '';
-      const res = await api('/api/zanin/replicate-attack', {
-        method: 'POST',
-        body: JSON.stringify({
-          visible_text: vis,
-          hidden_payload: hid
-        })
+        body: JSON.stringify({ scenario_id: currentScenario })
       });
       if (res.status === 'PASS') {
-        renderDiagnostico(res.inspection);
-        if (res.certidao) {
-          $('#certidaoId').textContent = res.certidao.certidao_id;
-          $('#certidaoLsn').textContent = `LSN ${res.certidao.lsn_heraclitusdb}`;
-          $('#certidaoHash').textContent = res.certidao.hash_certidao_pericial ? res.certidao.hash_certidao_pericial.slice(0, 24) + '…' : '—';
-        }
-        if (typeof toast === 'function') {
-          toast(`🛡️ Fraude bloqueada e selada com sucesso no Ledger HRKL (LSN ${res.lsn})!`);
-        }
-        // Ativa automaticamente o modo forense para o usuário ver
-        setForensicMode(true);
+        pipelineState = res.pipeline;
+        bundleState = res.bundle;
+        renderPipelineUI(res.pipeline, res.ledger_status, res.lsn);
+        // Atualiza verificação offline
+        await runOfflineVerifier();
       }
-    } catch (e) {
-      console.error('Erro na replicação:', e);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = '🛡️ Replicar Bloqueio no HeraclitusDB';
+    } catch (err) {
+      console.error('Erro ao executar pipeline do laboratório Zanin:', err);
     }
   }
 
-  function promptCustomPayload() {
-    const atual = caseData ? caseData.injected_prompt : '';
-    const novo = prompt('Insira o comando malicioso/prompt injection que deseja testar na petição oculta:', atual);
-    if (novo !== null) {
-      if (caseData) caseData.injected_prompt = novo;
-      $('#docInjectedText').textContent = novo;
-      inspecionarPeca(caseData ? caseData.visible_text : '', novo);
+  function renderPipelineUI(pipe, ledgerStatus, lsn) {
+    const doc = pipe.document;
+    const det = pipe.detection;
+    const pol = pipe.policy_decision;
+    const san = pipe.sanitization;
+
+    // Metadados do documento
+    $('#docFilename').textContent = `${doc.metadata.original_filename} (${doc.metadata.document_id})`;
+    $('#lblOriginalSha256').textContent = doc.hashes.sha256_original_bytes.slice(0, 16) + '…';
+
+    // Hashes da tabela
+    $('#hashOriginalBytes').textContent = doc.hashes.sha256_original_bytes;
+    $('#hashRenderedText').textContent = doc.hashes.rendered_text_hash;
+    $('#hashRawExtracted').textContent = doc.hashes.raw_extracted_text_hash;
+    $('#hashHiddenContent').textContent = doc.hashes.hidden_content_hash;
+    $('#hashNormalizedText').textContent = doc.hashes.normalized_text_hash;
+    $('#hashSanitizedText').textContent = san.sanitized_text_hash;
+
+    // Diff
+    $('#diffBefore').textContent = doc.raw_extracted_text;
+    $('#diffAfter').textContent = san.sanitized_text || '(Documento inteiramente contido em quarentena)';
+
+    // Status do Ledger
+    const lBadge = $('#ledgerStatusBadge');
+    if (ledgerStatus === 'HERACLITUSDB_REAL_COMMITTED') {
+      lBadge.textContent = `HERACLITUSDB REAL (LSN ${lsn})`;
+      lBadge.className = 'tag-status normal';
+    } else {
+      lBadge.textContent = `HARNESS LOCAL SINTÉTICO (LSN ${lsn})`;
+      lBadge.className = 'tag-status';
+    }
+
+    // Upstream Hero Card
+    const polTitle = $('#policyTitleLabel');
+    const polDesc = $('#policyDescText');
+    const polRule = $('#policyRuleCode');
+    const upVal = $('#upstreamDeltaVal');
+    const upBox = $('#upstreamScoreBox');
+    const upEffect = $('#upstreamRealEffectLabel');
+
+    upVal.textContent = pol.upstream_delta;
+    polRule.textContent = pol.policy_rule;
+    polDesc.textContent = pol.explanation;
+
+    if (pol.decision === 'ALLOW') {
+      polTitle.textContent = 'DECISÃO DO POLICY GATEWAY: ALLOW';
+      polTitle.style.color = '#86efac';
+      upBox.className = 'zanin-upstream-score executed';
+      upVal.style.color = '#facc15';
+      upEffect.textContent = 'AÇÃO JUDICIAL EXECUTADA';
+      upEffect.style.color = '#facc15';
+    } else {
+      polTitle.textContent = `DECISÃO DO POLICY GATEWAY: ${pol.decision}`;
+      polTitle.style.color = '#93c5fd';
+      upBox.className = 'zanin-upstream-score deny';
+      upVal.style.color = '#4ade80';
+      upEffect.textContent = 'EFEITO REAL: NENHUM';
+      upEffect.style.color = '#86efac';
+    }
+
+    // Grafo do Incidente
+    renderFlowGraph(pipe.incident_graph.nodes);
+
+    // Findings
+    renderFindings(det.findings);
+
+    // Relatório ID
+    $('#lblReportId').textContent = `REP-ZANIN-${doc.hashes.sha256_original_bytes.slice(0, 10)}`;
+
+    // Atualiza viewport de acordo com o modo atual
+    renderViewport();
+  }
+
+  function renderFlowGraph(nodes) {
+    const host = $('#pipelineFlowGraph');
+    if (!host || !nodes) return;
+
+    host.innerHTML = nodes.map((node, i) => {
+      let cls = 'zanin-flow-node';
+      if (node.status === 'DENY' || node.status === 'QUARANTINED_PRE_LLM' || node.status === 'DETECTED') {
+        cls += ' active-deny';
+      } else if (node.status === 'ALLOW' || node.status === 'SANITIZED' || node.status === 'PASSTHROUGH') {
+        cls += ' active-pass';
+      } else {
+        cls += ' active-neutral';
+      }
+
+      const arrow = i < nodes.length - 1 ? '<span class="zanin-flow-arrow">➔</span>' : '';
+      return `
+        <div class="${cls}">
+          <span class="zanin-flow-node-title">${esc(node.label)}</span>
+          <span class="zanin-flow-node-status">${esc(node.status)}</span>
+        </div>
+        ${arrow}
+      `;
+    }).join('');
+  }
+
+  function renderFindings(findings) {
+    const host = $('#findingsList');
+    const cnt = $('#findingsCount');
+    cnt.textContent = findings.length;
+
+    if (!findings.length) {
+      host.innerHTML = `
+        <div class="zanin-finding-item" style="border-left: 4px solid #22c55e;">
+          <div class="zanin-finding-head">
+            <span class="zanin-finding-badge" style="background: #dcfce7; color: #166534;">NENHUM ACHADO ADVERSARIAL</span>
+            <span class="zanin-finding-rule">DOC-CLEAN-000</span>
+          </div>
+          <p class="zanin-finding-desc" style="margin: 0;">O documento não possui esteganografia, fontes microscópicas nem comandos imperativos de modelo.</p>
+        </div>
+      `;
+      return;
+    }
+
+    host.innerHTML = findings.map(f => `
+      <div class="zanin-finding-item sev-${esc(f.severidade)}">
+        <div class="zanin-finding-head">
+          <span class="zanin-finding-badge">${esc(f.categoria)} · ${esc(f.severidade)}</span>
+          <span class="zanin-finding-rule">${esc(f.regra_disparada)} (${esc(f.posicao)})</span>
+        </div>
+        <div class="zanin-finding-desc">${esc(f.explicacao)}</div>
+        <div class="zanin-finding-evidence">Evidência: ${esc(f.evidencia)}</div>
+      </div>
+    `).join('');
+  }
+
+  function setViewMode(mode) {
+    currentMode = mode;
+    document.querySelectorAll('.zanin-mode-btn').forEach(btn => btn.classList.remove('active'));
+    if (mode === 'human') $('#btnModeHuman').classList.add('active');
+    if (mode === 'structural') $('#btnModeStructural').classList.add('active');
+    if (mode === 'forensic') $('#btnModeForensic').classList.add('active');
+    if (mode === 'sanitized') $('#btnModeSanitized').classList.add('active');
+    renderViewport();
+  }
+
+  function renderViewport() {
+    const vp = $('#docViewport');
+    if (!vp || !pipelineState) return;
+    const doc = pipelineState.document;
+    const san = pipelineState.sanitization;
+
+    vp.className = `zanin-doc-viewport mode-${currentMode}`;
+
+    if (currentMode === 'human') {
+      // Visão Humana: apenas o que é legível a olho nu
+      vp.textContent = doc.rendered_text;
+    } else if (currentMode === 'structural') {
+      // Visão Estrutural: todo o texto bruto extraído com marcações de stream
+      vp.textContent = `[INÍCIO DO STREAM ESTRUTURAL PDF]\n${doc.raw_extracted_text}\n[FIM DO STREAM ESTRUTURAL]`;
+    } else if (currentMode === 'forensic') {
+      // Visão Forense: destaca em caixas vermelhas o conteúdo oculto e caracteres zero-width
+      const visible = esc(doc.rendered_text);
+      const hidden = esc(doc.hidden_content);
+      vp.innerHTML = `
+        <div>${visible}</div>
+        ${hidden ? `
+          <div class="forensic-hidden-box">
+            <span class="forensic-hidden-badge">CAMADA OCULTA / ESTEGANOGRÁFICA DETECTADA:</span><br/>
+            ${hidden}
+          </div>
+        ` : '<div style="color: #4ade80; margin-top: 10px;">✓ Nenhuma camada oculta ou invisível encontrada neste documento.</div>'}
+      `;
+    } else if (currentMode === 'sanitized') {
+      // Visão Sanitizada: cópia purgada autorizada para a IA
+      vp.textContent = san.sanitized_text || '(Documento inteiramente contido em quarentena pré-LLM)';
     }
   }
 
-  window.refreshDefesaZanin = function() {
+  function openWhyModal() {
+    if (!pipelineState) return;
+    const m = $('#modalWhyBlocked');
+    const body = $('#modalWhyBody');
+    const pol = pipelineState.policy_decision;
+    const det = pipelineState.detection;
+
+    body.innerHTML = `
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px;">
+          <strong style="color: #0f172a; display: block; margin-bottom: 4px;">1. Decisão de Enforcement:</strong>
+          <span>Veredito: <strong>${esc(pol.decision)}</strong></span><br/>
+          <span>Código do Motivo: <code>${esc(pol.reason_code)}</code></span><br/>
+          <span>Política Aplicada: <code>${esc(pol.policy_rule)}</code></span>
+        </div>
+
+        <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px;">
+          <strong style="color: #0f172a; display: block; margin-bottom: 4px;">2. Explicação da Barreira:</strong>
+          <p style="margin: 0;">${esc(pol.explanation)}</p>
+        </div>
+
+        <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px;">
+          <strong style="color: #0f172a; display: block; margin-bottom: 4px;">3. Princípio Arquitetural de Segurança:</strong>
+          <p style="margin: 0; color: #475569;">
+            Mesmo que uma injeção de prompt consiga enganar o detector ou o modelo de IA,
+            o texto do documento <strong>nunca adquire autoridade operacional</strong>. Qualquer mutação em processos
+            exige credenciais formais de autoridade e aprovação humana (HITL). Portanto, o efeito upstream é rigorosamente zero.
+          </p>
+        </div>
+      </div>
+    `;
+    m.style.display = 'flex';
+  }
+
+  function closeWhyModal() {
+    $('#modalWhyBlocked').style.display = 'none';
+  }
+
+  async function runOfflineVerifier() {
+    try {
+      const res = await api('/api/zanin/verify-bundle', {
+        method: 'POST',
+        body: JSON.stringify({ bundle: bundleState })
+      });
+      verificationState = res;
+      renderVerifierTable(res.checks);
+    } catch (err) {
+      console.error('Erro na verificação offline do bundle:', err);
+    }
+  }
+
+  function renderVerifierTable(checks) {
+    const tbody = $('#verifierTableBody');
+    if (!tbody || !checks) return;
+
+    tbody.innerHTML = checks.map(c => {
+      let tagClass = 'pass';
+      if (c.status === 'UNVERIFIED') tagClass = 'unverified';
+      if (c.status === 'FAIL') tagClass = 'fail';
+
+      return `
+        <tr>
+          <td><code>${esc(c.check)}</code></td>
+          <td><span class="zanin-status-tag ${tagClass}">${esc(c.status)}</span></td>
+          <td style="color: #334155; font-size: 12px;">${esc(c.detail)}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  window.refreshDefesaZanin = async function() {
     if (!root.innerHTML || root.innerHTML.trim() === '') {
       renderSkeleton();
-      loadCaseData();
-    } else {
-      loadCaseData();
     }
+    await runPipelineCurrentScenario();
   };
 
-  // Render inicial caso seja aberto diretamente
+  // Render inicial
   renderSkeleton();
-  loadCaseData();
+  runPipelineCurrentScenario();
 })();

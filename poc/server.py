@@ -36,11 +36,14 @@ from heraclitus_adapter import HeraclitusAdapter
 from heraclitus_core import CoreUnavailable, HeraclitusCore
 from processos import ProcessLedger
 from zanin_defense import (
-    CASE_ZANIN_METADATA,
-    CASE_ZANIN_VISIBLE_TEXT,
-    CASE_ZANIN_INJECTED_PROMPT,
-    PromptInjectionSanitizer,
-    generate_certidao_pericial
+    PUBLIC_INCIDENT_FACTS,
+    SYNTHETIC_SCENARIOS,
+    DocumentParser,
+    ForensicDetector,
+    DocumentSanitizer,
+    DefensePipelineSimulator,
+    EvidenceBundleManager,
+    TechnicalReportGenerator
 )
 
 ROOT = Path(__file__).resolve().parent
@@ -2261,18 +2264,27 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"attacks": STF_TARGET_ATTACKS})
         if path=="/api/demo-profile":
             return self._json({"campaign_id": DEMO_CAMPAIGN_ID, "weights": demo_weights(), "mode": "random"})
+        if path=="/api/zanin/facts":
+            return self._json(PUBLIC_INCIDENT_FACTS)
+        if path=="/api/zanin/scenarios":
+            return self._json({"scenarios": [
+                {"id": k, "name": v["name"], "document_id": v["document_id"], "filename": v["original_filename"]}
+                for k, v in SYNTHETIC_SCENARIOS.items()
+            ]})
         if path=="/api/zanin/case":
-            return self._json({
-                "metadata": CASE_ZANIN_METADATA,
-                "visible_text": CASE_ZANIN_VISIBLE_TEXT,
-                "injected_prompt": CASE_ZANIN_INJECTED_PROMPT
-            })
-        if path=="/api/zanin/certidao":
-            try: lsn_val = int(query.get("lsn", ["10550"])[0])
-            except (ValueError, TypeError): lsn_val = 10550
-            inspection = PromptInjectionSanitizer.inspect(CASE_ZANIN_VISIBLE_TEXT, CASE_ZANIN_INJECTED_PROMPT)
-            cert = generate_certidao_pericial(CASE_ZANIN_METADATA["case_id"], inspection, lsn=lsn_val)
-            return self._json(cert)
+            scen_key = query.get("scenario", ["scenario_zanin_stego"])[0]
+            pipe = DefensePipelineSimulator.run_pipeline(scen_key)
+            return self._json(pipe)
+        if path=="/api/zanin/bundle":
+            scen_key = query.get("scenario", ["scenario_zanin_stego"])[0]
+            pipe = DefensePipelineSimulator.run_pipeline(scen_key)
+            bundle = EvidenceBundleManager.build_bundle(pipe)
+            return self._json(bundle)
+        if path in ("/api/zanin/report", "/api/zanin/certidao"):
+            scen_key = query.get("scenario", ["scenario_zanin_stego"])[0]
+            pipe = DefensePipelineSimulator.run_pipeline(scen_key)
+            report = TechnicalReportGenerator.generate(pipe)
+            return self._json(report)
         if path in ("/api/heraclitus-events", "/api/trail"):
             base=getattr(ENGINE, "heraclitus_url", None) or os.environ.get("HERACLITUS_URL", "http://127.0.0.1:8080")
             try:
@@ -2417,60 +2429,84 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError,KeyError,TypeError) as e:
                 return self._json({"error":"invalid_approval","detail":str(e)},400)
         if path=="/api/reset": ENGINE.reset(); return self._json(ENGINE.snapshot("Ambiente reiniciado"))
-        if path=="/api/zanin/inspect":
+        if path=="/api/zanin/run-pipeline":
             try:
                 body = self._read_json_body() if self.headers.get("content-length") else {}
-                vis = body.get("visible_text") or CASE_ZANIN_VISIBLE_TEXT
-                hid = body.get("hidden_payload") if "hidden_payload" in body else CASE_ZANIN_INJECTED_PROMPT
-                color = body.get("font_color") or "#ffffff"
-                size = float(body.get("font_size_pt") or 0.5)
-                res = PromptInjectionSanitizer.inspect(vis, hid, color, size)
-                return self._json(res, 200)
-            except Exception as e:
-                return self._json({"error": "inspect_failed", "detail": str(e)}, 400)
-        if path=="/api/zanin/replicate-attack":
-            try:
-                body = self._read_json_body() if self.headers.get("content-length") else {}
-                vis = body.get("visible_text") or CASE_ZANIN_VISIBLE_TEXT
-                hid = body.get("hidden_payload") if "hidden_payload" in body else CASE_ZANIN_INJECTED_PROMPT
-                color = body.get("font_color") or "#ffffff"
-                size = float(body.get("font_size_pt") or 0.5)
-                inspection = PromptInjectionSanitizer.inspect(vis, hid, color, size)
+                scen_id = body.get("scenario_id") or "scenario_zanin_stego"
+                custom_text = body.get("custom_text")
+                pipe = DefensePipelineSimulator.run_pipeline(scen_id, custom_text=custom_text)
+
                 base = getattr(ENGINE, "heraclitus_url", None) or os.environ.get("HERACLITUS_URL", "http://127.0.0.1:8080")
                 event_lsn = 10550
+                ledger_status = "LOCAL_HARNESS_SYNTHETIC"
                 try:
                     from heraclitus_adapter import HeraclitusAdapter
                     adapter = HeraclitusAdapter(base)
                     payload = {
-                        "campaign_id": "STF-ZANIN-DEFENSE",
-                        "type": "audit.prompt_injection_blocked",
-                        "asset": "asset:stf-victor-ai",
-                        "summary": "Detecção de tentativa de fraude via Prompt Injection oculto (Caso Min. Cristiano Zanin)",
+                        "campaign_id": "STF-ZANIN-LAB",
+                        "type": "audit.document_prompt_injection_evaluated",
+                        "asset": "asset:stf-ai-pipeline",
+                        "summary": f"Laboratório Zanin: execução do {scen_id} (decisão: {pipe['policy_decision']['decision']})",
                         "details": {
-                            "case_id": CASE_ZANIN_METADATA["case_id"],
-                            "relator": CASE_ZANIN_METADATA["relator"],
-                            "threat_score": inspection["threat_score"],
-                            "detected_triggers": inspection["detected_triggers"],
-                            "evidence": inspection["evidence"],
-                            "sanitized": True
+                            "document_id": pipe["document"]["metadata"]["document_id"],
+                            "findings_count": len(pipe["detection"]["findings"]),
+                            "llm_exposed": pipe["llm"]["exposed"],
+                            "policy_decision": pipe["policy_decision"]["decision"]
                         },
-                        "upstream_delta": 0,
-                        "reason_code": inspection["reason_code"]
+                        "upstream_delta": pipe["policy_decision"]["upstream_delta"],
+                        "reason_code": pipe["policy_decision"]["reason_code"]
                     }
                     resp = adapter.post("/api/v1/agent/ingest", payload)
                     if isinstance(resp, dict) and resp.get("lsn"):
                         event_lsn = int(resp["lsn"])
+                        ledger_status = "HERACLITUSDB_REAL_COMMITTED"
                 except Exception:
                     event_lsn = int(time.time() % 100000 + 10550)
-                certidao = generate_certidao_pericial(CASE_ZANIN_METADATA["case_id"], inspection, lsn=event_lsn)
+                    ledger_status = "LOCAL_HARNESS_SYNTHETIC"
+
+                bundle = EvidenceBundleManager.build_bundle(pipe)
+                report = TechnicalReportGenerator.generate(pipe)
                 return self._json({
                     "status": "PASS",
                     "lsn": event_lsn,
-                    "inspection": inspection,
-                    "certidao": certidao
+                    "ledger_status": ledger_status,
+                    "pipeline": pipe,
+                    "bundle": bundle,
+                    "report": report
                 }, 200)
             except Exception as e:
-                return self._json({"error": "replicate_failed", "detail": str(e)}, 400)
+                return self._json({"error": "pipeline_failed", "detail": str(e)}, 400)
+
+        if path=="/api/zanin/verify-bundle":
+            try:
+                body = self._read_json_body() if self.headers.get("content-length") else {}
+                bundle = body.get("bundle")
+                if not bundle:
+                    pipe = DefensePipelineSimulator.run_pipeline("scenario_zanin_stego")
+                    bundle = EvidenceBundleManager.build_bundle(pipe)
+                verification = EvidenceBundleManager.verify_bundle(bundle)
+                return self._json(verification, 200)
+            except Exception as e:
+                return self._json({"error": "verification_failed", "detail": str(e)}, 400)
+
+        if path in ("/api/zanin/inspect", "/api/zanin/replicate-attack"):
+            try:
+                body = self._read_json_body() if self.headers.get("content-length") else {}
+                scen_id = body.get("scenario_id") or "scenario_zanin_stego"
+                pipe = DefensePipelineSimulator.run_pipeline(scen_id)
+                bundle = EvidenceBundleManager.build_bundle(pipe)
+                report = TechnicalReportGenerator.generate(pipe)
+                return self._json({
+                    "status": "PASS",
+                    "lsn": 10550,
+                    "pipeline": pipe,
+                    "inspection": pipe["detection"],
+                    "certidao": report,
+                    "report": report,
+                    "bundle": bundle
+                }, 200)
+            except Exception as e:
+                return self._json({"error": "inspect_failed", "detail": str(e)}, 400)
         if path=="/api/step": return self._json(ENGINE.step())
         if path=="/api/run": return self._json(ENGINE.run_all())
         if path=="/api/tamper-demo":

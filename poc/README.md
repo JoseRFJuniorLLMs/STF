@@ -76,6 +76,18 @@ O `grpcio` é opcional: sem ele, a aba mostra o HeraclitusDB como indisponível 
 
 Endpoints: `GET /api/processos[?as_of=LSN]`, `GET /api/processos/detalhe?id=RE-000001[&as_of=LSN]`, `POST /api/processos/protocolar`, `POST /api/processos/tramitar` (`{"id": "..."}` opcional).
 
+## Defesa Zanin — Laboratório de Prompt Injection
+
+A aba **Defesa Zanin** demonstra a perícia estrutural de documentos contra *Indirect Prompt Injection*, inspirada no incidente relatado em 25/09/2026. A demonstração é **integralmente sintética e independente**.
+
+Capacidades demonstradas:
+- **Preservação de bytes originais:** o arquivo nunca é sobrescrito durante a perícia;
+- **4 Modos de Exibição:** Humano, Estrutural, Forense (destaque de esteganografia visual e zero-width) e Sanitizado;
+- **Forensic Diff:** comparação explícita de conteúdo antes e após a sanitização;
+- **Defesa em Duas Barreiras:** mesmo que o detector falhe (MISS programado no Cenário B), o **Policy Gateway** impede que instruções documentais adquiram autoridade operacional (`upstream_delta = 0`);
+- **Evidence Bundle & Offline Verifier:** manifesto forense com verificação estrita de integridade e checagens externas marcadas como `UNVERIFIED`.
+
+Consulte [ZANIN-PROMPT-INJECTION-LAB.md](../docs/ZANIN-PROMPT-INJECTION-LAB.md) para a documentação técnica completa.
 
 ## Dashboard atual
 
