@@ -43,7 +43,7 @@ def extract_incident_ids(value):
     return out
 
 class HeraclitusAdapter:
-    def __init__(self,base_url:str="http://127.0.0.1:8080",timeout:float=1.5):
+    def __init__(self,base_url:str="http://127.0.0.1:8080",timeout:float=4.0):
         self.base_url=base_url.rstrip('/')
         self.timeout=timeout
         self._offline_until=0.0

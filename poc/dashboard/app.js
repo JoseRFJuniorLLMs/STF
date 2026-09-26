@@ -1500,14 +1500,18 @@ let hdbTotalRealEvents = 0;
 let hdbLatestLsn = 0;
 let demoProfile = { DEFENDED: 33, BLOCKED: 33, TARGET_REACHED: 34 };
 
-async function loadRealHeraclitusTrail() {
+let hdbTrailLoading = false;
+
+async function loadRealHeraclitusTrail(forceLimit = 100) {
+  if (hdbTrailLoading) return;
   const badge = $('#integrationBadge');
   const summaryBadge = $('#heraclitusSummaryBadge');
   const rows = $('#heraclitusEventRows');
   if (!rows) return;
 
+  hdbTrailLoading = true;
   try {
-    const res = await api('/api/heraclitus-events?limit=1000');
+    const res = await api(`/api/heraclitus-events?limit=${forceLimit}`);
     const data = res.data || {};
     const events = data.events || [];
     if (res.limit) hdbLedgerLimit = res.limit;
@@ -1565,6 +1569,8 @@ async function loadRealHeraclitusTrail() {
     }
     rows.innerHTML = `<tr><td colspan="9" class="empty">Erro ao conectar ao HeraclitusDB: ${esc(err.message)}</td></tr>`;
     updateHdbPaginationControls(0, 0, 0);
+  } finally {
+    hdbTrailLoading = false;
   }
 }
 
@@ -3240,12 +3246,13 @@ async function init() {
   loadAndRenderHdbAttacks();
   // Atualização contínua leve da trilha real do HeraclitusDB e do grafo/estado
   setInterval(async () => {
+    if (document.hidden) return;
     loadRealHeraclitusTrail();
     try {
       const s = await api('/api/state');
       render(s);
     } catch (_) {}
-  }, 3000);
+  }, 4000);
 }
 
 init();
