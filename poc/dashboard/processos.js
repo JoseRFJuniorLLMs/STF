@@ -921,6 +921,7 @@ function setupProcessos() {
     const tt = $('#scrubberTooltip');
     if (tt) tt.classList.remove('show');
   }, true);
+  }
   const viewProc = $('#viewProcessos');
   const tt = $('#chartTooltip');
   if (viewProc && tt) {

@@ -585,21 +585,22 @@
     if (!pipelineState) return;
     const m = $('#modalWhyBlocked');
     const body = $('#modalWhyBody');
-    const pol = pipelineState.policy_decision;
-    const det = pipelineState.detection;
+    if (!m || !body) return;
+    const pol = pipelineState.policy_decision || {};
+    const det = pipelineState.detection || {};
 
     body.innerHTML = `
       <div style="display: flex; flex-direction: column; gap: 10px;">
         <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px;">
           <strong style="color: #0f172a; display: block; margin-bottom: 4px;">1. Decisão de Enforcement:</strong>
-          <span>Veredito: <strong>${esc(pol.decision)}</strong></span><br/>
-          <span>Código do Motivo: <code>${esc(pol.reason_code)}</code></span><br/>
-          <span>Política Aplicada: <code>${esc(pol.policy_rule)}</code></span>
+          <span>Veredito: <strong>${esc(pol.decision || 'N/A')}</strong></span><br/>
+          <span>Código do Motivo: <code>${esc(pol.reason_code || 'N/A')}</code></span><br/>
+          <span>Política Aplicada: <code>${esc(pol.policy_rule || 'N/A')}</code></span>
         </div>
 
         <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px;">
           <strong style="color: #0f172a; display: block; margin-bottom: 4px;">2. Explicação da Barreira:</strong>
-          <p style="margin: 0;">${esc(pol.explanation)}</p>
+          <p style="margin: 0;">${esc(pol.explanation || 'N/A')}</p>
         </div>
 
         <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px;">
@@ -616,7 +617,8 @@
   }
 
   function closeWhyModal() {
-    $('#modalWhyBlocked').style.display = 'none';
+    const m = $('#modalWhyBlocked');
+    if (m) m.style.display = 'none';
   }
 
   async function runOfflineVerifier() {
