@@ -1426,7 +1426,7 @@ class PocEngine:
             try:
                 recorded = self.adapter.record_red_team_event(payload)
             except Exception as exc:
-                logger.warning(f"HeraclitusDB record_red_team_event falhou na simulação ({exc}); usando fallback local resiliente")
+                sys.stderr.write(f"[SIMULATE] HeraclitusDB record_red_team_event exception: {exc}\n")
                 recorded = {"accepted": True, "lsn": (self.latest_lsn or len(self.events)) + 1, "evidence_id": f"SIM-{uuid.uuid4().hex[:12].upper()}"}
 
             if not recorded.get("accepted"):
