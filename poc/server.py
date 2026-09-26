@@ -59,7 +59,7 @@ DEMO_OUTCOMES = ("DEFENDED", "BLOCKED", "TARGET_REACHED")
 
 def demo_weights() -> dict[str, int]:
     """Distribuição para os eventos sintéticos da apresentação (randômico)."""
-    return {k: 33 for k in DEMO_OUTCOMES}
+    return dict.fromkeys(DEMO_OUTCOMES, 33)
 LOCAL_HOSTS={"127.0.0.1","localhost","::1"}
 
 EQUIPMENT_DEFINITIONS = [
@@ -2402,6 +2402,13 @@ class Handler(BaseHTTPRequestHandler):
             return False
         return self.headers.get("X-STF-POC")=="1"
     def do_GET(self)->None:
+        try:
+            self._handle_get()
+        except Exception as e:
+            sys.stderr.write(f"[HTTP GET ERROR] {self.path}: {e}\n")
+            return self._json({"error": "internal_server_error", "detail": str(e)}, 500)
+
+    def _handle_get(self)->None:
         parsed=urlparse(self.path)
         path=parsed.path
         query=parse_qs(parsed.query)
@@ -2567,6 +2574,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(ENGINE.interop_remessas(PROCESSOS))
         return self._static(path)
     def do_POST(self)->None:
+        try:
+            self._handle_post()
+        except Exception as e:
+            sys.stderr.write(f"[HTTP POST ERROR] {self.path}: {e}\n")
+            return self._json({"error": "internal_server_error", "detail": str(e)}, 500)
+
+    def _handle_post(self)->None:
         if not self._mutation_allowed():
             return self._json({"error":"forbidden_mutation","detail":"local origin and X-STF-POC header required"},403)
         parsed=urlparse(self.path)

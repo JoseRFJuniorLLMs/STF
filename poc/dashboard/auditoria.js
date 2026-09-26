@@ -342,7 +342,8 @@
     }
     const passos = getAuditSteps(all);
     const lsns = all.map(e => Number(e.lsn));
-    const historico = asOfLsn !== null && asOfLsn < totalSteps;
+    const latestLsn = lsns.length ? lsns[lsns.length - 1] : 0;
+    const historico = asOfLsn !== null && asOfLsn !== latestLsn;
     const idxAtual = historico
       ? Math.max(0, all.findIndex(e => Number(e.lsn) === asOfLsn))
       : totalSteps - 1;
@@ -442,13 +443,15 @@
     mount.addEventListener('click', e => {
       if (e.target.closest('#auditAsOfNow')) {
         asOfLsn = null;
-        loadReplay(events().length);
+        loadReplay(null);
         return;
       }
       if (e.target.closest('#auditStepPrev')) {
         const all = events();
         if (!all.length) return;
-        const historico = asOfLsn !== null && asOfLsn < all.length;
+        const lsns = all.map(e => Number(e.lsn));
+        const latestLsn = lsns.length ? lsns[lsns.length - 1] : 0;
+        const historico = asOfLsn !== null && asOfLsn !== latestLsn;
         const curIdx = historico ? Math.max(0, all.findIndex(ev => Number(ev.lsn) === asOfLsn)) : all.length - 1;
         if (curIdx > 0) {
           const prevLsn = Number(all[curIdx - 1].lsn);
@@ -459,7 +462,9 @@
       if (e.target.closest('#auditStepNext')) {
         const all = events();
         if (!all.length) return;
-        const historico = asOfLsn !== null && asOfLsn < all.length;
+        const lsns = all.map(e => Number(e.lsn));
+        const latestLsn = lsns.length ? lsns[lsns.length - 1] : 0;
+        const historico = asOfLsn !== null && asOfLsn !== latestLsn;
         const curIdx = historico ? Math.max(0, all.findIndex(ev => Number(ev.lsn) === asOfLsn)) : all.length - 1;
         if (curIdx < all.length - 1) {
           const nextLsn = Number(all[curIdx + 1].lsn);
@@ -574,17 +579,18 @@
   async function loadReplay(lsn) {
     if (!snapshot) return;
     const all = events();
-    const maximum = all.length;
-    if (lsn === null || lsn === undefined || Number(lsn) >= maximum) {
+    const lsns = all.map(e => Number(e.lsn));
+    const latestLsn = lsns.length ? lsns[lsns.length - 1] : 0;
+    if (lsn === null || lsn === undefined || Number(lsn) >= latestLsn) {
       asOfLsn = null;
     } else {
-      asOfLsn = Math.max(0, Math.min(maximum, Number(lsn) || 0));
+      asOfLsn = Number(lsn);
     }
     renderAuditTimeline();
     $('[data-audit-replay]').innerHTML = '<p class="audit-empty">Reconstituindo estado…</p>';
     const request = ++replayRequest;
     try {
-      const queryLsn = asOfLsn === null ? maximum : asOfLsn;
+      const queryLsn = asOfLsn === null ? (latestLsn || all.length) : asOfLsn;
       const result = await readJson(`/api/asof?lsn=${queryLsn}`);
       if (request !== replayRequest) return;
       renderReplay(result);
@@ -637,7 +643,7 @@
       if (action.dataset.auditAction === 'refresh') refresh();
       else if (action.dataset.auditAction === 'latest') {
         asOfLsn = null;
-        loadReplay(events().length);
+        loadReplay(null);
       }
       else if (action.dataset.auditAction === 'event-asof') loadReplay(Number(action.dataset.auditLsn));
     });

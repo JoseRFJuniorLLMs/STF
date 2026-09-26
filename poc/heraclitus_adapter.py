@@ -65,7 +65,8 @@ class HeraclitusAdapter:
                 raw=r.read(MAX_RESPONSE_BYTES+1)
                 if len(raw)>MAX_RESPONSE_BYTES:
                     raise ValueError("Heraclitus response exceeds safety limit")
-                return json.loads(raw.decode())
+                body = raw.decode("utf-8")
+                return json.loads(body) if body else {}
         except Exception:
             self._offline_until = time.time() + 10.0
             raise

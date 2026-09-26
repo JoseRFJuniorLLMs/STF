@@ -73,6 +73,18 @@ class TextSpan:
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
+    @classmethod
+    def from_dict(cls, d: Any) -> TextSpan:
+        if isinstance(d, cls):
+            return d
+        if not isinstance(d, dict):
+            return cls(text=str(d) if d is not None else "")
+        valid_keys = {"text", "page", "font_size_pt", "font_color_hex", "bg_color_hex", "is_visible_to_human", "is_zero_width", "is_homoglyph", "is_fragmented", "bbox"}
+        filtered = {k: v for k, v in d.items() if k in valid_keys}
+        if "text" not in filtered:
+            filtered["text"] = ""
+        return cls(**filtered)
+
 
 @dataclass
 class Finding:
@@ -505,7 +517,7 @@ class ForensicDetector:
                 "explanation": "Simulação de bypass do detector (MISS programado para teste da Barreira 2: Policy Gateway)."
             }
 
-        spans = [TextSpan(**s) for s in doc_result.get("spans", [])]
+        spans = [TextSpan.from_dict(s) for s in doc_result.get("spans", [])]
         findings: List[Finding] = []
         finding_seq = 1
 
@@ -641,7 +653,7 @@ class DocumentSanitizer:
 
     @staticmethod
     def sanitize(doc_result: Dict[str, Any], findings: List[Dict[str, Any]]) -> Dict[str, Any]:
-        spans = [TextSpan(**s) for s in doc_result.get("spans", [])]
+        spans = [TextSpan.from_dict(s) for s in doc_result.get("spans", [])]
         sanitized_spans = []
         removed_spans = []
 

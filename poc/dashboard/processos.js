@@ -769,60 +769,67 @@ function alternarTramitacaoAutomatica(ligar) {
 // ------------------------------------------------------------------ eventos
 function setupProcessos() {
   setupMainTabs();
-  $('#procProtocolarBtn').addEventListener('click', protocolarProcessos);
-  $('#procAutoToggle').addEventListener('change', e => alternarTramitacaoAutomatica(e.target.checked));
-  $('#procBusca').addEventListener('input', renderListaProcessos);
-  $('#procList').addEventListener('click', e => {
-    const card = e.target.closest('.proc-card');
-    if (card) selecionarProcesso(card.dataset.id);
-  });
+  const protoBtn = $('#procProtocolarBtn');
+  if (protoBtn) protoBtn.addEventListener('click', protocolarProcessos);
+  const autoTgl = $('#procAutoToggle');
+  if (autoTgl) autoTgl.addEventListener('change', e => alternarTramitacaoAutomatica(e.target.checked));
+  const busca = $('#procBusca');
+  if (busca) busca.addEventListener('input', renderListaProcessos);
+  const listEl = $('#procList');
+  if (listEl) {
+    listEl.addEventListener('click', e => {
+      const card = e.target.closest('.proc-card');
+      if (card) selecionarProcesso(card.dataset.id);
+    });
+  }
   const detalhe = $('#procDetail');
-  detalhe.addEventListener('click', e => {
-    const sub = e.target.closest('[data-subtab]');
-    if (sub) {
-      procSubtab = sub.dataset.subtab;
-      renderDetalhe();
-      return;
-    }
-    if (e.target.closest('#procNextBtn')) proximoAndamento();
-    if (e.target.closest('#procAsOfNow')) {
-      procAsOf = null;
-      carregarDetalhe();
-      return;
-    }
-    if (e.target.closest('#procStepPrev')) {
-      if (!procDetalhe) return;
-      const lsns = procDetalhe.lsns || [];
-      const curIdx = procAsOf === null ? lsns.length - 1 : Math.max(0, lsns.indexOf(procAsOf));
-      if (curIdx > 0) {
-        const newIdx = curIdx - 1;
-        procAsOf = newIdx === lsns.length - 1 ? null : lsns[newIdx];
-        carregarDetalhe();
+  if (detalhe) {
+    detalhe.addEventListener('click', e => {
+      const sub = e.target.closest('[data-subtab]');
+      if (sub) {
+        procSubtab = sub.dataset.subtab;
+        renderDetalhe();
+        return;
       }
-      return;
-    }
-    if (e.target.closest('#procStepNext')) {
-      if (!procDetalhe) return;
-      const lsns = procDetalhe.lsns || [];
-      const curIdx = procAsOf === null ? lsns.length - 1 : Math.max(0, lsns.indexOf(procAsOf));
-      if (curIdx < lsns.length - 1) {
-        const newIdx = curIdx + 1;
-        procAsOf = newIdx === lsns.length - 1 ? null : lsns[newIdx];
+      if (e.target.closest('#procNextBtn')) proximoAndamento();
+      if (e.target.closest('#procAsOfNow')) {
+        procAsOf = null;
         carregarDetalhe();
+        return;
       }
-      return;
-    }
-    const dot = e.target.closest('.scrubber-dot');
-    if (dot && procDetalhe) {
-      const i = Number(dot.dataset.index);
-      const lsns = procDetalhe.lsns || [];
-      procAsOf = i === lsns.length - 1 ? null : lsns[i];
-      carregarDetalhe();
-      return;
-    }
-  });
+      if (e.target.closest('#procStepPrev')) {
+        if (!procDetalhe) return;
+        const lsns = procDetalhe.lsns || [];
+        const curIdx = procAsOf === null ? lsns.length - 1 : Math.max(0, lsns.indexOf(procAsOf));
+        if (curIdx > 0) {
+          const newIdx = curIdx - 1;
+          procAsOf = newIdx === lsns.length - 1 ? null : lsns[newIdx];
+          carregarDetalhe();
+        }
+        return;
+      }
+      if (e.target.closest('#procStepNext')) {
+        if (!procDetalhe) return;
+        const lsns = procDetalhe.lsns || [];
+        const curIdx = procAsOf === null ? lsns.length - 1 : Math.max(0, lsns.indexOf(procAsOf));
+        if (curIdx < lsns.length - 1) {
+          const newIdx = curIdx + 1;
+          procAsOf = newIdx === lsns.length - 1 ? null : lsns[newIdx];
+          carregarDetalhe();
+        }
+        return;
+      }
+      const dot = e.target.closest('.scrubber-dot');
+      if (dot && procDetalhe) {
+        const i = Number(dot.dataset.index);
+        const lsns = procDetalhe.lsns || [];
+        procAsOf = i === lsns.length - 1 ? null : lsns[i];
+        carregarDetalhe();
+        return;
+      }
+    });
 
-  detalhe.addEventListener('input', e => {
+    detalhe.addEventListener('input', e => {
     if (e.target.id !== 'procAsOfRange' || !procDetalhe) return;
     const lsns = procDetalhe.lsns || [];
     const passos = procDetalhe.passos_timeline || [];

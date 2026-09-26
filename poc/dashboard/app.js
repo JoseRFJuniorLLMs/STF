@@ -3177,33 +3177,40 @@ function setupChartTooltip() {
 function render(s) {
   state = s;
 
-  $('#riskValue').textContent = s.risk;
+  const rv = $('#riskValue');
+  if (rv && s && s.risk !== undefined) rv.textContent = s.risk;
   const rl = $('#riskLabel');
-  if (s.risk >= 80) {
-    rl.textContent = 'CRÍTICO';
-    rl.className = 'tag-status critical';
-  } else if (s.risk >= 50) {
-    rl.textContent = 'ALTO';
-    rl.className = 'tag-status critical';
-  } else if (s.risk >= 20) {
-    rl.textContent = 'ELEVADO';
-    rl.className = 'tag-status';
-  } else {
-    rl.textContent = 'NORMAL';
-    rl.className = 'tag-status normal';
+  if (rl && s && s.risk !== undefined) {
+    if (s.risk >= 80) {
+      rl.textContent = 'CRÍTICO';
+      rl.className = 'tag-status critical';
+    } else if (s.risk >= 50) {
+      rl.textContent = 'ALTO';
+      rl.className = 'tag-status critical';
+    } else if (s.risk >= 20) {
+      rl.textContent = 'ELEVADO';
+      rl.className = 'tag-status';
+    } else {
+      rl.textContent = 'NORMAL';
+      rl.className = 'tag-status normal';
+    }
   }
 
   const incState = $('#incidentState');
-  if (s.incident) {
-    incState.textContent = `${s.incident.incident_id} (${s.incident.severity})`;
-    incState.style.color = 'var(--gov-gold)';
-  } else {
-    incState.textContent = 'NÃO ABERTO';
-    incState.style.color = 'var(--gov-muted)';
+  if (incState) {
+    if (s && s.incident) {
+      incState.textContent = `${s.incident.incident_id} (${s.incident.severity})`;
+      incState.style.color = 'var(--gov-gold)';
+    } else {
+      incState.textContent = 'NÃO ABERTO';
+      incState.style.color = 'var(--gov-muted)';
+    }
   }
 
-  $('#upstreamHits').textContent = s.upstream_hits;
-  $('#attackProgress').textContent = `${s.step} / ${s.total_steps} executados`;
+  const uh = $('#upstreamHits');
+  if (uh && s && s.upstream_hits !== undefined) uh.textContent = s.upstream_hits;
+  const ap = $('#attackProgress');
+  if (ap && s && s.step !== undefined) ap.textContent = `${s.step} / ${s.total_steps} executados`;
 
   updateInfraStatusBar(s);
   renderAttackList(s);
