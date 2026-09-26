@@ -117,8 +117,14 @@
   }
 
   function renderEvents() {
-    const query = $('[data-audit-search]').value.trim().toLocaleLowerCase('pt-BR');
-    const onlyIncident = $('[data-audit-incident-only]').checked;
+    const searchEl = $('[data-audit-search]');
+    const incOnlyEl = $('[data-audit-incident-only]');
+    const countEl = $('[data-audit-count]');
+    const eventsEl = $('[data-audit-events]');
+    if (!eventsEl) return;
+
+    const query = searchEl ? searchEl.value.trim().toLocaleLowerCase('pt-BR') : '';
+    const onlyIncident = incOnlyEl ? incOnlyEl.checked : false;
     const evidenceLsns = incidentLsns();
     const incidentId = snapshot?.incident?.incident_id;
     let matching = events().filter(ev => {
@@ -129,8 +135,8 @@
     });
     const total = matching.length;
     matching = matching.slice(-100).reverse();
-    $('[data-audit-count]').textContent = total > 100 ? `100 de ${total} eventos` : `${total} eventos`;
-    $('[data-audit-events]').innerHTML = matching.length ? matching.map(ev => {
+    if (countEl) countEl.textContent = total > 100 ? `100 de ${total} eventos` : `${total} eventos`;
+    eventsEl.innerHTML = matching.length ? matching.map(ev => {
       const atkId = ev.details?.stf_attack_id || ev.details?.heraclitus_attack_id;
       return `
       <button type="button" class="audit-event ${selectedLsn === ev.lsn ? 'selected' : ''}" role="option" aria-selected="${selectedLsn === ev.lsn}" data-audit-lsn="${Number(ev.lsn)}">

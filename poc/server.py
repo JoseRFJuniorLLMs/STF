@@ -2395,7 +2395,10 @@ class Handler(BaseHTTPRequestHandler):
         if length<0 or length>max_bytes: raise ValueError("body size out of bounds")
         raw=self.rfile.read(length)
         if not raw or not raw.strip(): return {}
-        value=json.loads(raw.decode("utf-8"))
+        try:
+            value=json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as err:
+            raise ValueError(f"malformed json payload: {err}") from err
         if not isinstance(value,dict): raise ValueError("JSON body must be an object")
         return value
     def _mutation_allowed(self)->bool:
