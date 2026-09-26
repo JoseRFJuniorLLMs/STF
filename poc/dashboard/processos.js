@@ -509,6 +509,7 @@ function renderDetalhe() {
           ▶ ${p.pendentes > 0 ? 'Próximo andamento' : 'Tramitação concluída'}
         </button>
         <small class="proc-side-note">${p.pendentes > 0 ? `${p.pendentes} passo(s) restantes no roteiro` : 'Sem passos restantes'}</small>
+      </div>
     </div>
 
     ${attacksHtml}
