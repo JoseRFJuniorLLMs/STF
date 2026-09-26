@@ -165,15 +165,9 @@ class HeraclitusCore:
         except ImportError as exc:
             raise CoreUnavailable("pacote grpcio não instalado (pip install grpcio)") from exc
         if self._channel is None:
-            channel = grpc.insecure_channel(self.addr, options=[
+            self._channel = grpc.insecure_channel(self.addr, options=[
                 ("grpc.max_receive_message_length", MAX_MESSAGE_BYTES),
             ])
-            try:
-                grpc.channel_ready_future(channel).result(timeout=self.timeout)
-            except grpc.FutureTimeoutError as exc:
-                channel.close()
-                raise CoreUnavailable(f"núcleo HeraclitusDB inacessível em {self.addr}") from exc
-            self._channel = channel
         stub = self._channel.unary_unary(SERVICE + method)
         metadata = [("authorization", f"Bearer {self._token}")] if self._token else None
         try:
