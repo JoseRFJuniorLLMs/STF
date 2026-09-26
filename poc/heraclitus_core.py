@@ -127,7 +127,7 @@ def decode_append_response(buf: bytes) -> dict[str, Any]:
         elif number == 2:
             out["deduplicated"] = bool(value)
         elif number == 3:
-            out["event_id"] = value.decode("utf-8")
+            out["event_id"] = value.decode("utf-8", errors="replace") if isinstance(value, (bytes, bytearray)) else str(value)
     return out
 
 
@@ -138,7 +138,7 @@ def encode_query_request(gql: str) -> bytes:
 def decode_query_response(buf: bytes) -> str:
     for number, value in _fields(buf):
         if number == 1:
-            return value.decode("utf-8")
+            return value.decode("utf-8", errors="replace") if isinstance(value, (bytes, bytearray)) else str(value)
     return "[]"
 
 

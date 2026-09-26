@@ -154,14 +154,14 @@
                       <small style="color: var(--gov-muted);">${escapeHtml(new Date(r.dataHora).toLocaleTimeString('pt-BR'))}</small>
                     </td>
                     <td>
-                      <strong style="color: #1e3a8a; cursor: pointer; text-decoration: underline;" onclick="goToProcesso('${procId}')" title="Abrir autos do processo na Aba 2">${escapeHtml(r.processo)}</strong>
+                      <strong style="color: #1e3a8a; cursor: pointer; text-decoration: underline;" data-interop-processo="${escapeHtml(procId)}" title="Abrir autos do processo na Aba 2">${escapeHtml(r.processo)}</strong>
                     </td>
                     <td><small>${escapeHtml(r.origem)} ➔ ${escapeHtml(r.destino)}</small></td>
                     <td>
                       <span class="interop-badge ${r.status === 'RECEBIDO' ? 'ok' : 'dup'}">${escapeHtml(r.status)}</span>
                       ${isDupOrReplay ? `
                         <div style="margin-top: 4px;">
-                          <button class="btn tiny ghost" type="button" onclick="goToAttack('13')" title="Ver Ataque 13 de Replay na Aba 1">🎯 Ver Ataque 13 (Replay)</button>
+                          <button class="btn tiny ghost" type="button" data-interop-attack="13" title="Ver Ataque 13 de Replay na Aba 1">🎯 Ver Ataque 13 (Replay)</button>
                         </div>
                       ` : ''}
                       ${r.detalhe ? `<br><small style="color: var(--gov-muted); font-size: 10px;">${escapeHtml(r.detalhe)}</small>` : ''}
@@ -201,9 +201,21 @@
   function initInteroperabilidade() {
     root.addEventListener('click', e => {
       const btn = e.target.closest('[data-interop-action]');
-      if (!btn) return;
-      if (btn.dataset.interopAction === 'reconciliar') reconciliar();
-      else if (btn.dataset.interopAction === 'duplicata') testarDuplicata();
+      if (btn) {
+        if (btn.dataset.interopAction === 'reconciliar') reconciliar();
+        else if (btn.dataset.interopAction === 'duplicata') testarDuplicata();
+        return;
+      }
+      const procBtn = e.target.closest('[data-interop-processo]');
+      if (procBtn) {
+        if (typeof goToProcesso === 'function') goToProcesso(procBtn.dataset.interopProcesso);
+        return;
+      }
+      const atkBtn = e.target.closest('[data-interop-attack]');
+      if (atkBtn) {
+        if (typeof goToAttack === 'function') goToAttack(atkBtn.dataset.interopAttack);
+        return;
+      }
     });
     carregarRemessas();
   }

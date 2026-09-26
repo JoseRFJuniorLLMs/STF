@@ -83,8 +83,12 @@ def verify(bundle):
         if not isinstance(incident,dict) or incident.get("incident_id")!=top_incident_id:
             semantic_ok=False
         else:
-            for lsn in incident.get("evidence_lsns",[]):
-                if lsn not in event_by_lsn: semantic_ok=False
+            evidence_lsns = incident.get("evidence_lsns")
+            if isinstance(evidence_lsns, (list, tuple, set)):
+                for lsn in evidence_lsns:
+                    if lsn not in event_by_lsn: semantic_ok=False
+            elif evidence_lsns is not None:
+                semantic_ok=False
 
     structure=all(k in bundle for k in [
         "schema_version","package_id","campaign_id","incident_id","generated_at_claimed",

@@ -14,7 +14,8 @@ class Detection:
     def to_dict(self): return asdict(self)
 
 def _typed_entities(normalized:dict[str,Any])->list[str]:
-    raw=normalized.get("raw") or {}
+    raw_val = normalized.get("raw")
+    raw = raw_val if isinstance(raw_val, dict) else {}
     cls=normalized.get("source_class")
     out=set()
     def add(kind,key):
@@ -40,7 +41,8 @@ def _safe_int(val: Any, default: int = 0) -> int:
 
 def evaluate(normalized:dict[str,Any]|None)->Detection|None:
     if not normalized: return None
-    raw=normalized.get("raw") or {}
+    raw_val=normalized.get("raw")
+    raw=raw_val if isinstance(raw_val, dict) else {}
     cls=normalized.get("source_class")
     entities=_typed_entities(normalized)
 

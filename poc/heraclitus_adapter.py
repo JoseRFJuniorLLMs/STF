@@ -18,7 +18,10 @@ STATIC_PATHS={
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        raise urllib.error.HTTPError(req.full_url,code,"redirect rejected by loopback safety gate",headers,fp)
+        if fp:
+            try: fp.close()
+            except Exception: pass
+        raise urllib.error.HTTPError(req.full_url,code,"redirect rejected by loopback safety gate",headers,None)
 
 def extract_incident_ids(value):
     if isinstance(value,list):
@@ -67,8 +70,12 @@ class HeraclitusAdapter:
                     raise ValueError("Heraclitus response exceeds safety limit")
                 body = raw.decode("utf-8")
                 return json.loads(body) if body else {}
-        except Exception:
-            self._offline_until = time.time() + 10.0
+        except urllib.error.HTTPError as exc:
+            if exc.code >= 500:
+                self._offline_until = time.time() + 2.0
+            raise
+        except (urllib.error.URLError, TimeoutError, OSError):
+            self._offline_until = time.time() + 2.0
             raise
 
     def post(self,path:str,payload:dict|bytes)->dict:
@@ -93,8 +100,12 @@ class HeraclitusAdapter:
                     raise ValueError("Heraclitus response exceeds safety limit")
                 body=raw.decode("utf-8")
                 return json.loads(body) if body else {}
-        except Exception:
-            self._offline_until = time.time() + 10.0
+        except urllib.error.HTTPError as exc:
+            if exc.code >= 500:
+                self._offline_until = time.time() + 2.0
+            raise
+        except (urllib.error.URLError, TimeoutError, OSError):
+            self._offline_until = time.time() + 2.0
             raise
 
     def record_red_team_event(self,event_data:dict)->dict:

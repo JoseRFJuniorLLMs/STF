@@ -151,8 +151,8 @@
                         </div>
                       </div>
                       <div style="display: flex; gap: 6px; flex-shrink: 0;">
-                        <button class="btn tiny ghost" type="button" onclick="goToAttack('${t.attack_id}')">🎯 Ver Ataque</button>
-                        <button class="btn tiny primary" type="button" onclick="emitirCertidaoOficial({attack_id: '${t.attack_id}', title: '${escapeHtml(t.title)}'})">📜 Emitir Certidão</button>
+                        <button class="btn tiny ghost" type="button" data-go-attack="${escapeHtml(t.attack_id)}">🎯 Ver Ataque</button>
+                        <button class="btn tiny primary" type="button" data-emit-threat="${escapeHtml(t.attack_id)}" data-threat-title="${escapeHtml(t.title)}">📜 Emitir Certidão</button>
                       </div>
                     </div>
                   `).join('')}
@@ -173,7 +173,7 @@
                   <div class="resil-certidao-body">
                     <strong>Período:</strong> ${escapeHtml(new Date(c.dataHoraInicio).toLocaleTimeString('pt-BR'))} às ${escapeHtml(new Date(c.dataHoraFim).toLocaleTimeString('pt-BR'))} (${escapeHtml(c.duracao)})<br>
                     <strong>Causa técnica:</strong> ${escapeHtml(c.motivo)}<br>
-                    ${c.attack_id ? `<div style="margin: 4px 0;"><span style="background: #fee2e2; color: #991b1b; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; border: 1px solid #fca5a5;">Vinculada ao Ataque: ${escapeHtml(c.attack_id)}</span> <button class="btn tiny ghost" type="button" onclick="goToAttack('${c.attack_id}')" style="margin-left: 6px;">🎯 Ver Ataque</button></div>` : ''}
+                    ${c.attack_id ? `<div style="margin: 4px 0;"><span style="background: #fee2e2; color: #991b1b; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; border: 1px solid #fca5a5;">Vinculada ao Ataque: ${escapeHtml(c.attack_id)}</span> <button class="btn tiny ghost" type="button" data-go-attack="${escapeHtml(c.attack_id)}" style="margin-left: 6px;">🎯 Ver Ataque</button></div>` : ''}
                     <strong>Efeito legal:</strong> ${escapeHtml(c.prorrogacao)}
                   </div>
                   <div class="resil-certidao-meta">
@@ -260,6 +260,21 @@
         const lsn = auditBtn.dataset.resilAudit;
         if (typeof mostrarView === 'function') mostrarView('auditoria');
         if (typeof selectAuditLsn === 'function') selectAuditLsn(Number(lsn));
+        return;
+      }
+      const goBtn = e.target.closest('[data-go-attack]');
+      if (goBtn) {
+        const id = goBtn.dataset.goAttack;
+        if (typeof goToAttack === 'function') goToAttack(id);
+        return;
+      }
+      const emitThreatBtn = e.target.closest('[data-emit-threat]');
+      if (emitThreatBtn) {
+        emitirCertidaoOficial({
+          attack_id: emitThreatBtn.dataset.emitThreat,
+          title: emitThreatBtn.dataset.threatTitle || ''
+        });
+        return;
       }
     });
     carregarDados();
