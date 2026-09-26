@@ -2523,9 +2523,8 @@ async function runMassiveCycle() {
 
     await executeDemoAttackSilent(attackId);
   } catch (err) {
-    console.warn('[MassiveLoop] Erro no disparo:', err);
-    stopAllMassiveAttacks(false);
-    toast(`Simulação interrompida: ${err.message}`);
+    console.warn('[MassiveLoop] Erro no disparo (recuperando):', err);
+    // Não interrompe o loop contínuo de simulação em caso de falha transitória
   }
 
   if (massiveLoopActive) {

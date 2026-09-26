@@ -46,6 +46,14 @@
       if (ledger.status === 'PASS') {
         demoEvents = (ledger.data?.events || []).filter(event => event.campaign_id === 'STF-DEMO-SIMULATION');
       }
+      if (!demoEvents.length && snapshot?.events) {
+        demoEvents = snapshot.events.filter(e => e.simulation || String(e.type || '').startsWith('demo.')).map(e => ({
+          attack_id: e.details?.attack_id || (e.type ? e.type.replace('demo.attack.', 'demo-') : 'demo-atk'),
+          campaign_id: 'STF-DEMO-SIMULATION',
+          lsn: e.lsn,
+          reason_code: e.reason_code || (e.outcome === 'PASS' ? 'DEMO_TARGET_REACHED' : e.outcome === 'DENY' ? 'DEMO_BLOCKED' : 'DEMO_DEFENDED'),
+        }));
+      }
     } catch (_) {
       // A aba continua a mostrar o incidente mesmo se a leitura do ledger falhar.
     }
@@ -96,12 +104,13 @@
     const incident = s?.incident;
     const openingLsns = new Set((s?.why_incident?.evidence_lsns || []).map(Number));
     const events = Array.isArray(s?.events) ? s.events : [];
-    return events.filter(event => {
+    const filtered = events.filter(event => {
       if (incident) {
-        return event.incident_id === incident.incident_id || openingLsns.has(Number(event.lsn)) || event.phase === 'FASE 1' || String(event.event_type || '').startsWith('hdb.') || String(event.event_type || '').startsWith('stf.');
+        return event.incident_id === incident.incident_id || openingLsns.has(Number(event.lsn)) || event.phase === 'FASE 1' || String(event.event_type || '').startsWith('hdb.') || String(event.event_type || '').startsWith('stf.') || event.simulation;
       }
       return true;
     }).sort((a, b) => number(a.lsn) - number(b.lsn));
+    return filtered.length ? filtered : events;
   }
 
   function assessment(event) {
@@ -173,6 +182,7 @@
           ${atkId === 'IA_ZAN_05' ? `<button type="button" class="btn tiny primary" onclick="event.stopPropagation(); goToDefesaZanin('IA_ZAN_05')">🏛️ Ver Perícia na Defesa Zanin</button>` : ''}
         </div>
       ` : '';
+      const effect = decision ? `<div class="inc360-event-effect">Gateway: <strong>${clean(decision.outcome || event.outcome)}</strong> · upstream Δ ${event.upstream_delta === null || event.upstream_delta === undefined ? '—' : clean(event.upstream_delta)}${receipt ? ' · recibo local presente' : ''}${reason}</div>` : '';
 
       return `<li class="inc360-event">
         <span class="inc360-event-marker" aria-hidden="true"></span>
