@@ -173,8 +173,8 @@ class HeraclitusCore:
         try:
             return stub(request, timeout=self.timeout, metadata=metadata)
         except grpc.RpcError as exc:
-            if exc.code() in (grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.DEADLINE_EXCEEDED):
-                self.close()
+            self.close()
+            if exc.code() in (grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.DEADLINE_EXCEEDED) or "Channel closed" in str(exc):
                 raise CoreUnavailable(f"núcleo HeraclitusDB inacessível em {self.addr}") from exc
             if exc.code() in (grpc.StatusCode.UNAUTHENTICATED, grpc.StatusCode.PERMISSION_DENIED):
                 raise CoreUnavailable(
