@@ -637,6 +637,14 @@ class EvidenceEvent:
     prev_hash: str = "0" * 64
     event_hash: str = ""
 
+    @property
+    def ts(self) -> str:
+        if isinstance(self.details, dict):
+            d_ts = self.details.get("ts") or self.details.get("timestamp") or self.details.get("dataHora")
+            if d_ts:
+                return str(d_ts)
+        return datetime.now(timezone(timedelta(hours=-3))).strftime("%d/%m/%Y %H:%M:%S")
+
     def material(self) -> dict[str, Any]:
         obj = asdict(self)
         obj.pop("event_hash", None)
@@ -2165,83 +2173,107 @@ class PocEngine:
     @locked_method
     def get_process_attacks(self, proc_id: str) -> list[dict[str, Any]]:
         attacks = []
-        p_clean = str(proc_id).upper().replace(" ", "").replace("-", "")
-        for ev in self.events:
-            asset = str(ev.asset or "").upper()
-            summary = str(ev.summary or "").upper()
-            details = ev.details or {}
-            stf_id = details.get("stf_attack_id") or ""
-            is_match = False
+        try:
+            p_clean = str(proc_id).upper().replace(" ", "").replace("-", "")
+            for ev in self.events:
+                asset = str(getattr(ev, "asset", "") or "").upper()
+                summary = str(getattr(ev, "summary", "") or "").upper()
+                details = getattr(ev, "details", {}) or {}
+                sub_det = details.get("details") if isinstance(details.get("details"), dict) else {}
+                stf_id = details.get("stf_attack_id") or sub_det.get("stf_attack_id") or ""
+                is_match = False
 
-            if "RE000001" in p_clean:
-                is_match = (
-                    "RE-000001" in asset or "SYNTHETIC/RE-000001" in asset or
-                    stf_id in ("DB_ORA_01", "IA_VIC_01") or
-                    ev.event_type in ("app.case_update_requested", "app.resource_access") or
-                    "RE-000001" in summary
-                )
-            elif "ARE" in p_clean:
-                is_match = stf_id == "IA_ZAN_05" or "ZANIN" in summary or "ARE" in asset or "STEGO" in summary
-            elif "INQ" in p_clean or "HC" in p_clean:
-                is_match = stf_id == "IA_VIT_03" or "VITÓRIA" in summary or "VITORIA" in summary or "SEGREDO DE JUSTIÇA" in summary
+                if "RE000001" in p_clean:
+                    is_match = (
+                        "RE-000001" in asset or "SYNTHETIC/RE-000001" in asset or
+                        stf_id in ("DB_ORA_01", "IA_VIC_01") or
+                        getattr(ev, "event_type", "") in ("app.case_update_requested", "app.resource_access") or
+                        "RE-000001" in summary
+                    )
+                elif "ARE" in p_clean:
+                    is_match = stf_id == "IA_ZAN_05" or "ZANIN" in summary or "ARE" in asset or "STEGO" in summary
+                elif "INQ" in p_clean or "HC" in p_clean:
+                    is_match = stf_id == "IA_VIT_03" or "VITÓRIA" in summary or "VITORIA" in summary or "SEGREDO DE JUSTIÇA" in summary
 
-            if is_match:
-                attacks.append({
-                    "lsn": ev.lsn,
-                    "event_type": ev.event_type,
-                    "attack_id": stf_id or details.get("attack_id") or f"Passo {getattr(ev, 'step', '—')}",
-                    "title": ev.summary,
-                    "source": ev.source,
-                    "target": ev.asset,
-                    "outcome": ev.outcome,
-                    "upstream_delta": ev.upstream_delta if ev.upstream_delta is not None else 0,
-                    "ts": ev.ts,
-                    "details": details
-                })
+                if is_match:
+                    ev_ts = getattr(ev, "ts", "")
+                    if not ev_ts:
+                        ev_ts = datetime.now(timezone(timedelta(hours=-3))).strftime("%d/%m/%Y %H:%M:%S")
+                    atk_code = stf_id or details.get("attack_id") or sub_det.get("attack_id") or f"Passo {getattr(ev, 'step', '—')}"
+                    attacks.append({
+                        "lsn": getattr(ev, "lsn", 0),
+                        "event_type": getattr(ev, "event_type", ""),
+                        "attack_id": atk_code,
+                        "title": getattr(ev, "summary", "Ataque detectado"),
+                        "source": getattr(ev, "source", "Red-Team"),
+                        "target": getattr(ev, "asset", "STF"),
+                        "outcome": getattr(ev, "outcome", "BLOCKED"),
+                        "upstream_delta": ev.upstream_delta if getattr(ev, "upstream_delta", None) is not None else 0,
+                        "ts": ev_ts,
+                        "details": details
+                    })
+        except Exception as e:
+            print(f"[STF-POC WARN] get_process_attacks error for {proc_id}: {e}")
         return attacks
 
     @locked_method
     def enrich_process_list(self, lista: dict[str, Any]) -> None:
-        procs = lista.get("processos", [])
-        for p in procs:
-            pid = p.get("id", "")
-            atks = self.get_process_attacks(pid)
-            p["attack_intercepts"] = atks
-            p["has_attack_alert"] = len(atks) > 0
-            if atks:
-                p["last_attack"] = atks[-1]
+        try:
+            procs = lista.get("processos", [])
+            for p in procs:
+                pid = p.get("id", "")
+                atks = self.get_process_attacks(pid)
+                p["attack_intercepts"] = atks
+                p["has_attack_alert"] = len(atks) > 0
+                if atks:
+                    p["last_attack"] = atks[-1]
+        except Exception as e:
+            print(f"[STF-POC WARN] enrich_process_list error: {e}")
 
     @locked_method
     def enrich_process_detalhe(self, detalhe: dict[str, Any]) -> None:
-        p = detalhe.get("processo", {})
-        pid = p.get("id", "")
-        atks = self.get_process_attacks(pid)
-        detalhe["attack_intercepts"] = atks
-        detalhe["has_attack_alert"] = len(atks) > 0
+        try:
+            p = detalhe.get("processo", {})
+            pid = p.get("id", "")
+            atks = self.get_process_attacks(pid)
+            detalhe["attack_intercepts"] = atks
+            detalhe["has_attack_alert"] = len(atks) > 0
+        except Exception as e:
+            print(f"[STF-POC WARN] enrich_process_detalhe error: {e}")
 
     @locked_method
     def get_recent_resilience_threats(self) -> list[dict[str, Any]]:
         threats = []
-        for ev in self.events:
-            det = ev.details or {}
-            stf_id = det.get("stf_attack_id") or ""
-            is_infra_threat = (
-                ev.event_type.startswith("stf.attack.") or
-                stf_id in ("NET_DDOS_01", "K8S_POD_01", "K8S_ETCD_02", "DB_ORA_01", "NET_FW_02", "STOR_SAN_01") or
-                "DDOS" in str(ev.summary).upper() or "DATABASE" in str(ev.source).upper() or "KUBERNETES" in str(ev.source).upper()
-            )
-            if is_infra_threat:
-                threats.append({
-                    "lsn": ev.lsn,
-                    "attack_id": stf_id or ev.source,
-                    "title": ev.summary,
-                    "equipment": ev.source,
-                    "target": ev.asset,
-                    "outcome": ev.outcome,
-                    "rpo": "0s",
-                    "impact": "NEUTRALIZADO (Fail-Closed)",
-                    "ts": ev.ts
-                })
+        try:
+            for ev in self.events:
+                det = getattr(ev, "details", {}) or {}
+                sub_det = det.get("details") if isinstance(det.get("details"), dict) else {}
+                stf_id = det.get("stf_attack_id") or sub_det.get("stf_attack_id") or ""
+                ev_type = getattr(ev, "event_type", "")
+                ev_summary = str(getattr(ev, "summary", "") or "")
+                ev_source = str(getattr(ev, "source", "") or "")
+                is_infra_threat = (
+                    ev_type.startswith("stf.attack.") or
+                    stf_id in ("NET_DDOS_01", "K8S_POD_01", "K8S_ETCD_02", "DB_ORA_01", "NET_FW_02", "STOR_SAN_01") or
+                    "DDOS" in ev_summary.upper() or "DATABASE" in ev_source.upper() or "KUBERNETES" in ev_source.upper()
+                )
+                if is_infra_threat:
+                    ev_ts = getattr(ev, "ts", "")
+                    if not ev_ts:
+                        ev_ts = datetime.now(timezone(timedelta(hours=-3))).strftime("%d/%m/%Y %H:%M:%S")
+                    threats.append({
+                        "lsn": getattr(ev, "lsn", 0),
+                        "attack_id": stf_id or det.get("attack_id") or sub_det.get("attack_id") or ev_source,
+                        "title": getattr(ev, "summary", "Ameaça à infraestrutura"),
+                        "equipment": ev_source,
+                        "target": getattr(ev, "asset", "STF"),
+                        "outcome": getattr(ev, "outcome", "BLOCKED"),
+                        "rpo": "0s",
+                        "impact": "NEUTRALIZADO (Fail-Closed)",
+                        "ts": ev_ts
+                    })
+        except Exception as e:
+            print(f"[STF-POC WARN] get_recent_resilience_threats error: {e}")
         return threats
 
     @locked_method
@@ -2443,13 +2475,21 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 if path=="/api/processos":
                     lista = PROCESSOS.listar(as_of)
-                    ENGINE.enrich_process_list(lista)
+                    try:
+                        ENGINE.enrich_process_list(lista)
+                    except Exception as err:
+                        print(f"[STF-POC WARN] enrich_process_list: {err}")
                     return self._json({"connected":True,"addr":PROCESSOS.core.addr,"as_of_lsn":as_of,**lista})
                 detalhe=PROCESSOS.detalhe(query.get("id",[""])[0],as_of)
                 if detalhe is None: return self._json({"error":"processo_desconhecido"},404)
-                ENGINE.enrich_process_detalhe(detalhe)
+                try:
+                    ENGINE.enrich_process_detalhe(detalhe)
+                except Exception as err:
+                    print(f"[STF-POC WARN] enrich_process_detalhe: {err}")
                 return self._json({"connected":True,"addr":PROCESSOS.core.addr,**detalhe})
             except Exception as e:
+                import traceback
+                traceback.print_exc()
                 body,status=_processos_erro(e)
                 # Banco fora do ar é um ESTADO que a aba mostra, não um erro HTTP.
                 return self._json(body,200 if status==503 else status)
