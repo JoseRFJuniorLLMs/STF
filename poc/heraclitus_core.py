@@ -144,7 +144,7 @@ def decode_query_response(buf: bytes) -> str:
 
 # --------------------------------------------------------------------- cliente
 class HeraclitusCore:
-    def __init__(self, addr: str = "127.0.0.1:17474", timeout: float = 3.0) -> None:
+    def __init__(self, addr: str = "127.0.0.1:17474", timeout: float = 20.0) -> None:
         host = addr.rsplit(":", 1)[0].strip("[]")
         if host not in ALLOWED_HOSTS:
             raise ValueError("Safety gate: o núcleo HeraclitusDB só é aceito em loopback")
