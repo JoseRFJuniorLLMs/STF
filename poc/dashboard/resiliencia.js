@@ -267,6 +267,7 @@
 
   window.initResiliencia = initResiliencia;
   window.refreshResiliencia = carregarDados;
+  window.emitirCertidaoOficial = emitirCertidaoOficial;
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initResiliencia, { once: true });
   else initResiliencia();

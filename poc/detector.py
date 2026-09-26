@@ -34,13 +34,17 @@ def _typed_entities(normalized:dict[str,Any])->list[str]:
         add("principal","principal"); add("resource","resource")
     return sorted(out)
 
+def _safe_int(val: Any, default: int = 0) -> int:
+    try: return int(val)
+    except (TypeError, ValueError): return default
+
 def evaluate(normalized:dict[str,Any]|None)->Detection|None:
     if not normalized: return None
     raw=normalized.get("raw") or {}
     cls=normalized.get("source_class")
     entities=_typed_entities(normalized)
 
-    if cls=="EDGE" and int(raw.get("waf_score",0))>=70:
+    if cls=="EDGE" and _safe_int(raw.get("waf_score",0))>=70:
         return Detection("DET-EDGE-001","EDGE_ANOMALY","MEDIUM",12,"Score sintético de borda acima do limiar documentado.",entities)
     if cls=="IDENTITY" and raw.get("context")=="new-device" and raw.get("device_trust")=="unknown":
         return Detection("DET-IAM-001","NEW_AUTH_CONTEXT","HIGH",18,"Identidade de serviço autenticou em contexto novo e não confiável.",entities)
@@ -48,7 +52,7 @@ def evaluate(normalized:dict[str,Any]|None)->Detection|None:
         return Detection("DET-HOST-001","UNUSUAL_PROCESS","HIGH",16,"Processo fora do baseline sintético do host.",entities)
     if cls=="NETWORK" and raw.get("src_host") and raw.get("dst_host") and raw.get("src_host")!=raw.get("dst_host"):
         return Detection("DET-NET-001","LATERAL_MOVEMENT","HIGH",14,"Conexão host-a-host não presente no baseline da conta fictícia.",entities)
-    if cls=="DATABASE" and raw.get("operation")=="query" and int(raw.get("rows",0))>=40:
+    if cls=="DATABASE" and raw.get("operation")=="query" and _safe_int(raw.get("rows",0))>=40:
         return Detection("DET-DB-001","DB_BEHAVIOR_ANOMALY","HIGH",15,"Consulta com volume acima do baseline sintético do principal.",entities)
     if cls=="APPLICATION" and raw.get("classification")=="RESTRICTED":
         return Detection("DET-APP-001","RESTRICTED_RESOURCE_ACCESS","CRITICAL",20,"Identidade correlacionada acessou recurso classificado como restrito.",entities)

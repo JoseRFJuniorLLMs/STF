@@ -189,8 +189,14 @@ class HeraclitusCore:
         return decode_append_response(self._call("Append", request))
 
     def query(self, gql: str) -> list[dict[str, Any]]:
-        rows = json.loads(decode_query_response(self._call("Query", encode_query_request(gql))))
-        return rows if isinstance(rows, list) else []
+        raw_resp = decode_query_response(self._call("Query", encode_query_request(gql)))
+        if not raw_resp or not raw_resp.strip():
+            return []
+        try:
+            rows = json.loads(raw_resp)
+            return rows if isinstance(rows, list) else []
+        except Exception:
+            return []
 
     def close(self) -> None:
         if self._channel is not None:

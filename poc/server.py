@@ -13,6 +13,7 @@ import json
 import mimetypes
 import os
 import random
+import re
 import subprocess
 import sys
 import tempfile
@@ -1314,7 +1315,7 @@ class PocEngine:
             red_team_payload = {
                 "attack_id": f"finding-hdb-{attack_id}-{int(time.time())}",
                 "campaign_id": "HERACLITUS-REDTEAM-2.0",
-                "vector": atk["title"],
+                "vector": atk.get("vector") or atk.get("name") or atk.get("title") or "Heraclitus Attack",
                 "target": atk["target"],
                 "phase": "red-team",
                 "result": oracle_verdict,
@@ -1412,7 +1413,7 @@ class PocEngine:
             payload = {
                 "attack_id": f"demo-{atk['id'].lower()}-{uuid.uuid4().hex}",
                 "campaign_id": DEMO_CAMPAIGN_ID,
-                "vector": atk.get("vector") or atk["title"],
+                "vector": atk.get("vector") or atk.get("title") or atk.get("name") or "Attack Vector",
                 "target": atk["target"],
                 "phase": "synthetic-demo",
                 "result": "fail" if outcome == "TARGET_REACHED" else "pass",
@@ -1473,9 +1474,9 @@ class PocEngine:
             red_team_payload = {
                 "attack_id": f"finding-stf-{attack_id.lower()}-{int(time.time())}",
                 "campaign_id": "STF-FULL-INFRA-ATTACK",
-                "vector": atk["vector"],
-                "target": atk["target"],
-                "phase": atk["phase"],
+                "vector": atk.get("vector") or atk.get("title") or atk.get("name") or "STF Vector",
+                "target": atk.get("target") or "asset:stf",
+                "phase": atk.get("phase") or "INFRA STF",
                 "result": "pass" if outcome in ("DENY", "REQUIRE_HITL") else "fail",
                 "expected": "attack blocked by gateway with zero upstream effect",
                 "reason_code": reason_code,
@@ -1620,11 +1621,11 @@ class PocEngine:
     @locked_method
     def qualification(self) -> list[dict[str, str]]:
         denied=[e for e in self.events if e.outcome=="DENY"]
-        policy_events=[e for e in self.events if e.details.get("policy_decision")]
+        policy_events=[e for e in self.events if isinstance(e.details, dict) and e.details.get("policy_decision")]
         reason_codes={e.reason_code for e in policy_events}
         tests=[
             ("PHASE1_TELEMETRY_INGEST",len({e.source for e in self.events if e.phase=="FASE 1"})>=5,"PASS"),
-            ("PHASE1_RAW_TO_CANONICAL",sum(1 for e in self.events if e.details.get("normalized_telemetry"))>=6,"PASS"),
+            ("PHASE1_RAW_TO_CANONICAL",sum(1 for e in self.events if isinstance(e.details, dict) and e.details.get("normalized_telemetry"))>=6,"PASS"),
             ("PHASE1_RULE_ENGINE",len(self.signals)>=6 and all(s.get("rule_id") for s in self.signals),"PASS"),
             ("PHASE1_ENTITY_CORRELATION",bool(self.incident and self.incident.get("correlation",{}).get("qualifies")),"PASS"),
             ("PHASE1_RULE_DETECTION",len(self.signals)>=3,"PASS"),
@@ -1636,7 +1637,7 @@ class PocEngine:
             ("PHASE2_REPLAY","REPLAY_DETECTED" in reason_codes,"DENY"),
             ("PHASE2_IDENTITY_SWAP","IDENTITY_BINDING_MISMATCH" in reason_codes,"DENY"),
             ("PHASE2_PARAMETER_SWAP","PARAMETERS_DIGEST_MISMATCH" in reason_codes,"DENY"),
-            ("UPSTREAM_ON_DENY",all((e.upstream_delta in (None,0)) and not e.details.get("upstream_receipt") for e in denied)
+            ("UPSTREAM_ON_DENY",all((e.upstream_delta in (None,0)) and (not isinstance(e.details, dict) or not e.details.get("upstream_receipt")) for e in denied)
              and self.upstream_hits==sum((e.upstream_delta or 0) for e in self.events),"0"),
             ("HISTORY_TAMPER",self.tamper_status=="DETECTED","DETECTED"),
             ("EVIDENCE_EXPORT",self.export_count>0,"PASS"),
@@ -2446,10 +2447,11 @@ class Handler(BaseHTTPRequestHandler):
                 if download_path:
                     try:
                         raw_zip = ENGINE.adapter.get_bundle_bytes(download_path)
-                        filename = ENGINE.last_real_bundle_info.get("file") or "evidence-bundle.zip"
+                        raw_name = ENGINE.last_real_bundle_info.get("file") or "evidence-bundle.zip"
+                        safe_filename = re.sub(r'[^a-zA-Z0-9_.-]', '_', os.path.basename(raw_name))
                         self.send_response(200)
                         self.send_header("Content-Type", "application/zip")
-                        self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+                        self.send_header("Content-Disposition", f'attachment; filename="{safe_filename}"')
                         self.send_header("Content-Length", str(len(raw_zip)))
                         self.end_headers(); self.wfile.write(raw_zip); return
                     except Exception:
