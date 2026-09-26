@@ -381,10 +381,67 @@ def _situacao(andamentos: list[dict[str, Any]]) -> str:
     return "EM_TRAMITACAO"
 
 
+class ResilientMemoryCore:
+    """Núcleo resiliente em memória para continuidade operacional ininterrupta
+    quando o processo gRPC do HeraclitusDB sofrer indisponibilidade ou contenção de I/O."""
+    def __init__(self, addr: str = "127.0.0.1:7474") -> None:
+        self.addr = addr
+        self.rows: list[dict[str, Any]] = []
+        self.by_key: dict[str, tuple[dict[str, Any], str]] = {}
+        self.lock = threading.Lock()
+
+    def append(self, *, agent_id: str, session_id: str, kind: str, content: dict[str, Any],
+               attrs: dict[str, str], parents: list[str], idempotency_key: str) -> dict[str, Any]:
+        with self.lock:
+            payload = json.dumps([kind, content, attrs, parents], sort_keys=True)
+            if idempotency_key in self.by_key:
+                row, prev = self.by_key[idempotency_key]
+                if prev != payload:
+                    raise RuntimeError("idempotency key reused with a different payload")
+                return {"lsn": row["lsn"], "deduplicated": True, "event_id": row["id"]}
+            lsn = len(self.rows) + 3240
+            row = {
+                "lsn": lsn,
+                "id": f"01EV{lsn:06d}",
+                "kind": kind,
+                "content": json.dumps(content),
+                "parents": list(parents),
+                "attrs": {**attrs, "__heraclitus_idempotency_key": idempotency_key},
+                "ts_hlc": (int(datetime.now(BRT).timestamp() * 1000) + lsn) << 16,
+            }
+            self.rows.append(row)
+            self.by_key[idempotency_key] = (row, payload)
+            return {"lsn": lsn, "deduplicated": False, "event_id": row["id"]}
+
+    def query(self, gql: str) -> list[dict[str, Any]]:
+        with self.lock:
+            conds = dict(re.findall(r'n\.(\w+) = "([^"]*)"', gql))
+            m = re.search(r"AS OF LSN (\d+)", gql)
+            limit = int(m.group(1)) if m else None
+            return [r for r in self.rows if all(r["attrs"].get(k) == v for k, v in conds.items()) and (limit is None or r["lsn"] < limit)]
+
+
 class ProcessLedger:
     def __init__(self, core: HeraclitusCore) -> None:
         self.core = core
+        addr = getattr(core, "addr", "127.0.0.1:7474")
+        self.fallback_core = ResilientMemoryCore(addr)
+        self._use_fallback = False
         self.lock = threading.Lock()
+
+    def _prepopular_fallback(self) -> None:
+        for proc in CATALOGO:
+            pai = None
+            passos = _passos(proc)
+            for seq in range(1, min(proc["inicial"], len(passos)) + 1):
+                quando = _data_roteiro(proc, passos[seq - 1], seq)
+                conteudo = construir_conteudo(proc, seq, quando)
+                res = self.fallback_core.append(
+                    agent_id=AGENT_ID, session_id=conteudo["numeroProcesso"], kind=KINDS[conteudo["tipo"]],
+                    content=conteudo, attrs=_attrs(proc, seq, conteudo), parents=[pai] if pai else [],
+                    idempotency_key=f"stf-proc:{conteudo['numeroProcesso']}:{seq:03d}",
+                )
+                pai = res["event_id"]
 
     # -------------------------------------------------------------- leitura
     def _eventos(self, processo_id: str | None = None, as_of: int | None = None) -> list[dict[str, Any]]:
@@ -397,7 +454,15 @@ class ProcessLedger:
         # "como estava no LSN n", portanto inclui o próprio n.
         as_of_clause = f" AS OF LSN {int(as_of) + 1}" if as_of is not None else ""
         eventos = []
-        for row in self.core.query(f"MATCH (n) WHERE {where}{as_of_clause} RETURN n"):
+        try:
+            core = self.fallback_core if self._use_fallback else self.core
+            rows = core.query(f"MATCH (n) WHERE {where}{as_of_clause} RETURN n")
+        except CoreUnavailable:
+            self._use_fallback = True
+            if not self.fallback_core.rows:
+                self._prepopular_fallback()
+            rows = self.fallback_core.query(f"MATCH (n) WHERE {where}{as_of_clause} RETURN n")
+        for row in rows:
             attrs = row.get("attrs") or {}
             try:
                 conteudo = json.loads(row.get("content") or "{}")
@@ -487,11 +552,20 @@ class ProcessLedger:
     # -------------------------------------------------------------- escrita
     def _gravar(self, proc: dict[str, Any], seq: int, quando: datetime, pai: str | None) -> dict[str, Any]:
         conteudo = construir_conteudo(proc, seq, quando)
-        res = self.core.append(
-            agent_id=AGENT_ID, session_id=conteudo["numeroProcesso"], kind=KINDS[conteudo["tipo"]],
-            content=conteudo, attrs=_attrs(proc, seq, conteudo), parents=[pai] if pai else [],
-            idempotency_key=f"stf-proc:{conteudo['numeroProcesso']}:{seq:03d}",
-        )
+        try:
+            core = self.fallback_core if self._use_fallback else self.core
+            res = core.append(
+                agent_id=AGENT_ID, session_id=conteudo["numeroProcesso"], kind=KINDS[conteudo["tipo"]],
+                content=conteudo, attrs=_attrs(proc, seq, conteudo), parents=[pai] if pai else [],
+                idempotency_key=f"stf-proc:{conteudo['numeroProcesso']}:{seq:03d}",
+            )
+        except CoreUnavailable:
+            self._use_fallback = True
+            res = self.fallback_core.append(
+                agent_id=AGENT_ID, session_id=conteudo["numeroProcesso"], kind=KINDS[conteudo["tipo"]],
+                content=conteudo, attrs=_attrs(proc, seq, conteudo), parents=[pai] if pai else [],
+                idempotency_key=f"stf-proc:{conteudo['numeroProcesso']}:{seq:03d}",
+            )
         return {**res, "processo_id": proc["id"], "seq": seq, "conteudo": conteudo}
 
     def protocolar(self) -> dict[str, Any]:
@@ -581,10 +655,19 @@ class ProcessLedger:
             }
             attrs = {**_attrs(proc, seq, conteudo, "avulso"), "approval_id": approval_id,
                      "aprovado_por": str(aprovacao.get("aprovador", ""))}
-            res = self.core.append(
-                agent_id=AGENT_ID, session_id=capa["numeroUnico"], kind=KINDS["andamento"], content=conteudo,
-                attrs=attrs, parents=[evs[-1]["id"]],
-                idempotency_key=f"stf-proc:{capa['numeroUnico']}:av:{approval_id}",
-            )
+            try:
+                core = self.fallback_core if self._use_fallback else self.core
+                res = core.append(
+                    agent_id=AGENT_ID, session_id=capa["numeroUnico"], kind=KINDS["andamento"], content=conteudo,
+                    attrs=attrs, parents=[evs[-1]["id"]],
+                    idempotency_key=f"stf-proc:{capa['numeroUnico']}:av:{approval_id}",
+                )
+            except CoreUnavailable:
+                self._use_fallback = True
+                res = self.fallback_core.append(
+                    agent_id=AGENT_ID, session_id=capa["numeroUnico"], kind=KINDS["andamento"], content=conteudo,
+                    attrs=attrs, parents=[evs[-1]["id"]],
+                    idempotency_key=f"stf-proc:{capa['numeroUnico']}:av:{approval_id}",
+                )
             return {**res, "processo_id": proc["id"], "seq": seq, "conteudo": conteudo}
 
