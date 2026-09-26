@@ -2538,8 +2538,10 @@ async function executeDemoAttackSilent(attackId) {
   });
   if (res.state) {
     state = res.state;
-    $('#riskValue').textContent = state.risk;
-    $('#upstreamHits').textContent = state.upstream_hits;
+    const rv = $('#riskValue');
+    if (rv) rv.textContent = state.risk;
+    const uh = $('#upstreamHits');
+    if (uh) uh.textContent = state.upstream_hits;
     if (state.equipment_counters) renderEquipmentCounters(state.equipment_counters);
     updateFocusCard(state);
   }

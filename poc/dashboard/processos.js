@@ -725,6 +725,7 @@ async function proximoAndamento() {
     await carregarProcessos();
   } catch (e) {
     toast('Não foi possível tramitar: ' + e.message);
+  } finally {
     if (btn) btn.disabled = false;
   }
 }

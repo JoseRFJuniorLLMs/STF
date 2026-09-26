@@ -24,7 +24,7 @@ import json
 import random
 import re
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, asdict
 from typing import Dict, Any, List, Optional, Tuple
 
 PARSER_VERSION = "zanin-pdf-forensic-parser-v2.0"
@@ -387,7 +387,7 @@ class DocumentParser:
         # Divide texto visível em parágrafos como spans normais
         lines = visible_text.split("\n")
         y_pos = 100.0
-        for idx, line in enumerate(lines):
+        for _idx, line in enumerate(lines):
             if line.strip():
                 spans.append(TextSpan(
                     text=line,

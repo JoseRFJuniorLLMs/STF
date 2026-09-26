@@ -641,8 +641,10 @@
       }
       else if (action.dataset.auditAction === 'event-asof') loadReplay(Number(action.dataset.auditLsn));
     });
-    $('[data-audit-search]').addEventListener('input', renderEvents);
-    $('[data-audit-incident-only]').addEventListener('change', renderEvents);
+    const searchEl = $('[data-audit-search]');
+    if (searchEl) searchEl.addEventListener('input', renderEvents);
+    const incOnlyEl = $('[data-audit-incident-only]');
+    if (incOnlyEl) incOnlyEl.addEventListener('change', renderEvents);
     refresh();
   }
 

@@ -1,4 +1,4 @@
-import pathlib,sys,unittest,threading
+import pathlib,sys,unittest,threading,urllib.error
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 HERE=pathlib.Path(__file__).resolve().parents[1];sys.path.insert(0,str(HERE))
 from heraclitus_adapter import extract_incident_ids,HeraclitusAdapter,STATIC_PATHS
@@ -64,7 +64,7 @@ class AdapterTests(unittest.TestCase):
         thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
         try:
             adapter=HeraclitusAdapter(f"http://127.0.0.1:{server.server_address[1]}")
-            with self.assertRaises(Exception):
+            with self.assertRaises(urllib.error.HTTPError):
                 adapter.get("/sentinel/status")
         finally:
             server.shutdown();server.server_close()

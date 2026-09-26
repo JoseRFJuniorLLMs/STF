@@ -326,16 +326,24 @@
     });
 
     // Modos de visualização
-    $('#btnModeHuman').onclick = () => setViewMode('human');
-    $('#btnModeStructural').onclick = () => setViewMode('structural');
-    $('#btnModeForensic').onclick = () => setViewMode('forensic');
-    $('#btnModeSanitized').onclick = () => setViewMode('sanitized');
+    const btnModeHuman = $('#btnModeHuman');
+    if (btnModeHuman) btnModeHuman.onclick = () => setViewMode('human');
+    const btnModeStructural = $('#btnModeStructural');
+    if (btnModeStructural) btnModeStructural.onclick = () => setViewMode('structural');
+    const btnModeForensic = $('#btnModeForensic');
+    if (btnModeForensic) btnModeForensic.onclick = () => setViewMode('forensic');
+    const btnModeSanitized = $('#btnModeSanitized');
+    if (btnModeSanitized) btnModeSanitized.onclick = () => setViewMode('sanitized');
 
     // Botões de ação
-    $('#btnWhyBlocked').onclick = () => openWhyModal();
-    $('#btnCloseWhyModal').onclick = () => closeWhyModal();
-    $('#btnReexecutar').onclick = () => runPipelineCurrentScenario();
-    $('#btnVerifyBundle').onclick = () => runOfflineVerifier();
+    const btnWhyBlocked = $('#btnWhyBlocked');
+    if (btnWhyBlocked) btnWhyBlocked.onclick = () => openWhyModal();
+    const btnCloseWhyModal = $('#btnCloseWhyModal');
+    if (btnCloseWhyModal) btnCloseWhyModal.onclick = () => closeWhyModal();
+    const btnReexecutar = $('#btnReexecutar');
+    if (btnReexecutar) btnReexecutar.onclick = () => runPipelineCurrentScenario();
+    const btnVerifyBundle = $('#btnVerifyBundle');
+    if (btnVerifyBundle) btnVerifyBundle.onclick = () => runOfflineVerifier();
   }
 
   async function selectIncident(scenId, atkOrigin) {

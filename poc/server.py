@@ -38,9 +38,6 @@ from processos import ProcessLedger
 from zanin_defense import (
     PUBLIC_INCIDENT_FACTS,
     SYNTHETIC_SCENARIOS,
-    DocumentParser,
-    ForensicDetector,
-    DocumentSanitizer,
     DefensePipelineSimulator,
     EvidenceBundleManager,
     TechnicalReportGenerator
@@ -802,7 +799,6 @@ class PocEngine:
     def _append(self, spec: dict[str, Any], incident_id: str | None = None, *, persist: bool = True) -> EvidenceEvent:
         local_lsn = len(self.events) + 1
         prev = self.events[-1].event_hash if self.events else "0" * 64
-        lsn = local_lsn
         hlc = 1_800_000_000_000 + local_lsn
 
         # PERSISTÊNCIA REAL NO HERACLITUSDB (WSL LINUX)
@@ -830,8 +826,6 @@ class PocEngine:
                 ht_res = adapter.record_red_team_event(red_team_payload)
                 if ht_res.get("accepted"):
                     real_lsn = ht_res.get("lsn")
-                    if real_lsn:
-                        lsn = real_lsn
                     heraclitus_record = {
                         "accepted": True,
                         "lsn": real_lsn,
@@ -1392,7 +1386,7 @@ class PocEngine:
             return {
                 "count": len(results),
                 "results": results,
-                "state": self.snapshot(message=f"Bateria completa de 9 ataques ao HeraclitusDB executada com sucesso!")
+                "state": self.snapshot(message="Bateria completa de 9 ataques ao HeraclitusDB executada com sucesso!")
             }
 
     def simulate_attack(self, attack_id: str) -> dict[str, Any]:
@@ -2389,10 +2383,12 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status); self.send_header("Content-Type","application/json; charset=utf-8")
         self.send_header("Content-Length",str(len(raw))); self.send_header("Cache-Control","no-store"); self.end_headers(); self.wfile.write(raw)
     def _read_json_body(self,max_bytes:int=65536)->dict[str,Any]:
-        try: length=int(self.headers.get("Content-Length","0"))
-        except ValueError: raise ValueError("invalid content length")
-        if length<=0 or length>max_bytes: raise ValueError("body size out of bounds")
+        try: length=int(self.headers.get("Content-Length","0") or 0)
+        except ValueError: raise ValueError("invalid content length") from None
+        if length==0: return {}
+        if length<0 or length>max_bytes: raise ValueError("body size out of bounds")
         raw=self.rfile.read(length)
+        if not raw or not raw.strip(): return {}
         value=json.loads(raw.decode("utf-8"))
         if not isinstance(value,dict): raise ValueError("JSON body must be an object")
         return value

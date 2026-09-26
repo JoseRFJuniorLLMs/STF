@@ -2,16 +2,12 @@
 import pathlib
 import sys
 import unittest
-import hashlib
 
 HERE = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(HERE))
 
 from zanin_defense import (
     PUBLIC_INCIDENT_FACTS,
-    SYNTHETIC_SCENARIOS,
-    TextSpan,
-    Finding,
     DocumentParser,
     ForensicDetector,
     DocumentSanitizer,
