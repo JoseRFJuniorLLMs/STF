@@ -28,7 +28,7 @@ import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from heraclitus_core import HeraclitusCore
+from heraclitus_core import CoreUnavailable, HeraclitusCore
 
 GENERATED_BY = "stf_processos"
 AGENT_ID = "stf-poc-processual"
