@@ -24,21 +24,6 @@
     root.innerHTML = `
       <div class="zanin-container">
 
-        <!-- 1. HEADER TÉCNICO -->
-        <header class="zanin-hero">
-          <div class="zanin-hero-kicker">
-            <span>🏛️ SUPREMO TRIBUNAL FEDERAL · SEGURANÇA DE IA</span>
-            <span>•</span>
-            <span>CÂMARA PERICIAL FORENSE HERACLITUSDB</span>
-          </div>
-          <h1 class="zanin-hero-title">Defesa Zanin — Câmara Pericial de Incidentes de IA</h1>
-          <p class="zanin-hero-desc">
-            Esta câmara recebe e pericia tecnicamente os incidentes e tentativas de <em>Indirect Prompt Injection</em>
-            disparados na <strong>Aba 1 (Defesa Cibernética)</strong> ou protocolados nos autos processuais.
-            Mesmo em caso de falha de detecção no scanner (MISS / Zero-Day), o <strong>Heraclitus Policy Gateway</strong>
-            impõe fail-closed irrestrito: o documento não possui autoridade operacional e o efeito nos bancos judiciais é nulo (<strong>upstream_delta = 0</strong>).
-          </p>
-        </header>
 
         <!-- 2. PAINEL DE RECEPÇÃO DE INCIDENTES REGISTRADOS (DA ABA 1 / AUTOS) -->
         <section class="zanin-incidents-hub">
