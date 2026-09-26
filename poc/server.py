@@ -2163,6 +2163,88 @@ class PocEngine:
         }
 
     @locked_method
+    def get_process_attacks(self, proc_id: str) -> list[dict[str, Any]]:
+        attacks = []
+        p_clean = str(proc_id).upper().replace(" ", "").replace("-", "")
+        for ev in self.events:
+            asset = str(ev.asset or "").upper()
+            summary = str(ev.summary or "").upper()
+            details = ev.details or {}
+            stf_id = details.get("stf_attack_id") or ""
+            is_match = False
+
+            if "RE000001" in p_clean:
+                is_match = (
+                    "RE-000001" in asset or "SYNTHETIC/RE-000001" in asset or
+                    stf_id in ("DB_ORA_01", "IA_VIC_01") or
+                    ev.event_type in ("app.case_update_requested", "app.resource_access") or
+                    "RE-000001" in summary
+                )
+            elif "ARE" in p_clean:
+                is_match = stf_id == "IA_ZAN_05" or "ZANIN" in summary or "ARE" in asset or "STEGO" in summary
+            elif "INQ" in p_clean or "HC" in p_clean:
+                is_match = stf_id == "IA_VIT_03" or "VITÓRIA" in summary or "VITORIA" in summary or "SEGREDO DE JUSTIÇA" in summary
+
+            if is_match:
+                attacks.append({
+                    "lsn": ev.lsn,
+                    "event_type": ev.event_type,
+                    "attack_id": stf_id or details.get("attack_id") or f"Passo {getattr(ev, 'step', '—')}",
+                    "title": ev.summary,
+                    "source": ev.source,
+                    "target": ev.asset,
+                    "outcome": ev.outcome,
+                    "upstream_delta": ev.upstream_delta if ev.upstream_delta is not None else 0,
+                    "ts": ev.ts,
+                    "details": details
+                })
+        return attacks
+
+    @locked_method
+    def enrich_process_list(self, lista: dict[str, Any]) -> None:
+        procs = lista.get("processos", [])
+        for p in procs:
+            pid = p.get("id", "")
+            atks = self.get_process_attacks(pid)
+            p["attack_intercepts"] = atks
+            p["has_attack_alert"] = len(atks) > 0
+            if atks:
+                p["last_attack"] = atks[-1]
+
+    @locked_method
+    def enrich_process_detalhe(self, detalhe: dict[str, Any]) -> None:
+        p = detalhe.get("processo", {})
+        pid = p.get("id", "")
+        atks = self.get_process_attacks(pid)
+        detalhe["attack_intercepts"] = atks
+        detalhe["has_attack_alert"] = len(atks) > 0
+
+    @locked_method
+    def get_recent_resilience_threats(self) -> list[dict[str, Any]]:
+        threats = []
+        for ev in self.events:
+            det = ev.details or {}
+            stf_id = det.get("stf_attack_id") or ""
+            is_infra_threat = (
+                ev.event_type.startswith("stf.attack.") or
+                stf_id in ("NET_DDOS_01", "K8S_POD_01", "K8S_ETCD_02", "DB_ORA_01", "NET_FW_02", "STOR_SAN_01") or
+                "DDOS" in str(ev.summary).upper() or "DATABASE" in str(ev.source).upper() or "KUBERNETES" in str(ev.source).upper()
+            )
+            if is_infra_threat:
+                threats.append({
+                    "lsn": ev.lsn,
+                    "attack_id": stf_id or ev.source,
+                    "title": ev.summary,
+                    "equipment": ev.source,
+                    "target": ev.asset,
+                    "outcome": ev.outcome,
+                    "rpo": "0s",
+                    "impact": "NEUTRALIZADO (Fail-Closed)",
+                    "ts": ev.ts
+                })
+        return threats
+
+    @locked_method
     def interop_testar_duplicata(self, ledger: Any) -> dict[str, Any]:
         agora = datetime.now(timezone(timedelta(hours=-3))).isoformat()
         chave = "stf-proc:0000001-44.2026.1.00.0000:000"
@@ -2360,9 +2442,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error":"invalid_as_of"},400)
             try:
                 if path=="/api/processos":
-                    return self._json({"connected":True,"addr":PROCESSOS.core.addr,"as_of_lsn":as_of,**PROCESSOS.listar(as_of)})
+                    lista = PROCESSOS.listar(as_of)
+                    ENGINE.enrich_process_list(lista)
+                    return self._json({"connected":True,"addr":PROCESSOS.core.addr,"as_of_lsn":as_of,**lista})
                 detalhe=PROCESSOS.detalhe(query.get("id",[""])[0],as_of)
                 if detalhe is None: return self._json({"error":"processo_desconhecido"},404)
+                ENGINE.enrich_process_detalhe(detalhe)
                 return self._json({"connected":True,"addr":PROCESSOS.core.addr,**detalhe})
             except Exception as e:
                 body,status=_processos_erro(e)
@@ -2370,6 +2455,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(body,200 if status==503 else status)
         if path=="/api/certidoes":
             return self._json(ENGINE.list_certidoes())
+        if path=="/api/resilience/recent-threats":
+            return self._json({"threats": ENGINE.get_recent_resilience_threats()})
         if path=="/api/interop/remessas":
             return self._json(ENGINE.interop_remessas(PROCESSOS))
         return self._static(path)

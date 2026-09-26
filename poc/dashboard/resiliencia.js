@@ -12,20 +12,23 @@
   }[c]));
 
   let certidoes = [];
+  let threats = [];
   let snapshot = null;
   let processData = null;
   let statusMensagem = 'Monitorando serviços e integridade de ledger em tempo real';
 
   async function carregarDados() {
     try {
-      const [resState, resProc, resCerts] = await Promise.all([
+      const [resState, resProc, resCerts, resThreats] = await Promise.all([
         fetch('api/state', { cache: 'no-store' }).then(r => r.json()).catch(() => null),
         fetch('api/processos', { cache: 'no-store' }).then(r => r.json()).catch(() => null),
-        fetch('api/certidoes', { cache: 'no-store' }).then(r => r.json()).catch(() => [])
+        fetch('api/certidoes', { cache: 'no-store' }).then(r => r.json()).catch(() => []),
+        fetch('api/resilience/recent-threats', { cache: 'no-store' }).then(r => r.json()).catch(() => ({ threats: [] }))
       ]);
       snapshot = resState;
       processData = resProc;
       certidoes = Array.isArray(resCerts) ? resCerts : [];
+      threats = Array.isArray(resThreats?.threats) ? resThreats.threats : [];
       render();
     } catch (e) {
       statusMensagem = `Erro ao carregar telemetria: ${e.message}`;
@@ -33,22 +36,28 @@
     }
   }
 
-  async function emitirCertidaoOficial() {
-    statusMensagem = 'Emitindo certidão oficial no HeraclitusDB com assinatura criptográfica...';
+  async function emitirCertidaoOficial(threat) {
+    const atkId = threat?.attack_id || '';
+    statusMensagem = `Emitindo certidão oficial no HeraclitusDB ${atkId ? 'para o ataque ' + atkId : ''}...`;
     render();
     try {
+      const motivo = atkId
+        ? `Tentativa de degradação/sobrecarga via Ataque ${atkId} (${threat.title || 'Infraestrutura'}). Neutralizado pelo HeraclitusDB com RPO=0s e integridade preservada.`
+        : 'Oscilação controlada de enlace primário e failover automático de gateway com garantia de integridade';
+
       const res = await fetch('api/certidoes/emitir', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-STF-POC': '1' },
         body: JSON.stringify({
-          motivo: 'Oscilação controlada de enlace primário e failover automático de gateway com garantia de integridade',
+          motivo,
+          attack_id: atkId,
           duracao_segundos: 184,
           operador: 'SecOps / SRE Tribunal (STF)'
         })
       }).then(r => r.json());
       if (res.error) throw new Error(res.error);
-      statusMensagem = `Certidão ${res.id} emitida com sucesso e gravada no HeraclitusDB (LSN ${res.lsn}) com hash ${String(res.hash || '').slice(0, 16)}…`;
-      if (typeof toast === 'function') toast(`📜 Certidão ${res.id} gravada no HeraclitusDB (LSN ${res.lsn})`);
+      statusMensagem = `Certidão ${res.id} emitida com sucesso e vinculada ao ataque (LSN ${res.lsn})!`;
+      if (typeof toast === 'function') toast(`📜 Certidão ${res.id} emitida e vinculada ao Ataque ${atkId || 'de infraestrutura'}`);
       await carregarDados();
     } catch (e) {
       statusMensagem = `Erro ao emitir certidão: ${e.message}`;
@@ -126,6 +135,31 @@
             <div class="resil-action-bar">
               <button class="btn small primary" type="button" data-resil-action="emitir">📜 Emitir Certidão Oficial de Indisponibilidade (HeraclitusDB)</button>
             </div>
+
+            ${threats.length ? `
+              <div style="background: #ffffff; border: 1px solid #cbd5e1; border-left: 5px solid #dc2626; border-radius: 8px; padding: 14px; margin-bottom: 14px;">
+                <strong style="font-size: 12.5px; color: #991b1b; text-transform: uppercase; display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+                  <span>🚨</span> Ataques Recentes à Infraestrutura Interceptados (${threats.length})
+                </strong>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                  ${threats.slice(-4).reverse().map(t => `
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px;">
+                      <div>
+                        <strong>${escapeHtml(t.attack_id)}: ${escapeHtml(t.title)}</strong>
+                        <div style="font-size: 11px; color: #64748b; margin-top: 2px;">
+                          Equipamento: <code>${escapeHtml(t.equipment)}</code> • LSN: <code>${escapeHtml(t.lsn)}</code> • RPO Comprovado: <strong style="color: #166534;">0s (Sem Perda)</strong>
+                        </div>
+                      </div>
+                      <div style="display: flex; gap: 6px; flex-shrink: 0;">
+                        <button class="btn tiny ghost" type="button" onclick="goToAttack('${t.attack_id}')">🎯 Ver Ataque</button>
+                        <button class="btn tiny primary" type="button" onclick="emitirCertidaoOficial({attack_id: '${t.attack_id}', title: '${escapeHtml(t.title)}'})">📜 Emitir Certidão</button>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            ` : ''}
+
             <div style="display: flex; flex-direction: column; gap: 10px;">
               ${certidoes.length ? certidoes.map(c => `
                 <div class="resil-certidao-card">
@@ -139,6 +173,7 @@
                   <div class="resil-certidao-body">
                     <strong>Período:</strong> ${escapeHtml(new Date(c.dataHoraInicio).toLocaleTimeString('pt-BR'))} às ${escapeHtml(new Date(c.dataHoraFim).toLocaleTimeString('pt-BR'))} (${escapeHtml(c.duracao)})<br>
                     <strong>Causa técnica:</strong> ${escapeHtml(c.motivo)}<br>
+                    ${c.attack_id ? `<div style="margin: 4px 0;"><span style="background: #fee2e2; color: #991b1b; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; border: 1px solid #fca5a5;">Vinculada ao Ataque: ${escapeHtml(c.attack_id)}</span> <button class="btn tiny ghost" type="button" onclick="goToAttack('${c.attack_id}')" style="margin-left: 6px;">🎯 Ver Ataque</button></div>` : ''}
                     <strong>Efeito legal:</strong> ${escapeHtml(c.prorrogacao)}
                   </div>
                   <div class="resil-certidao-meta">

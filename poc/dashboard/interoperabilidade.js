@@ -144,21 +144,31 @@
                 </tr>
               </thead>
               <tbody>
-                ${remessas.map(r => `
+                ${remessas.map(r => {
+                  const procId = r.processo ? r.processo.replace(' ', '-') : '';
+                  const isDupOrReplay = r.status.includes('DUPLICATA') || r.status.includes('REPLAY');
+                  return `
                   <tr>
                     <td>
                       <strong>${escapeHtml(r.id)}</strong><br>
                       <small style="color: var(--gov-muted);">${escapeHtml(new Date(r.dataHora).toLocaleTimeString('pt-BR'))}</small>
                     </td>
-                    <td><strong>${escapeHtml(r.processo)}</strong></td>
+                    <td>
+                      <strong style="color: #1e3a8a; cursor: pointer; text-decoration: underline;" onclick="goToProcesso('${procId}')" title="Abrir autos do processo na Aba 2">${escapeHtml(r.processo)}</strong>
+                    </td>
                     <td><small>${escapeHtml(r.origem)} ➔ ${escapeHtml(r.destino)}</small></td>
                     <td>
                       <span class="interop-badge ${r.status === 'RECEBIDO' ? 'ok' : 'dup'}">${escapeHtml(r.status)}</span>
+                      ${isDupOrReplay ? `
+                        <div style="margin-top: 4px;">
+                          <button class="btn tiny ghost" type="button" onclick="goToAttack('13')" title="Ver Ataque 13 de Replay na Aba 1">🎯 Ver Ataque 13 (Replay)</button>
+                        </div>
+                      ` : ''}
                       ${r.detalhe ? `<br><small style="color: var(--gov-muted); font-size: 10px;">${escapeHtml(r.detalhe)}</small>` : ''}
                     </td>
                     <td class="mono" style="font-size: 11px;">${escapeHtml(r.idempotenciaChave || '—')}</td>
                   </tr>
-                `).join('')}
+                `;}).join('')}
               </tbody>
             </table>
           </section>

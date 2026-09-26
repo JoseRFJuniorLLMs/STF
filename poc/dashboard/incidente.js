@@ -165,14 +165,28 @@
       const decision = event.details?.policy_decision;
       const reason = event.reason_code ? ` · ${escapeHtml(event.reason_code)}` : '';
       const receipt = event.details?.upstream_receipt;
-      const effect = decision ? `<div class="inc360-event-effect">Gateway: <strong>${clean(decision.outcome || event.outcome)}</strong> · upstream Δ ${event.upstream_delta === null || event.upstream_delta === undefined ? '—' : clean(event.upstream_delta)}${receipt ? ' · recibo local presente' : ''}${reason}</div>` : '';
+      const atkId = event.details?.stf_attack_id || event.details?.heraclitus_attack_id;
+      const attackBadge = atkId ? `<span class="inc360-attack-tag">⚡ ATAQUE ${escapeHtml(atkId)}</span>` : '';
+      const actionBtn = atkId ? `
+        <div style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap;">
+          <button type="button" class="btn tiny ghost" onclick="event.stopPropagation(); goToAttack('${atkId}')">🎯 Localizar Ataque na Aba 1 ➔</button>
+          ${atkId === 'IA_ZAN_05' ? `<button type="button" class="btn tiny primary" onclick="event.stopPropagation(); goToDefesaZanin('IA_ZAN_05')">🏛️ Ver Perícia na Defesa Zanin</button>` : ''}
+        </div>
+      ` : '';
+
       return `<li class="inc360-event">
         <span class="inc360-event-marker" aria-hidden="true"></span>
         <div class="inc360-event-card">
-          <div class="inc360-event-top"><span class="inc360-lsn">LSN ${clean(event.lsn)}</span><span class="inc360-event-source">${clean(event.source)}</span><span class="inc360-badge ${evidence.kind}" title="${escapeHtml(evidence.explanation)}">${evidence.label}</span></div>
+          <div class="inc360-event-top">
+            <span class="inc360-lsn">LSN ${clean(event.lsn)}</span>
+            <span class="inc360-event-source">${clean(event.source)}</span>
+            ${attackBadge}
+            <span class="inc360-badge ${evidence.kind}" title="${escapeHtml(evidence.explanation)}">${evidence.label}</span>
+          </div>
           <strong>${clean(event.summary)}</strong>
           <div class="inc360-event-meta">${clean(event.actor)} → ${clean(event.asset)} · ${clean(event.event_type)} · ${clean(event.outcome)}</div>
           ${effect}
+          ${actionBtn}
         </div>
       </li>`;
     }).join('')}</ol>`;

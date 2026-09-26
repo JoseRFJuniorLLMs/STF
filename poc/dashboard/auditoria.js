@@ -134,13 +134,21 @@
     const total = matching.length;
     matching = matching.slice(-100).reverse();
     $('[data-audit-count]').textContent = total > 100 ? `100 de ${total} eventos` : `${total} eventos`;
-    $('[data-audit-events]').innerHTML = matching.length ? matching.map(ev => `
+    $('[data-audit-events]').innerHTML = matching.length ? matching.map(ev => {
+      const atkId = ev.details?.stf_attack_id || ev.details?.heraclitus_attack_id;
+      return `
       <button type="button" class="audit-event ${selectedLsn === ev.lsn ? 'selected' : ''}" role="option" aria-selected="${selectedLsn === ev.lsn}" data-audit-lsn="${Number(ev.lsn)}">
-        <span class="audit-event-top"><strong>LSN ${Number(ev.lsn)}</strong><span>${shown(ev.source)}</span><em class="audit-outcome">${shown(ev.outcome)}</em></span>
+        <span class="audit-event-top">
+          <strong>LSN ${Number(ev.lsn)}</strong>
+          <span>${shown(ev.source)}</span>
+          ${atkId ? `<span style="background:#1e3a8a;color:#fff;font-size:9.5px;padding:1px 6px;border-radius:3px;font-weight:700;">${shown(atkId)}</span>` : ''}
+          <em class="audit-outcome">${shown(ev.outcome)}</em>
+        </span>
         <span class="audit-event-type">${shown(ev.event_type)}</span>
         <span class="audit-event-summary">${shown(ev.summary)}</span>
         <span class="audit-event-foot">${ev.details?.heraclitus_persisted === true ? 'Recibo HeraclitusDB' : 'Registro da POC'} · ${evidenceLsns.has(ev.lsn) ? 'Citado no incidente' : 'Campanha'}</span>
-      </button>`).join('') : '<p class="audit-empty">Nenhum evento corresponde ao filtro.</p>';
+      </button>`;
+    }).join('') : '<p class="audit-empty">Nenhum evento corresponde ao filtro.</p>';
   }
 
   function renderObject(result, expected) {
@@ -151,6 +159,7 @@
     const ev = result.event;
     const p = result.provenance || {};
     const d = ev.details || {};
+    const atkId = d.stf_attack_id || d.heraclitus_attack_id;
     const raw = d.raw_telemetry;
     const normalized = d.normalized_telemetry;
     const persisted = d.heraclitus_persisted === true;
@@ -164,7 +173,19 @@
         </dl>
         <p>Estes campos são retornados pelo adaptador. A validação de hash abaixo cobre o evento local da POC.</p>
       </div>` : `<div class="audit-receipt neutral"><strong>Sem recibo de aceite no evento</strong><p>${d.heraclitus_error ? `Erro do adaptador: ${shown(d.heraclitus_error)}` : 'Este evento não traz confirmação de persistência no HeraclitusDB.'}</p></div>`;
+
+    const attackBox = atkId ? `
+      <div class="audit-attack-box" style="background:#eff6ff;border:1px solid #93c5fd;border-left:5px solid #2563eb;border-radius:6px;padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <div>
+          <strong style="color:#1e3a8a;font-size:12px;display:block;">🎯 ORIGEM DO ATAQUE: ${shown(atkId)}</strong>
+          <span style="font-size:11px;color:#475569;">Alvo: <code>${shown(ev.asset)}</code> • upstream_delta = ${shown(ev.upstream_delta ?? 0)}</span>
+        </div>
+        <button type="button" class="btn tiny primary" onclick="event.stopPropagation(); goToAttack('${atkId}')">Localizar Ataque na Aba 1 ➔</button>
+      </div>
+    ` : '';
+
     $('[data-audit-detail]').innerHTML = `
+      ${attackBox}
       <div class="audit-detail-title"><span class="audit-kicker">LSN LOCAL ${Number(ev.lsn)}</span><h4>${shown(ev.event_type)}</h4><p>${shown(ev.summary)}</p></div>
       <div class="audit-checks">
         ${check('Conteúdo', p.content_hash_valid)}

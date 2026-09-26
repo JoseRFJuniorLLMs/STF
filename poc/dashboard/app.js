@@ -2273,6 +2273,57 @@ window.goToDefesaZanin = function(attackId) {
   toast(`Auditoria Forense: Inspecionando evidência do ataque ${attackId} na Câmara Defesa Zanin.`);
 };
 
+// NAVEGAÇÃO REVERSA DIRETA PARA O CARD DO ATAQUE (ABA 1)
+window.goToAttack = function(attackId) {
+  if (!attackId) return;
+  if (typeof mostrarView === 'function') {
+    mostrarView('defesa');
+  } else {
+    const tabD = document.getElementById('tabDefesa');
+    if (tabD) tabD.click();
+  }
+
+  setTimeout(() => {
+    let el = document.getElementById(`stf-atk-${attackId}`) ||
+             document.getElementById(`hdb-atk-${attackId}`) ||
+             document.getElementById(`attack-step-${attackId}`);
+
+    if (!el && !isNaN(Number(attackId))) {
+      el = document.getElementById(`attack-step-${attackId}`);
+    }
+
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('attack-card-highlighted');
+      setTimeout(() => el.classList.remove('attack-card-highlighted'), 3500);
+      toast(`🎯 Ataque ${attackId} localizado na Central de Defesa Cibernética`);
+    } else {
+      toast(`Ataque ${attackId} registrado no HeraclitusDB.`);
+    }
+  }, 200);
+};
+
+// NAVEGAÇÃO DIRETA PARA OS AUTOS DO PROCESSO (ABA 2)
+window.goToProcesso = function(processoId) {
+  if (!processoId) return;
+  if (typeof mostrarView === 'function') {
+    mostrarView('processos');
+  } else {
+    const tabP = document.getElementById('tabProcessos');
+    if (tabP) tabP.click();
+  }
+
+  setTimeout(() => {
+    if (typeof window.selecionarProcesso === 'function') {
+      window.selecionarProcesso(processoId);
+    } else {
+      const btn = document.querySelector(`.proc-card[data-id="${processoId}"]`);
+      if (btn) btn.click();
+    }
+    toast(`Navegando para os autos de ${processoId}...`);
+  }, 150);
+};
+
 // EXECUÇÃO DE ATAQUE DA INFRAESTRUTURA INDIVIDUAL
 window.executeStfAttack = async function(attackId) {
   if (running) return;

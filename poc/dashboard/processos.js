@@ -185,10 +185,12 @@ function renderListaProcessos() {
   $('#procList').innerHTML = visiveis.map(p => {
     const ult = p.ultimo_andamento;
     const ativo = p.id === procSelecionado;
+    const hasAttack = Boolean(p.has_attack_alert || (p.attack_intercepts && p.attack_intercepts.length));
     return `
-      <button class="proc-card ${ativo ? 'active' : ''}" role="option" aria-selected="${ativo}" data-id="${esc(p.id)}">
+      <button class="proc-card ${ativo ? 'active' : ''} ${hasAttack ? 'has-attack-threat' : ''}" role="option" aria-selected="${ativo}" data-id="${esc(p.id)}">
         <div class="proc-card-top">
           <strong>${esc(p.capa.numero)}</strong>
+          ${hasAttack ? '<span class="proc-attack-badge">🚨 ATAQUE INTERCEPTADO</span>' : ''}
           ${procNovos.has(p.id) ? '<span class="proc-novo">NOVO</span>' : ''}
           <span class="proc-sit ${esc(p.situacao)}">${esc(PROC_SITUACAO[p.situacao] || p.situacao)}</span>
         </div>
@@ -211,6 +213,7 @@ function selecionarProcesso(id) {
   renderListaProcessos();
   carregarDetalhe();
 }
+window.selecionarProcesso = selecionarProcesso;
 
 async function carregarDetalhe() {
   if (!procSelecionado) return;
@@ -447,6 +450,35 @@ function renderDetalhe() {
   const idxAtual = procAsOf === null ? lsns.length - 1 : Math.max(0, lsns.indexOf(procAsOf));
   const historico = procAsOf !== null;
 
+  const attacks = d.attack_intercepts || p.attack_intercepts || [];
+  const attacksHtml = attacks.length ? `
+    <div class="proc-security-alert-box">
+      <div class="proc-sec-alert-header">
+        <span class="proc-sec-alert-icon">🛡️</span>
+        <div>
+          <strong>Tentativa de Ataque Adversarial Interceptada no HeraclitusDB (${attacks.length})</strong>
+          <small>Autos protegidos contra mutação não autorizada • Decisão do Policy Gateway: DENY • upstream_delta = 0</small>
+        </div>
+      </div>
+      <div class="proc-sec-attacks-list">
+        ${attacks.map(atk => `
+          <div class="proc-sec-attack-item">
+            <div>
+              <strong>${esc(atk.attack_id || 'Ataque')}: ${esc(atk.title || 'Tentativa de alteração não autorizada')}</strong>
+              <div style="font-size: 11px; color: #64748b; margin-top: 2px;">
+                Origem: <code>${esc(atk.source)}</code> • Alvo: <code>${esc(atk.target)}</code> • LSN: <code>${esc(atk.lsn)}</code>
+              </div>
+            </div>
+            <div style="display: flex; gap: 6px;">
+              <button class="btn tiny primary" onclick="event.stopPropagation(); goToAttack('${atk.attack_id}')">🎯 Ver Ataque</button>
+              ${atk.attack_id === 'IA_ZAN_05' ? `<button class="btn tiny ghost" onclick="event.stopPropagation(); goToDefesaZanin('IA_ZAN_05')">🏛️ Ver Perícia</button>` : ''}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  ` : '';
+
   // Linhas acrescentadas desde o último desenho deste processo piscam uma vez.
   const jaVisto = historico ? Infinity : (procLsnRenderizado.get(c.id) ?? Infinity);
   if (!historico && eventos.length) procLsnRenderizado.set(c.id, eventos[eventos.length - 1].lsn);
@@ -477,8 +509,9 @@ function renderDetalhe() {
           ▶ ${p.pendentes > 0 ? 'Próximo andamento' : 'Tramitação concluída'}
         </button>
         <small class="proc-side-note">${p.pendentes > 0 ? `${p.pendentes} passo(s) restantes no roteiro` : 'Sem passos restantes'}</small>
-      </div>
     </div>
+
+    ${attacksHtml}
 
     ${renderProcessTimelineScrubber(d, idxAtual, lsns, historico)}
 
