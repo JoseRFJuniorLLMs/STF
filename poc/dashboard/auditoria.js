@@ -29,8 +29,16 @@
   let replayRequest = 0;
 
   async function readJson(path) {
-    const response = await fetch(path.replace(/^\//, ''), { cache: 'no-store' });
-    const data = await response.json();
+    const response = await fetch(path.replace(/^\//, ''), {
+      headers: { 'X-STF-POC': '1' },
+      cache: 'no-store'
+    });
+    let data;
+    try {
+      data = await response.json();
+    } catch {
+      data = { error: `HTTP ${response.status}` };
+    }
     if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
     return data;
   }

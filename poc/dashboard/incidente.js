@@ -32,20 +32,30 @@
       headers: { 'X-STF-POC': '1' }, cache: 'no-store'
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return response.json();
+    try {
+      return await response.json();
+    } catch {
+      return {};
+    }
   }
 
   async function loadDemo() {
     try {
       if (!demoCatalog.length) {
-        const [stf, hdb, profile] = await Promise.all([getJson('/api/stf-attacks'), getJson('/api/heraclitus-attacks'), getJson('/api/demo-profile')]);
-        demoCatalog = [...(stf.attacks || []), ...(hdb.attacks || [])];
-        demoProfile = profile.weights || demoProfile;
+        const [stf, hdb, profile] = await Promise.all([
+          getJson('/api/stf-attacks').catch(() => ({ attacks: [] })),
+          getJson('/api/heraclitus-attacks').catch(() => ({ attacks: [] })),
+          getJson('/api/demo-profile').catch(() => ({ weights: {} }))
+        ]);
+        demoCatalog = [...(stf?.attacks || []), ...(hdb?.attacks || [])];
+        demoProfile = profile?.weights || demoProfile;
       }
-      const ledger = await getJson('/api/heraclitus-events?limit=1000');
-      if (ledger.status === 'PASS') {
-        demoEvents = (ledger.data?.events || []).filter(event => event.campaign_id === 'STF-DEMO-SIMULATION');
-      }
+      try {
+        const ledger = await getJson('/api/heraclitus-events?limit=1000');
+        if (ledger && ledger.status === 'PASS') {
+          demoEvents = (ledger.data?.events || []).filter(event => event.campaign_id === 'STF-DEMO-SIMULATION');
+        }
+      } catch (_) {}
       if (!demoEvents.length && snapshot?.events) {
         demoEvents = snapshot.events.filter(e => e.simulation || String(e.type || '').startsWith('demo.')).map(e => ({
           attack_id: e.details?.attack_id || (e.type ? e.type.replace('demo.attack.', 'demo-') : 'demo-atk'),

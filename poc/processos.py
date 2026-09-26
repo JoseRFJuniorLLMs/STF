@@ -629,6 +629,10 @@ class ProcessLedger:
             raise KeyError(processo_id)
         if codigo not in TPU:
             raise ValueError(f"código TPU não catalogado: {codigo}")
+        if isinstance(aprovacao, str):
+            aprovacao = {"approval_id": aprovacao}
+        elif not isinstance(aprovacao, dict):
+            aprovacao = {}
         approval_id = str(aprovacao.get("approval_id", ""))
         if not re.fullmatch(r"[A-Za-z0-9-]{4,40}", approval_id):
             raise ValueError("approval_id inválido")

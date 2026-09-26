@@ -1946,7 +1946,7 @@ class PocEngine:
                 approval_state="PENDING"
             elif e.event_type=="approval.granted":
                 approval_state="APPROVED"
-            elif e.details.get("policy_decision",{}).get("effect_allowed"):
+            elif isinstance(e.details, dict) and isinstance(e.details.get("policy_decision"), dict) and e.details["policy_decision"].get("effect_allowed"):
                 approval_state="CONSUMED"
         return {
             "as_of_lsn":lsn,"event_count":len(events),"risk":risk,
@@ -1954,7 +1954,7 @@ class PocEngine:
             "tamper_status":tamper,"approval_state":approval_state,
             "case_state":{
                 "id":SYNTHETIC_CASE,"classification":"RESTRICTED",
-                "last_effect":receipts[-1]["effect_kind"] if receipts else "NONE",
+                "last_effect":receipts[-1].get("effect_kind","NONE") if receipts else "NONE",
             },
             "merkle_root":merkle_root([e.event_hash for e in events]),
             "events":[asdict(e) for e in events],
@@ -2000,16 +2000,16 @@ class PocEngine:
                 "risk":right["risk"]-left["risk"],
                 "upstream_hits":right["upstream_hits"]-left["upstream_hits"],
                 "incident":incident_state(left)+" -> "+incident_state(right),
-                "approval":left["approval_state"]+" -> "+right["approval_state"],
-                "tamper":left["tamper_status"]+" -> "+right["tamper_status"],
-                "case_effect":left["case_state"]["last_effect"]+" -> "+right["case_state"]["last_effect"],
+                "approval":str(left.get("approval_state","NONE"))+" -> "+str(right.get("approval_state","NONE")),
+                "tamper":str(left.get("tamper_status","NONE"))+" -> "+str(right.get("tamper_status","NONE")),
+                "case_effect":str((left.get("case_state") or {}).get("last_effect","NONE"))+" -> "+str((right.get("case_state") or {}).get("last_effect","NONE")),
             },
         }
 
     @locked_method
     def incident_report(self)->dict[str,Any]:
         why=self.why_incident()
-        policy_events=[e for e in self.events if e.details.get("policy_decision")]
+        policy_events=[e for e in self.events if isinstance(e.details, dict) and e.details.get("policy_decision")]
         reasons={e.reason_code for e in policy_events}
         return {
             "title":"Relatório Sintético de Incidente — STF POC","campaign_id":CAMPAIGN_ID,
@@ -2366,7 +2366,7 @@ class PocEngine:
             "detalhe": "Tribunal parceiro reenviou o lote por timeout de rede. HeraclitusDB identificou a chave de idempotência e retornou deduplicated=true sem criar duplicata nos autos."
         }
 
-ENGINE=PocEngine()
+ENGINE=PocEngine(heraclitus_url=os.environ.get("HERACLITUS_URL","http://127.0.0.1:8080"))
 # Log processual: núcleo gRPC da MESMA instância do laboratório que serve o
 # Agent Black Box (8080). Nunca a instância 7474, que é a memória do Claude.
 PROCESSOS=ProcessLedger(HeraclitusCore(os.environ.get("HERACLITUS_CORE_ADDR","127.0.0.1:17474")))
@@ -2666,8 +2666,7 @@ class Handler(BaseHTTPRequestHandler):
         if path=="/api/reset": ENGINE.reset(); return self._json(ENGINE.snapshot("Ambiente reiniciado"))
         if path=="/api/zanin/run-pipeline":
             try:
-                cl = int(self.headers.get("content-length", "0") or 0)
-                body = self._read_json_body() if cl > 0 else {}
+                body = self._read_json_body()
                 scen_id = body.get("scenario_id") or "dynamic_fuzzer"
                 custom_text = body.get("custom_text")
                 pipe = DefensePipelineSimulator.run_pipeline(scen_id, custom_text=custom_text, custom_params=body)
@@ -2715,8 +2714,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if path=="/api/zanin/verify-bundle":
             try:
-                cl = int(self.headers.get("content-length", "0") or 0)
-                body = self._read_json_body() if cl > 0 else {}
+                body = self._read_json_body()
                 bundle = body.get("bundle")
                 if not bundle:
                     pipe = DefensePipelineSimulator.run_pipeline("scenario_zanin_stego")
@@ -2728,8 +2726,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if path in ("/api/zanin/inspect", "/api/zanin/replicate-attack"):
             try:
-                cl = int(self.headers.get("content-length", "0") or 0)
-                body = self._read_json_body() if cl > 0 else {}
+                body = self._read_json_body()
                 scen_id = body.get("scenario_id") or "scenario_zanin_stego"
                 pipe = DefensePipelineSimulator.run_pipeline(scen_id)
                 bundle = EvidenceBundleManager.build_bundle(pipe)
@@ -2771,7 +2768,7 @@ class Handler(BaseHTTPRequestHandler):
         if path in ("/api/processos/protocolar","/api/processos/tramitar"):
             try:
                 if path=="/api/processos/protocolar": return self._json({"connected":True,**PROCESSOS.protocolar()})
-                body=self._read_json_body() if int(self.headers.get("Content-Length","0") or 0) else {}
+                body=self._read_json_body()
                 processo_id=body.get("id")
                 if processo_id is not None and not isinstance(processo_id,str): raise ValueError("id must be a string")
                 res=PROCESSOS.tramitar(processo_id)
@@ -2782,7 +2779,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(body,status)
         if path=="/api/certidoes/emitir":
             try:
-                body=self._read_json_body() if int(self.headers.get("Content-Length","0") or 0) else {}
+                body=self._read_json_body()
                 motivo=body.get("motivo","")
                 duracao=body.get("duracao_segundos",184)
                 operador=body.get("operador","SecOps / SRE Tribunal (STF)")
@@ -2797,11 +2794,21 @@ class Handler(BaseHTTPRequestHandler):
         if path=="/api/processos/avulso":
             try:
                 body=self._read_json_body()
-                processo_id=body.get("processo_id") or body.get("id")
-                codigo_tpu=int(body.get("codigo_tpu",11383))
+                processo_id=str(body.get("processo_id") or body.get("id") or "").strip()
+                if not processo_id:
+                    raise ValueError("id do processo é obrigatório")
+                try:
+                    codigo_tpu=int(body.get("codigo_tpu") or 11383)
+                except (ValueError, TypeError):
+                    codigo_tpu=11383
                 complemento=str(body.get("complemento","Praticado ato ordinatório")).strip()
                 approval_id=str(body.get("approval_id","HITL-APROVACAO")).strip()
-                res=PROCESSOS.acrescentar_avulso(processo_id,codigo_tpu,complemento,approval_id)
+                res=PROCESSOS.acrescentar_avulso(
+                    processo_id,
+                    codigo_tpu,
+                    complemento,
+                    {"approval_id": approval_id, "aprovador": str(body.get("aprovador", "operador-stf")).strip()},
+                )
                 return self._json({"connected":True,**res},200)
             except Exception as e:
                 body_err,status_code=_processos_erro(e)
