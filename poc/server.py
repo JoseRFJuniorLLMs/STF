@@ -662,14 +662,14 @@ class PocEngine:
         self.reset()
 
     def connect_heraclitus(self, url: str = "http://127.0.0.1:8080") -> bool:
+        self.heraclitus_url = url
+        self.adapter = HeraclitusAdapter(url)
         try:
-            self.heraclitus_url = url
-            self.adapter = HeraclitusAdapter(url)
             _ = self.adapter.get("/api/v1/agent/status")
             print(f"[STF-POC] Conectado com sucesso ao HeraclitusDB real: {url}")
             return True
         except Exception as e:
-            self.adapter = None
+            print(f"[STF-POC WARN] HeraclitusDB na porta 8080 não respondeu ({e}); operando com fallback resiliente.")
             return False
 
     @property
