@@ -735,17 +735,34 @@ function alternarTramitacaoAutomatica(ligar) {
   if (!ligar) return;
   const passo = async () => {
     try {
-      await procPost('/api/processos/tramitar');
+      const body = {};
+      if (procSelecionado && procDetalhe && procDetalhe.processo && procDetalhe.processo.pendentes > 0) {
+        body.id = procSelecionado;
+      }
+      let res;
+      try {
+        res = await procPost('/api/processos/tramitar', body);
+      } catch (err) {
+        if (body.id && err.status === 409) {
+          res = await procPost('/api/processos/tramitar', {});
+        } else {
+          throw err;
+        }
+      }
+      if (res && res.processo_id) {
+        procUltimoLsnVisto.set(res.processo_id, res.lsn);
+      }
       await carregarProcessos();
+      await carregarDetalhe();
     } catch (e) {
-      // 409 = nenhum processo com passos restantes: o roteiro acabou.
-      $('#procAutoToggle').checked = false;
-      alternarTramitacaoAutomatica(false);
-      toast(e.status === 409 ? 'Tramitação automática concluída: todos os roteiros chegaram ao fim.' : 'Tramitação automática parada: ' + e.message);
+      console.warn('Tramitação automática:', e.message);
+      if (e.status !== 409) {
+        toast('Tramitação automática aguardando: ' + e.message);
+      }
     }
   };
   passo();
-  procAutoTimer = setInterval(passo, 6000);
+  procAutoTimer = setInterval(passo, 2800);
 }
 
 // ------------------------------------------------------------------ eventos

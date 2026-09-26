@@ -82,11 +82,7 @@
         <div class="audit-lower-grid">
           <section class="audit-box audit-replay-box" aria-label="Replay AS OF LSN">
             <div class="audit-box-head"><div><h3>Estado AS OF LSN</h3><p>Replay local da campanha após o LSN escolhido; não é uma consulta histórica ao banco.</p></div></div>
-            <div class="audit-replay-control">
-              <label for="auditAsOfRange">LSN <strong data-audit-asof-label>0</strong></label>
-              <input id="auditAsOfRange" type="range" min="0" max="0" value="0" data-audit-asof />
-              <button type="button" class="btn small ghost" data-audit-action="latest">Mais recente</button>
-            </div>
+            <div id="auditTimelineMount"></div>
             <div data-audit-replay class="audit-replay"><p class="audit-empty">Carregando replay…</p></div>
           </section>
           <section class="audit-box audit-package-box" aria-label="Pacote de evidências">
@@ -298,18 +294,298 @@
       <div class="audit-recent"><strong>Últimos eventos visíveis nesse ponto</strong>${recent.length ? recent.map(ev => `<div><span>LSN ${Number(ev.lsn)}</span><span>${shown(ev.event_type)}</span><em>${shown(ev.outcome)}</em></div>`).join('') : '<p class="audit-empty">Ainda não havia eventos.</p>'}</div>`;
   }
 
+  function formatAuditDate(ev, idx) {
+    if (ev.details?.raw_telemetry?.timestamp) {
+      try {
+        const dt = new Date(ev.details.raw_telemetry.timestamp);
+        if (!isNaN(dt.getTime())) return dt.toLocaleString('pt-BR');
+      } catch (_) {}
+    }
+    if (ev.hlc) {
+      try {
+        const ms = Number(BigInt(ev.hlc) >> 16n);
+        if (ms > 1600000000000) return new Date(ms).toLocaleString('pt-BR');
+      } catch (_) {}
+    }
+    if (ev.ts) {
+      try {
+        const dt = new Date(ev.ts);
+        if (!isNaN(dt.getTime())) return dt.toLocaleString('pt-BR');
+      } catch (_) {}
+    }
+    return `Evento #${idx + 1}`;
+  }
+
+  function getAuditSteps(all) {
+    return all.map((ev, i) => {
+      const dh = formatAuditDate(ev, i);
+      const title = ev.summary || ev.event_type || `Evento ${i + 1}`;
+      return {
+        lsn: Number(ev.lsn),
+        dataHora: dh,
+        title: title,
+        source: ev.source || 'POC',
+        outcome: ev.outcome || 'PASS',
+        seq: i
+      };
+    });
+  }
+
+  function renderAuditTimeline() {
+    const mount = $('#auditTimelineMount');
+    if (!mount) return;
+    const all = events();
+    const totalSteps = all.length;
+    if (totalSteps === 0) {
+      mount.innerHTML = '<div class="proc-empty">Nenhum evento registrado para reconstituição temporal.</div>';
+      return;
+    }
+    const passos = getAuditSteps(all);
+    const lsns = all.map(e => Number(e.lsn));
+    const historico = asOfLsn !== null && asOfLsn < totalSteps;
+    const idxAtual = historico
+      ? Math.max(0, all.findIndex(e => Number(e.lsn) === asOfLsn))
+      : totalSteps - 1;
+    const currentStep = passos[idxAtual] || passos[totalSteps - 1] || {};
+    const progressPct = totalSteps > 1 ? (idxAtual / (totalSteps - 1)) * 100 : 100;
+
+    const dotsHtml = passos.map((p, i) => {
+      const dotPct = totalSteps > 1 ? (i / (totalSteps - 1)) * 100 : 0;
+      let statusClass = 'future';
+      if (i < idxAtual) statusClass = 'passed';
+      else if (i === idxAtual) statusClass = 'current';
+
+      return `
+        <div class="scrubber-dot ${statusClass}"
+          style="left: ${dotPct}%;"
+          data-index="${i}"
+          data-lsn="${p.lsn}"
+          data-date="${escapeHtml(p.dataHora)}"
+          data-title="${escapeHtml(p.title)}"
+          data-seq="${i + 1}"
+          role="button"
+          tabindex="0"
+          aria-label="Ir para evento ${i + 1}: ${escapeHtml(p.title)} (${escapeHtml(p.dataHora)})">
+          <span class="dot-core"></span>
+        </div>
+      `;
+    }).join('');
+
+    mount.innerHTML = `
+      <div class="proc-timeline-scrubber ${historico ? 'historical-active' : ''}" id="auditTimelineScrubber">
+        <div class="scrubber-header">
+          <div class="scrubber-title-wrap">
+            <span class="scrubber-icon">⏱️</span>
+            <div class="scrubber-titles">
+              <strong>Linha do Tempo Criptográfica</strong>
+              <small>Reconstrução Temporal AS OF LSN • Imutabilidade HeraclitusDB</small>
+            </div>
+          </div>
+
+          <div class="scrubber-header-actions">
+            <div class="scrubber-status-badge ${historico ? 'is-historical' : 'is-current'}">
+              <span class="status-dot"></span>
+              <span id="auditAsOfLabel" class="status-text mono">
+                ${historico ? `AS OF LSN ${asOfLsn} · Passo ${idxAtual + 1} de ${totalSteps}` : `Estado Atual · LSN ${lsns[totalSteps - 1] ?? '—'}`}
+              </span>
+            </div>
+            <button class="btn tiny ghost scrubber-reset-btn" id="auditAsOfNow" data-audit-action="latest" ${historico ? '' : 'disabled'} title="Restaurar visualização para o momento atual">
+              ↺ Voltar ao atual
+            </button>
+          </div>
+        </div>
+
+        <div class="scrubber-track-container" id="auditTrackContainer">
+          <!-- Floating Tooltip (Grok / Google Fotos) -->
+          <div class="scrubber-floating-tooltip" id="auditScrubberTooltip">
+            <div class="st-date"><span id="auditStDateText">—</span></div>
+            <div class="st-title" id="auditStTitleText">—</div>
+            <div class="st-meta">LSN <span id="auditStLsnText">—</span> • Passo <span id="auditStStepText">—</span> de ${totalSteps}</div>
+            <div class="st-arrow"></div>
+          </div>
+
+          <div class="scrubber-track-rail">
+            <div class="scrubber-track-progress" id="auditTrackProgress" style="width: ${progressPct}%;"></div>
+          </div>
+
+          <div class="scrubber-dots-layer" id="auditDotsLayer">
+            ${dotsHtml}
+          </div>
+
+          <div class="scrubber-thumb" id="auditScrubberThumb" style="left: ${progressPct}%;">
+            <div class="scrubber-thumb-handle"></div>
+            <div class="scrubber-thumb-ring"></div>
+          </div>
+
+          <input type="range" class="scrubber-range-overlay" id="auditAsOfRange"
+            min="0" max="${Math.max(0, totalSteps - 1)}" value="${idxAtual}"
+            ${totalSteps < 2 ? 'disabled' : ''} aria-label="Reconstruir estado da auditoria ao longo do tempo" />
+        </div>
+
+        <div class="scrubber-footer">
+          <button class="btn tiny ghost" id="auditStepPrev" ${idxAtual <= 0 ? 'disabled' : ''} title="Retroceder um evento">◀ Anterior</button>
+          <div class="scrubber-current-info" id="auditCurrentInfo">
+            <span class="sci-date" id="auditSciDateText">${escapeHtml(currentStep.dataHora || '—')}</span>
+            <span class="sci-sep">•</span>
+            <span class="sci-name" id="auditSciNameText">${escapeHtml(currentStep.title || 'Evento')}</span>
+          </div>
+          <button class="btn tiny ghost" id="auditStepNext" ${idxAtual >= totalSteps - 1 ? 'disabled' : ''} title="Avançar um evento">Próximo ▶</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function setupAuditTimelineEvents() {
+    const mount = $('#auditTimelineMount');
+    if (!mount) return;
+
+    mount.addEventListener('click', e => {
+      if (e.target.closest('#auditAsOfNow')) {
+        asOfLsn = null;
+        loadReplay(events().length);
+        return;
+      }
+      if (e.target.closest('#auditStepPrev')) {
+        const all = events();
+        if (!all.length) return;
+        const historico = asOfLsn !== null && asOfLsn < all.length;
+        const curIdx = historico ? Math.max(0, all.findIndex(ev => Number(ev.lsn) === asOfLsn)) : all.length - 1;
+        if (curIdx > 0) {
+          const prevLsn = Number(all[curIdx - 1].lsn);
+          loadReplay(prevLsn);
+        }
+        return;
+      }
+      if (e.target.closest('#auditStepNext')) {
+        const all = events();
+        if (!all.length) return;
+        const historico = asOfLsn !== null && asOfLsn < all.length;
+        const curIdx = historico ? Math.max(0, all.findIndex(ev => Number(ev.lsn) === asOfLsn)) : all.length - 1;
+        if (curIdx < all.length - 1) {
+          const nextLsn = Number(all[curIdx + 1].lsn);
+          loadReplay(nextLsn);
+        }
+        return;
+      }
+      const dot = e.target.closest('.scrubber-dot');
+      if (dot) {
+        const lsn = Number(dot.dataset.lsn);
+        loadReplay(lsn);
+        return;
+      }
+    });
+
+    mount.addEventListener('input', e => {
+      if (e.target.id !== 'auditAsOfRange') return;
+      const all = events();
+      const totalSteps = all.length;
+      if (!totalSteps) return;
+      const i = Number(e.target.value);
+      const pct = totalSteps > 1 ? (i / (totalSteps - 1)) * 100 : 100;
+      const passos = getAuditSteps(all);
+      const step = passos[i] || {};
+
+      const progress = $('#auditTrackProgress');
+      if (progress) progress.style.width = `${pct}%`;
+      const thumb = $('#auditScrubberThumb');
+      if (thumb) thumb.style.left = `${pct}%`;
+
+      const dots = mount.querySelectorAll('.scrubber-dot');
+      dots.forEach((d, idx) => {
+        d.classList.remove('passed', 'current', 'future');
+        if (idx < i) d.classList.add('passed');
+        else if (idx === i) d.classList.add('current');
+        else d.classList.add('future');
+      });
+
+      const lbl = $('#auditAsOfLabel');
+      if (lbl) {
+        lbl.textContent = i === totalSteps - 1
+          ? `Estado Atual · LSN ${all[i]?.lsn ?? totalSteps}`
+          : `AS OF LSN ${all[i]?.lsn} · Passo ${i + 1} de ${totalSteps}`;
+      }
+
+      const dtText = $('#auditSciDateText');
+      if (dtText && step.dataHora) dtText.textContent = step.dataHora;
+      const nmText = $('#auditSciNameText');
+      if (nmText && step.title) nmText.textContent = step.title;
+
+      const tt = $('#auditScrubberTooltip');
+      if (tt) {
+        const dtEl = $('#auditStDateText');
+        if (dtEl) dtEl.textContent = step.dataHora ? `📅 ${step.dataHora}` : `Passo ${i + 1}`;
+        const tiEl = $('#auditStTitleText');
+        if (tiEl) tiEl.textContent = step.title || 'Evento';
+        const lsnEl = $('#auditStLsnText');
+        if (lsnEl) lsnEl.textContent = all[i]?.lsn ?? '—';
+        const stEl = $('#auditStStepText');
+        if (stEl) stEl.textContent = i + 1;
+        tt.style.left = `${pct}%`;
+        tt.classList.add('show');
+      }
+    });
+
+    mount.addEventListener('change', e => {
+      if (e.target.id !== 'auditAsOfRange') return;
+      const all = events();
+      const i = Number(e.target.value);
+      if (all[i]) {
+        loadReplay(i === all.length - 1 ? all.length : Number(all[i].lsn));
+      }
+      const tt = $('#auditScrubberTooltip');
+      if (tt) tt.classList.remove('show');
+    });
+
+    mount.addEventListener('mousemove', e => {
+      const track = e.target.closest('#auditTrackContainer');
+      if (!track) return;
+      const all = events();
+      if (!all.length) return;
+      const passos = getAuditSteps(all);
+
+      const rect = track.getBoundingClientRect();
+      const mouseX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+      const pct = rect.width > 0 ? (mouseX / rect.width) : 0;
+      const closestIdx = Math.max(0, Math.min(Math.round(pct * (all.length - 1)), all.length - 1));
+      const step = passos[closestIdx] || {};
+
+      const tt = $('#auditScrubberTooltip');
+      if (tt) {
+        const dtEl = $('#auditStDateText');
+        if (dtEl) dtEl.textContent = step.dataHora ? `📅 ${step.dataHora}` : `Passo ${closestIdx + 1}`;
+        const tiEl = $('#auditStTitleText');
+        if (tiEl) tiEl.textContent = step.title || 'Evento';
+        const lsnEl = $('#auditStLsnText');
+        if (lsnEl) lsnEl.textContent = all[closestIdx]?.lsn ?? '—';
+        const stEl = $('#auditStStepText');
+        if (stEl) stEl.textContent = closestIdx + 1;
+        const dotPct = all.length > 1 ? (closestIdx / (all.length - 1)) * 100 : 50;
+        tt.style.left = `${dotPct}%`;
+        tt.classList.add('show');
+      }
+    });
+
+    mount.addEventListener('mouseleave', () => {
+      const tt = $('#auditScrubberTooltip');
+      if (tt) tt.classList.remove('show');
+    }, true);
+  }
+
   async function loadReplay(lsn) {
     if (!snapshot) return;
-    const maximum = events().length;
-    asOfLsn = Math.max(0, Math.min(maximum, Number(lsn) || 0));
-    const slider = $('[data-audit-asof]');
-    slider.max = String(maximum);
-    slider.value = String(asOfLsn);
-    $('[data-audit-asof-label]').textContent = String(asOfLsn);
+    const all = events();
+    const maximum = all.length;
+    if (lsn === null || lsn === undefined || Number(lsn) >= maximum) {
+      asOfLsn = null;
+    } else {
+      asOfLsn = Math.max(0, Math.min(maximum, Number(lsn) || 0));
+    }
+    renderAuditTimeline();
     $('[data-audit-replay]').innerHTML = '<p class="audit-empty">Reconstituindo estado…</p>';
     const request = ++replayRequest;
     try {
-      const result = await readJson(`/api/asof?lsn=${asOfLsn}`);
+      const queryLsn = asOfLsn === null ? maximum : asOfLsn;
+      const result = await readJson(`/api/asof?lsn=${queryLsn}`);
       if (request !== replayRequest) return;
       renderReplay(result);
     } catch (error) {
@@ -349,6 +625,7 @@
     if (initialized) return;
     initialized = true;
     markup();
+    setupAuditTimelineEvents();
     root.addEventListener('click', event => {
       const item = event.target.closest('[data-audit-lsn][role="option"]');
       if (item) {
@@ -358,15 +635,14 @@
       const action = event.target.closest('[data-audit-action]');
       if (!action) return;
       if (action.dataset.auditAction === 'refresh') refresh();
-      else if (action.dataset.auditAction === 'latest') loadReplay(events().length);
+      else if (action.dataset.auditAction === 'latest') {
+        asOfLsn = null;
+        loadReplay(events().length);
+      }
       else if (action.dataset.auditAction === 'event-asof') loadReplay(Number(action.dataset.auditLsn));
     });
     $('[data-audit-search]').addEventListener('input', renderEvents);
     $('[data-audit-incident-only]').addEventListener('change', renderEvents);
-    $('[data-audit-asof]').addEventListener('input', event => {
-      $('[data-audit-asof-label]').textContent = event.target.value;
-    });
-    $('[data-audit-asof]').addEventListener('change', event => loadReplay(Number(event.target.value)));
     refresh();
   }
 

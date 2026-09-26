@@ -330,7 +330,11 @@
   async function dispararCorrelacao() {
     try {
       if (typeof toast === 'function') toast('⚡ Disparando sinais de correlação para o HeraclitusDB...');
-      await fetch('api/run', { method: 'POST', headers: { 'X-STF-POC': '1' } });
+      if (typeof api === 'function') {
+        await api('/api/run', { method: 'POST' });
+      } else {
+        await fetch('api/run', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-STF-POC': '1' } });
+      }
       await refreshIncidente360();
       if (typeof toast === 'function') toast('🚨 Incidente correlacionado e registrado no HeraclitusDB!');
     } catch (e) {

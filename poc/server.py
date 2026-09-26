@@ -1263,12 +1263,12 @@ class PocEngine:
 
     def run_all(self) -> dict[str, Any]:
         with self.lock:
-            if self.execution_mode=="API_LAB":
-                return self.snapshot(message="Modo API Lab ativo; reinicie antes de executar a campanha roteirizada")
+            if self.step_index >= len(self._scenario):
+                self.reset()
             self.execution_mode="SCRIPTED"
             while self.step_index < len(self._scenario):
                 self.step()
-            return self.snapshot(message="Campanha completa executada")
+            return self.snapshot(message="Campanha completa executada e incidente 360 correlacionado")
 
     def execute_heraclitus_attack(self, attack_id: str) -> dict[str, Any]:
         with self.lock:
@@ -1506,6 +1506,15 @@ class PocEngine:
                 details["heraclitus_persisted"] = True
             if real_lsn:
                 details["heraclitus_lsn"] = real_lsn
+            policy_dec = {
+                "action": f"attack_execution:{atk['id']}",
+                "outcome": outcome,
+                "reason_code": reason_code,
+                "effect_allowed": False,
+                "requires_human": outcome == "REQUIRE_HITL",
+                "upstream_delta": 0,
+            }
+            details["policy_decision"] = policy_dec
             ev_spec = {
                 "phase": atk["phase"],
                 "source": atk["equipment"],
@@ -1519,7 +1528,63 @@ class PocEngine:
                 "upstream": 0,
                 "details": details,
             }
-            ev = self._append(ev_spec, persist=False)
+            incident_id = self.incident.get("incident_id") if self.incident else INCIDENT_ID
+            ev = self._append(ev_spec, incident_id=incident_id, persist=False)
+
+            # SINAL FORMAL DE SEGURANÇA E CORRELAÇÃO DE INCIDENTE
+            sig_id = f"SIG-{len(self.signals)+1:03d}"
+            rule_id = f"RULE-{atk['id']}"
+            score = 95 if atk.get("risk") == "CRÍTICO" else 85
+            entities = [f"asset:{atk['target']}", f"equipment:{atk['equipment_id']}", "actor:ai-attacker-synthetic", f"source:{atk['equipment']}"]
+            sig = {
+                "signal_id": sig_id,
+                "lsn": ev.lsn,
+                "hlc": ev.hlc,
+                "source": atk["equipment"],
+                "source_class": atk["equipment_id"].upper(),
+                "severity": "CRITICAL" if atk.get("risk") == "CRÍTICO" else "HIGH",
+                "reason_code": reason_code,
+                "rule_id": rule_id,
+                "rule_explanation": f"Detecção de intrusão adversarial direcionada a {atk['target']}: {atk['title']}",
+                "score": score,
+                "actor": "ai-attacker-synthetic",
+                "asset": atk["target"],
+                "entities": entities,
+                "campaign_id": CAMPAIGN_ID,
+                "evidence_hash": ev.event_hash,
+            }
+            self.signals.append(sig)
+
+            # Atualiza ou abre o incidente
+            if not self.incident:
+                self.incident = {
+                    "incident_id": INCIDENT_ID,
+                    "campaign_id": CAMPAIGN_ID,
+                    "state": "OPEN",
+                    "severity": "CRITICAL",
+                    "risk_score": score,
+                    "principal": "ai-attacker-synthetic",
+                    "summary": f"Campanha adversarial multi-vetor detectada contra a infraestrutura do STF ({len(self.signals)} sinais correlacionados)",
+                    "policy_tags": ["COMPROMISE_ATTEMPT", "FAIL_CLOSED_ENFORCED", "HERACLITUS_POLICY_GATEWAY"],
+                    "evidence_lsns": [s["lsn"] for s in self.signals],
+                    "correlation": {
+                        "qualifies": True,
+                        "score": score,
+                        "signal_ids": [s["signal_id"] for s in self.signals],
+                        "entities": list({e for s in self.signals for e in s.get("entities", [])}),
+                        "lsns": [s["lsn"] for s in self.signals],
+                    },
+                    "correlation_explanation": f"Correlação temporal e multi-fonte de {len(self.signals)} eventos adversariais interceptados pelo HeraclitusDB."
+                }
+            else:
+                self.incident["risk_score"] = max(self.incident.get("risk_score", 0), score)
+                self.incident["evidence_lsns"] = [s["lsn"] for s in self.signals]
+                corr = self.incident.setdefault("correlation", {})
+                corr["signal_ids"] = [s["signal_id"] for s in self.signals]
+                corr["lsns"] = [s["lsn"] for s in self.signals]
+                self.incident["summary"] = f"Campanha adversarial multi-vetor detectada contra a infraestrutura do STF ({len(self.signals)} sinais correlacionados)"
+            self.risk = max(self.risk, score)
+
             self._add_graph(ev)
             self.last_action = f"Ataque contra {atk['equipment']}: {atk['title']} (LSN {ev.lsn})"
 
@@ -2736,6 +2801,10 @@ def main()->None:
         PROCESSOS.core=HeraclitusCore(args.heraclitus_core)
     if args.heraclitus:
         ENGINE.connect_heraclitus(args.heraclitus)
+    try:
+        ENGINE.run_all()
+    except Exception as e:
+        print(f"[STF-POC WARN] Falha ao rodar campanha inicial: {e}")
     server=ThreadingHTTPServer((args.host,args.port),Handler)
     print(f"STF POC dashboard: http://{args.host}:{args.port}")
     if getattr(ENGINE, "adapter", None):

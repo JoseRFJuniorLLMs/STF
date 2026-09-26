@@ -296,8 +296,24 @@ def _data_roteiro(proc: dict[str, Any], passo: dict[str, Any], seq: int) -> date
     return base + timedelta(days=passo["dia"], minutes=seq * 7)
 
 
+CONTINUOUS_PASSOS = [
+    {"tipo": "andamento", "codigo": 11383, "complemento": "Certidão de intimação eletrônica expedida", "orgao": "Secretaria Judiciária"},
+    {"tipo": "andamento", "codigo": 85, "complemento": "Juntada de manifestação aos autos", "orgao": "Gabinete"},
+    {"tipo": "andamento", "codigo": 51, "complemento": "Conclusos ao(à) Relator(a)", "orgao": None},
+    {"tipo": "andamento", "codigo": 12105, "complemento": "Inclusão em pauta de sessão virtual", "orgao": "Tribunal Pleno"},
+    {"tipo": "andamento", "codigo": 92, "complemento": "Publicação de ato ordinatório no DJe", "orgao": "Secretaria de Comunicação"},
+    {"tipo": "andamento", "codigo": 60, "complemento": "Expedição de comunicação eletrônica", "orgao": "Secretaria Judiciária"},
+    {"tipo": "andamento", "codigo": 132, "complemento": "Ciência da Procuradoria-Geral da República", "orgao": "PGR"},
+]
+
+
 def construir_conteudo(proc: dict[str, Any], seq: int, quando: datetime) -> dict[str, Any]:
-    passo = _passos(proc)[seq - 1]
+    passos_cat = _passos(proc)
+    if seq <= len(passos_cat):
+        passo = passos_cat[seq - 1]
+    else:
+        idx = (seq - len(passos_cat) - 1) % len(CONTINUOUS_PASSOS)
+        passo = CONTINUOUS_PASSOS[idx]
     capa = _capa(proc)
     data = quando.isoformat(timespec="seconds")
     out: dict[str, Any] = {
@@ -503,10 +519,16 @@ class ProcessLedger:
                 atuais: dict[str, int] = {}
                 for ev in self._eventos():
                     atuais[ev["processo_id"]] = atuais.get(ev["processo_id"], 0) + 1
+                if not atuais:
+                    raise LookupError("nenhum processo protocolado no HeraclitusDB")
                 candidatos = [p for p in CATALOGO if 0 < atuais.get(p["id"], 0) < len(_passos(p))]
-                if not candidatos:
-                    raise LookupError("nenhum processo com tramitação pendente")
-                proc = random.choice(candidatos)
+                if candidatos:
+                    proc = random.choice(candidatos)
+                else:
+                    candidatos_gerais = [p for p in CATALOGO if p["id"] in atuais]
+                    if not candidatos_gerais:
+                        raise LookupError("nenhum processo protocolado no HeraclitusDB")
+                    proc = random.choice(candidatos_gerais)
             else:
                 proc = POR_ID.get(processo_id)
                 if proc is None:
@@ -515,7 +537,7 @@ class ProcessLedger:
             if not evs:
                 raise LookupError(f"{proc['id']} ainda não foi protocolado no HeraclitusDB")
             seq = len(evs) + 1
-            if seq > len(_passos(proc)):
+            if seq > len(_passos(proc)) and processo_id is not None:
                 raise LookupError(f"{proc['id']} já tem a tramitação concluída")
             return self._gravar(proc, seq, (agora or datetime.now(BRT)).replace(microsecond=0), evs[-1]["id"])
 
