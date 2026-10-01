@@ -47,8 +47,13 @@ def main():
             except urllib.error.HTTPError as e:
                 if e.code!=403: raise
 
+        # O servidor pode restaurar uma campanha persistida. O smoke precisa
+        # estabelecer explicitamente o seu estado inicial em vez de confundir
+        # persistência válida com "processo novo = estado vazio".
+        reset_state=post("/api/reset")
+        if reset_state.get("step")!=0: raise RuntimeError("reset did not establish step 0")
         state=get("/api/state")
-        if state["step"]!=0: raise RuntimeError("fresh state step != 0")
+        if state["step"]!=0: raise RuntimeError("reset state step != 0")
         stepped=post("/api/step")
         if stepped["step"]!=1 or len(stepped["events"])!=1: raise RuntimeError("step endpoint failed")
         if get("/api/evidence").get("event_count")!=1: raise RuntimeError("evidence endpoint failed")

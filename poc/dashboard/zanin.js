@@ -30,7 +30,7 @@
           <div class="zanin-incidents-hub-header">
             <div>
               <div class="zanin-hub-tag">📥 INCIDENTES REGISTRADOS NO HERACLITUSDB LEDGER</div>
-              <h2 class="zanin-hub-title">Incidentes Processuais Ocorridos & Periciados</h2>
+              <h2 class="zanin-hub-title">Central Forense de Segurança de IA · Incidentes Processuais</h2>
               <p class="zanin-hub-subtitle">
                 Selecione o caso registrado abaixo para inspecionar os bytes originais, as camadas ocultas, a decisão do Policy Gateway e o pacote forense de custódia.
               </p>
@@ -57,6 +57,19 @@
               <div class="zanin-inc-meta">
                 <span>Origem: <strong>Ataque IA_ZAN_05 (Aba 1)</strong></span>
                 <span>Barreira: <strong>Quarentena Pré-LLM</strong></span>
+              </div>
+            </div>
+
+            <div class="zanin-incident-card" id="cardIncMoraes" data-scenario="vector_moraes_header" data-attack="IA_MOR_01">
+              <div class="zanin-inc-head">
+                <span class="zanin-inc-id">AP-SINTETICA-2822</span>
+                <span class="zanin-inc-badge deny">QUARENTENA (upstream=0)</span>
+              </div>
+              <div class="zanin-inc-title">Caso Moraes: Instruction Override em Cabeçalho</div>
+              <div class="zanin-inc-desc">Comando oculto em região de cabeçalho, baixa opacidade e microfonte, tratado como DATA_ONLY.</div>
+              <div class="zanin-inc-meta">
+                <span>Origem: <strong>Cenário público de 01/10/2026, reproduzido sinteticamente</strong></span>
+                <span>Regras: <strong>DOC-HDR-001 / DOC-STEG-004</strong></span>
               </div>
             </div>
 
@@ -127,6 +140,26 @@
           <!-- Viewport do Documento -->
           <div class="zanin-doc-viewport mode-human" id="docViewport">
             Carregando documento...
+          </div>
+
+          <!-- Human vs Machine: diferença essencial para prompt injection indireto -->
+          <div class="zanin-human-machine" id="humanMachinePanel">
+            <div class="zanin-hm-card">
+              <span class="zanin-hm-kicker">VISÃO HUMANA</span>
+              <strong id="hmHumanChars">0 caracteres</strong>
+              <span>Somente conteúdo efetivamente visível na renderização convencional.</span>
+            </div>
+            <div class="zanin-hm-arrow">≠</div>
+            <div class="zanin-hm-card machine">
+              <span class="zanin-hm-kicker">VISÃO DA MÁQUINA</span>
+              <strong id="hmMachineChars">0 caracteres</strong>
+              <span id="hmMachineOnly">0 tokens exclusivos da máquina</span>
+            </div>
+            <div class="zanin-hm-contract">
+              <span class="zanin-contract-pill">trust=UNTRUSTED_DOCUMENT</span>
+              <span class="zanin-contract-pill">authority=DATA_ONLY</span>
+              <span class="zanin-contract-pill deny">tools_allowed=false</span>
+            </div>
           </div>
 
           <!-- Forensic Diff: Antes vs Depois da Sanitização -->
@@ -423,9 +456,16 @@
     $('#hashNormalizedText').textContent = doc.hashes.normalized_text_hash;
     $('#hashSanitizedText').textContent = san.sanitized_text_hash;
 
-    // Diff
+    // Diff humano × máquina + sanitização
+    const differential = pipe.differential || {};
     $('#diffBefore').textContent = doc.raw_extracted_text;
     $('#diffAfter').textContent = san.sanitized_text || '(Documento inteiramente contido em quarentena pré-LLM)';
+    const humanChars = $('#hmHumanChars');
+    const machineChars = $('#hmMachineChars');
+    const machineOnly = $('#hmMachineOnly');
+    if (humanChars) humanChars.textContent = `${(differential.human_text || doc.rendered_text || '').length} caracteres`;
+    if (machineChars) machineChars.textContent = `${(differential.machine_text || doc.raw_extracted_text || '').length} caracteres`;
+    if (machineOnly) machineOnly.textContent = `${differential.machine_only_token_count || 0} tokens exclusivos da máquina`;
 
     // Status do Ledger
     const lBadge = $('#ledgerStatusBadge');
@@ -563,21 +603,82 @@
       // Visão Estrutural: todo o texto bruto extraído com marcações de stream
       vp.textContent = `[INÍCIO DO STREAM ESTRUTURAL PDF]\n${doc.raw_extracted_text}\n[FIM DO STREAM ESTRUTURAL]`;
     } else if (currentMode === 'forensic') {
-      // Visão Forense: destaca em caixas vermelhas o conteúdo oculto e caracteres zero-width
-      const visible = esc(doc.rendered_text);
-      const hidden = esc(doc.hidden_content);
-      vp.innerHTML = `
-        <div>${visible}</div>
-        ${hidden ? `
-          <div class="forensic-hidden-box">
-            <span class="forensic-hidden-badge">CAMADA OCULTA / ESTEGANOGRÁFICA DETECTADA:</span><br/>
-            ${hidden}
-          </div>
-        ` : '<div style="color: #4ade80; margin-top: 10px;">✓ Nenhuma camada oculta ou invisível encontrada neste documento.</div>'}
-      `;
+      renderForensicHeatmap(vp, doc, pipelineState.detection || {});
     } else if (currentMode === 'sanitized') {
       // Visão Sanitizada: cópia purgada autorizada para a IA
       vp.textContent = san.sanitized_text || '(Documento inteiramente contido em quarentena pré-LLM)';
+    }
+  }
+
+  function renderForensicHeatmap(vp, doc, detection) {
+    const spans = Array.isArray(doc.spans) ? doc.spans : [];
+    const findings = Array.isArray(detection.findings) ? detection.findings : [];
+    const byPage = new Map();
+    spans.forEach((s, idx) => {
+      const page = Number(s.page || 1);
+      if (!byPage.has(page)) byPage.set(page, []);
+      byPage.get(page).push({ ...s, __idx: idx + 1 });
+    });
+
+    const pages = [...byPage.keys()].sort((a, b) => a - b);
+    if (!pages.length) {
+      vp.textContent = doc.raw_extracted_text || '';
+      return;
+    }
+
+    vp.innerHTML = pages.map(page => {
+      const pageSpans = byPage.get(page);
+      const hotspots = pageSpans.map(s => {
+        const fg = String(s.font_color_hex || '').toLowerCase();
+        const bg = String(s.bg_color_hex || '').toLowerCase();
+        const hidden = s.is_visible_to_human === false ||
+          Number(s.font_size_pt || 12) < 2 ||
+          Number(s.opacity ?? 1) < 0.08 ||
+          s.clipped || s.outside_page || s.behind_image ||
+          Math.abs(Number(s.transform_scale ?? 1)) < 0.05 ||
+          ((fg === '#ffffff' || fg === '#fff') && (bg === '#ffffff' || bg === '#fff'));
+        if (!hidden) return '';
+
+        const bbox = Array.isArray(s.bbox) ? s.bbox : [50, 50, 500, 70];
+        const left = Math.max(0, Math.min(96, (Number(bbox[0]) / 595) * 100));
+        const top = Math.max(0, Math.min(96, (Number(bbox[1]) / 842) * 100));
+        const width = Math.max(3, Math.min(100 - left, ((Number(bbox[2]) - Number(bbox[0])) / 595) * 100));
+        const height = Math.max(2, Math.min(100 - top, ((Number(bbox[3]) - Number(bbox[1])) / 842) * 100));
+        const related = findings.filter(f => String(f.posicao || '').includes(`span #${s.__idx}`));
+        const rules = related.map(f => f.regra_disparada).join(', ') || 'HIDDEN-CONTENT';
+        return `
+          <button type="button" class="forensic-hotspot"
+            style="left:${left}%;top:${top}%;width:${width}%;height:${height}%"
+            title="${esc(rules)} · ${esc(s.text)}">
+            <span>${esc(rules)}</span>
+          </button>
+        `;
+      }).join('');
+
+      const pageVisible = pageSpans
+        .filter(s => s.is_visible_to_human !== false && Number(s.font_size_pt || 12) >= 2 && Number(s.opacity ?? 1) >= 0.08)
+        .map(s => esc(s.text))
+        .join('<br/>');
+
+      return `
+        <div class="forensic-page-wrap">
+          <div class="forensic-page-label">Página ${page}</div>
+          <div class="forensic-page">
+            <div class="forensic-page-text">${pageVisible}</div>
+            ${hotspots}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    const hidden = esc(doc.hidden_content || '');
+    if (hidden) {
+      vp.insertAdjacentHTML('beforeend', `
+        <div class="forensic-hidden-box">
+          <span class="forensic-hidden-badge">PAYLOAD EXTRAÍDO DA CAMADA NÃO VISÍVEL</span><br/>
+          ${hidden}
+        </div>
+      `);
     }
   }
 
@@ -605,6 +706,7 @@
 
         <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px;">
           <strong style="color: #0f172a; display: block; margin-bottom: 4px;">3. Princípio Arquitetural de Segurança:</strong>
+          <div style="font-family:ui-monospace,monospace;background:#0f172a;color:#e2e8f0;padding:8px 10px;border-radius:6px;margin-bottom:8px;">UNTRUSTED_DOCUMENT → DATA_ONLY → NO TOOL AUTHORITY</div>
           <p style="margin: 0; color: #475569;">
             Mesmo que uma injeção de prompt consiga enganar o detector ou o modelo de IA,
             o texto do documento <strong>nunca adquire autoridade operacional</strong>. Qualquer mutação em processos
