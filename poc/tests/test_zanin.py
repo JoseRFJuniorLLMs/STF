@@ -50,6 +50,26 @@ class ComprehensiveZaninDefenseTests(unittest.TestCase):
             self.assertTrue(finding["explicacao"])
             self.assertIn(finding["severidade"], ("LOW", "MEDIUM", "HIGH", "CRITICAL"))
 
+    def test_moraes_header_override_is_quarantined(self):
+        """Caso sintético de cabeçalho oculto dispara regra específica e preserva DATA_ONLY."""
+        doc = DocumentParser.parse_from_scenario("scenario_moraes_header_override")
+        det = ForensicDetector.inspect(doc)
+        self.assertEqual(det["verdict"], "QUARANTINED")
+        rules = [f["regra_disparada"] for f in det["findings"]]
+        self.assertIn("DOC-HDR-001", rules)
+        self.assertIn("DOC-STEG-004", rules)
+        self.assertGreater(doc["machine_only_token_count"], 0)
+        self.assertEqual(doc["security_labels"]["authority"], "DATA_ONLY")
+        self.assertFalse(doc["security_labels"]["tools_allowed"])
+
+        pipeline = DefensePipelineSimulator.run_pipeline("vector_moraes_header")
+        self.assertEqual(pipeline["policy_decision"]["upstream_delta"], 0)
+        self.assertEqual(pipeline["security_contract"]["authority"], "DATA_ONLY")
+        self.assertFalse(pipeline["security_contract"]["reader_tools_allowed"])
+        event_types = [e["event_type"] for e in pipeline["sentinel_events"]]
+        self.assertIn("document.prompt_injection.detected", event_types)
+        self.assertIn("document.quarantined", event_types)
+
     def test_original_document_bytes_immutable_during_sanitization(self):
         """A sanitização deve gerar cópia limpa SEM alterar os bytes do documento original."""
         doc = DocumentParser.parse_from_scenario("scenario_zanin_stego")
