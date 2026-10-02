@@ -246,17 +246,23 @@ function setupContextHelp() {
     const el = e.target.closest?.('[data-help]');
     if (el && !el.contains(e.relatedTarget)) hideContextHelp(el);
   });
-  document.addEventListener('click', e => {
+  document.addEventListener('pointerup', e => {
+    if (e.pointerType !== 'touch') return;
     const el = e.target.closest?.('[data-help]');
     if (!el) {
       if (contextHelpPinned) hideContextHelp(null, true);
       return;
     }
-    if (e.pointerType === 'touch' || el.classList.contains('help-tip')) {
-      const same = contextHelpPinned === el;
-      hideContextHelp(null, true);
-      if (!same) showContextHelp(el, true);
-    }
+    const same = contextHelpPinned === el;
+    hideContextHelp(null, true);
+    if (!same) showContextHelp(el, true);
+  }, true);
+  document.addEventListener('click', e => {
+    const el = e.target.closest?.('.help-tip[data-help]');
+    if (!el) return;
+    const same = contextHelpPinned === el;
+    hideContextHelp(null, true);
+    if (!same) showContextHelp(el, true);
   }, true);
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') hideContextHelp(null, true);
@@ -3302,6 +3308,23 @@ function setupChartTooltip() {
   const panel = $('#chartsPanel');
   const tt = $('#chartTooltip');
   if (!panel || !tt) return;
+
+  const plainTip = html => {
+    const box = document.createElement('div');
+    box.innerHTML = html || '';
+    return (box.textContent || '').replace(/\\s+/g, ' ').trim();
+  };
+
+  const decorateTips = () => {
+    const items = [...panel.querySelectorAll('[data-tip]')];
+    items.forEach((item, index) => {
+      item.setAttribute('tabindex', index === 0 ? '0' : '-1');
+      item.setAttribute('role', item.getAttribute('role') || 'img');
+      item.setAttribute('aria-label', plainTip(item.getAttribute('data-tip')));
+      item.dataset.tipKeyboardReady = '1';
+    });
+  };
+
   const showTip = (g, x, y) => {
     if (!g) { tt.classList.remove('show'); return; }
     tt.innerHTML = g.getAttribute('data-tip');
@@ -3314,6 +3337,17 @@ function setupChartTooltip() {
     tt.style.top = Math.max(8, top) + 'px';
     tt.classList.add('show');
   };
+
+  const focusTip = g => {
+    if (!g) return;
+    const items = [...panel.querySelectorAll('[data-tip]')];
+    items.forEach(item => item.setAttribute('tabindex', item === g ? '0' : '-1'));
+    g.focus();
+  };
+
+  new MutationObserver(decorateTips).observe(panel, { childList: true, subtree: true });
+  decorateTips();
+
   panel.addEventListener('mousemove', evt => {
     showTip(evt.target.closest('[data-tip]'), evt.clientX, evt.clientY);
   });
@@ -3323,12 +3357,23 @@ function setupChartTooltip() {
     const r = g.getBoundingClientRect();
     showTip(g, r.left + r.width / 2, r.bottom);
   });
+  panel.addEventListener('keydown', evt => {
+    const current = evt.target.closest('[data-tip]');
+    if (!current || !['ArrowRight','ArrowDown','ArrowLeft','ArrowUp'].includes(evt.key)) return;
+    const items = [...panel.querySelectorAll('[data-tip]')];
+    const index = items.indexOf(current);
+    if (index < 0 || items.length < 2) return;
+    evt.preventDefault();
+    const delta = evt.key === 'ArrowRight' || evt.key === 'ArrowDown' ? 1 : -1;
+    focusTip(items[(index + delta + items.length) % items.length]);
+  });
   panel.addEventListener('focusout', evt => {
     if (!panel.contains(evt.relatedTarget)) tt.classList.remove('show');
   });
-  panel.addEventListener('click', evt => {
+  panel.addEventListener('pointerup', evt => {
+    if (evt.pointerType !== 'touch') return;
     const g = evt.target.closest('[data-tip]');
-    if (!g || evt.pointerType !== 'touch') return;
+    if (!g) return;
     const r = g.getBoundingClientRect();
     showTip(g, r.left + r.width / 2, r.bottom);
   });
