@@ -24,6 +24,8 @@ A POC demonstra uma única campanha de ataque sintética do primeiro sinal obser
 
 > **Auditoria de código:** a auditoria recursiva em três passadas e sua remediação estão registradas em [AUDIT-CODE-3-PASSES-2026-09-23.md](docs/AUDIT-CODE-3-PASSES-2026-09-23.md) e [AUDIT-REMEDIATION-2026-09-23.md](docs/AUDIT-REMEDIATION-2026-09-23.md).
 
+> **Auditoria recursiva mais recente:** [10 passadas — 01/10/2026](docs/AUDIT-RECURSIVE-10-PASSES-2026-10-01.md), cobrindo persistência, failover, frontend, CI, deploy, claims e SPEC-0028.
+
 > **Guia Visual e Lâminas Arquiteturais:** veja [GUIA-VISUAL.md](docs/GUIA-VISUAL.md) para os diagramas da arquitetura integrada, fluxo de governança e visão executiva para leigos.
 
 ## POC executável e dashboard
