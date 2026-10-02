@@ -188,8 +188,8 @@
       const attackBadge = atkId ? `<span class="inc360-attack-tag">⚡ ATAQUE ${escapeHtml(atkId)}</span>` : '';
       const actionBtn = atkId ? `
         <div style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap;">
-          <button type="button" class="btn tiny ghost" onclick="event.stopPropagation(); goToAttack('${atkId}')">🎯 Localizar Ataque na Aba 1 ➔</button>
-          ${atkId === 'IA_ZAN_05' ? `<button type="button" class="btn tiny primary" onclick="event.stopPropagation(); goToDefesaZanin('IA_ZAN_05')">🏛️ Ver Perícia na Defesa Zanin</button>` : ''}
+          <button type="button" class="btn tiny ghost" data-go-attack="${escapeHtml(atkId)}">🎯 Localizar Ataque na Aba 1 ➔</button>
+          ${atkId === 'IA_ZAN_05' ? `<button type="button" class="btn tiny primary" data-go-zanin="IA_ZAN_05">🔬 Ver Forense de IA</button>` : ''}
         </div>
       ` : '';
       const effect = decision ? `<div class="inc360-event-effect">Gateway: <strong>${clean(decision.outcome || event.outcome)}</strong> · upstream Δ ${event.upstream_delta === null || event.upstream_delta === undefined ? '—' : clean(event.upstream_delta)}${receipt ? ' · recibo local presente' : ''}${reason}</div>` : '';
@@ -366,6 +366,16 @@
     if (initialized) return;
     initialized = true;
     root.addEventListener('click', event => {
+      const attack = event.target.closest('[data-go-attack]');
+      if (attack) {
+        if (typeof goToAttack === 'function') goToAttack(attack.dataset.goAttack);
+        return;
+      }
+      const forensic = event.target.closest('[data-go-zanin]');
+      if (forensic) {
+        if (typeof goToDefesaZanin === 'function') goToDefesaZanin(forensic.dataset.goZanin);
+        return;
+      }
       if (event.target.closest('[data-inc360-action="correlacionar"]')) {
         dispararCorrelacao();
         return;

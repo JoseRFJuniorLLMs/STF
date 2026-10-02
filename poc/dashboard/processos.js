@@ -472,8 +472,8 @@ function renderDetalhe() {
               </div>
             </div>
             <div style="display: flex; gap: 6px;">
-              <button class="btn tiny primary" onclick="event.stopPropagation(); goToAttack('${atk.attack_id}')">🎯 Ver Ataque</button>
-              ${atk.attack_id === 'IA_ZAN_05' ? `<button class="btn tiny ghost" onclick="event.stopPropagation(); goToDefesaZanin('IA_ZAN_05')">🏛️ Ver Perícia</button>` : ''}
+              <button class="btn tiny primary" data-go-attack="${esc(atk.attack_id)}">🎯 Ver Ataque</button>
+              ${atk.attack_id === 'IA_ZAN_05' ? `<button class="btn tiny ghost" data-go-zanin="IA_ZAN_05">🔬 Ver Forense de IA</button>` : ''}
             </div>
           </div>
         `).join('')}
@@ -795,6 +795,18 @@ function setupProcessos() {
   const detalhe = $('#procDetail');
   if (detalhe) {
     detalhe.addEventListener('click', e => {
+      const attack = e.target.closest('[data-go-attack]');
+      if (attack) {
+        e.stopPropagation();
+        if (typeof goToAttack === 'function') goToAttack(attack.dataset.goAttack);
+        return;
+      }
+      const forensic = e.target.closest('[data-go-zanin]');
+      if (forensic) {
+        e.stopPropagation();
+        if (typeof goToDefesaZanin === 'function') goToDefesaZanin(forensic.dataset.goZanin);
+        return;
+      }
       const sub = e.target.closest('[data-subtab]');
       if (sub) {
         procSubtab = sub.dataset.subtab;
