@@ -25,7 +25,8 @@ jobs:
               if path.suffix.lower() not in {'.py','.js','.html','.css','.md','.yml','.yaml','.sh','.ps1','.bat','.cmd'}:
                   continue
               text=path.read_text(encoding='utf-8',errors='ignore')
-              if '-----BEGIN PRIVATE KEY-----' in text:
+              marker='-----BEGIN ' + 'PRIVATE KEY-----'
+              if marker in text:
                   bad.append(str(path))
           if bad:
               raise SystemExit('private key material found: '+', '.join(bad))
