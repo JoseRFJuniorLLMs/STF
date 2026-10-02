@@ -45,7 +45,7 @@ class RepositoryContracts(unittest.TestCase):
 
     def test_context_help_engine_supports_mouse_keyboard_touch_and_escape(self):
         app=(DASH/"app.js").read_text(encoding="utf-8")
-        for token in ("data-help","aria-describedby","pointerover","focusin","pointerType === 'touch'","Escape","MutationObserver"):
+        for token in ("data-help","aria-describedby","pointerover","focusin","pointerType !== 'touch'","Escape","MutationObserver"):
             self.assertIn(token,app)
         css=(DASH/"styles.css").read_text(encoding="utf-8")
         self.assertIn(".context-help-popover",css)
