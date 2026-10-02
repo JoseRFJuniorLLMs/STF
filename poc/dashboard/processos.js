@@ -389,7 +389,7 @@ function renderProcessTimelineScrubber(d, idxAtual, lsns, historico) {
         <div class="scrubber-header-actions">
           <div class="scrubber-status-badge ${historico ? 'is-historical' : 'is-current'}">
             <span class="status-dot"></span>
-            <span id="procAsOfLabel" class="status-text mono">
+            <span id="procAsOfLabel" class="status-text mono" data-help="AS OF LSN reconstrói a visão usando somente eventos até aquele Log Sequence Number. É uma leitura histórica e não altera o ledger.">
               ${historico ? `AS OF LSN ${procAsOf} · Passo ${idxAtual + 1} de ${totalSteps}` : `Estado Atual · LSN ${lsns[totalSteps - 1] ?? '—'}`}
             </span>
           </div>
@@ -493,7 +493,7 @@ function renderDetalhe() {
   const novo = lsn => (lsn > jaVisto ? ' row-new' : '');
 
   const storageNotice = procDetalhe.storage_mode === 'MEMORY_FALLBACK'
-    ? '<div class="proc-storage-warning"><strong>MEMORY FALLBACK · NÃO DURÁVEL</strong><span>Leitura sintética de contingência. Escritas permanecem bloqueadas até o núcleo HeraclitusDB voltar.</span></div>'
+    ? '<div class="proc-storage-warning" data-help="MEMORY_FALLBACK é um snapshot sintético em RAM, somente leitura. VOLATILE significa que ele não é persistência HRKL e desaparece no restart."><strong>MEMORY FALLBACK · NÃO DURÁVEL</strong><span>Leitura sintética de contingência. Escritas permanecem bloqueadas até o núcleo HeraclitusDB voltar.</span></div>'
     : '';
   $('#procDetail').innerHTML = `
     ${storageNotice}
@@ -579,7 +579,7 @@ function renderSubtab(eventos, integ, novo) {
         detalheHtml = `
           ${m.complemento ? `<div class="proc-tl-complemento"><strong>Complemento:</strong> ${esc(m.complemento)}</div>` : ''}
           <div class="proc-tl-orgao"><strong>Órgão julgador:</strong> ${esc(m.orgaoJulgador?.nome || '—')}</div>
-          ${e.origem === 'avulso' ? `<div class="proc-tl-avulso">🛡️ <strong>Andamento Avulso Aprovado</strong> (Aprovação: <span class="mono">${esc(e.approval_id || 'HITL')}</span>)</div>` : ''}
+          ${e.origem === 'avulso' ? `<div class="proc-tl-avulso">🛡️ <strong>Andamento Avulso Aprovado</strong> (Aprovação: <span class="mono" data-help="HITL (Human-in-the-Loop): aprovação humana explícita e vinculada à identidade, ação e parâmetros.">${esc(e.approval_id || 'HITL')}</span>)</div>` : ''}
         `;
       } else if (e.tipo === 'protocolo') {
         const x = e.conteudo?.protocolo || {};
@@ -689,12 +689,27 @@ function renderSubtab(eventos, integ, novo) {
   }, 'Nenhum evento neste ponto do histórico.');
 }
 
+const PROC_TABLE_HELP = {
+  'Movimento': 'Movimento processual sintético associado ao evento.',
+  'Data': 'Data processual declarada no conteúdo do evento.',
+  'Documento': 'Documento ou referência vinculada ao movimento.',
+  'Origem': 'Origem sintética do deslocamento ou petição.',
+  'Destino': 'Destino sintético do deslocamento.',
+  'Seq': 'Ordem do evento dentro deste processo.',
+  'LSN': 'Log Sequence Number: posição monotônica do evento no log.',
+  'Registrado': 'Momento de Append registrado pelo relógio híbrido do HeraclitusDB.',
+  'Kind': 'Tipo técnico do evento persistido.',
+  'Evento (ULID)': 'Identificador único ordenável aproximadamente por tempo.',
+  'Elo anterior': 'Referência parents para o evento imediatamente anterior deste processo.',
+  'Chave de idempotência': 'Impede duplicação ou divergência da mesma operação lógica.'
+};
+
 function tabela(cabecalhos, linhas, linhaHtml, vazio) {
   const corpo = linhas.length
     ? linhas.map(linhaHtml).join('')
     : `<tr><td colspan="${cabecalhos.length}" class="empty">${vazio}</td></tr>`;
   return `<table class="simple-table proc-table">
-    <thead><tr>${cabecalhos.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+    <thead><tr>${cabecalhos.map(h => `<th data-help="${esc(PROC_TABLE_HELP[h] || 'Campo da visão processual sintética.')}">${h}</th>`).join('')}</tr></thead>
     <tbody>${corpo}</tbody>
   </table>`;
 }

@@ -87,7 +87,7 @@
         <div class="resil-hero">
           <div>
             <span class="resil-eyebrow">CONTINUIDADE · DEMONSTRAÇÃO CONTROLADA</span>
-            <h2>Resiliência e Continuidade</h2>
+            <h2 data-help="Demonstra, em ambiente sintético, registro de indisponibilidade, comparação de checkpoint/backup e verificação de recuperação.">Resiliência e Continuidade</h2>
             <p>Demonstração sintética de registro de indisponibilidade, integridade e recuperação. Não substitui certificação oficial do sistema judicial.</p>
           </div>
           <div class="resil-status-badge">
@@ -101,10 +101,10 @@
             <span>Disponibilidade institucional</span><strong>UNVERIFIED</strong><small>A POC não mede SLA oficial</small>
           </div>
           <div class="resil-kpi-card">
-            <span>RPO institucional</span><strong>UNVERIFIED</strong><small>Exige teste de crash/storage/replicação</small>
+            <span><span data-help="RPO (Recovery Point Objective): perda máxima de dados aceitável medida em tempo. A POC não o qualifica institucionalmente.">RPO institucional</span><strong>UNVERIFIED</strong><small>Exige teste de crash/storage/replicação</small>
           </div>
           <div class="resil-kpi-card">
-            <span>RTO institucional</span><strong>UNVERIFIED</strong><small>Não qualificado por esta POC</small>
+            <span><span data-help="RTO (Recovery Time Objective): tempo-alvo para restaurar o serviço após falha. A POC não o qualifica institucionalmente.">RTO institucional</span><strong>UNVERIFIED</strong><small>Não qualificado por esta POC</small>
           </div>
           <div class="resil-kpi-card">
             <span>Certidões no HeraclitusDB</span>
@@ -120,14 +120,14 @@
         <div class="resil-grid">
           <section class="resil-box">
             <div class="resil-box-head">
-              <h3>Registros Sintéticos de Indisponibilidade</h3>
+              <h3 data-help="Registros gerados pelo laboratório para demonstrar um fluxo de evidência. Não são certidões oficiais nem produzem efeito processual.">Registros Sintéticos de Indisponibilidade</h3>
               <small>Art. 10, § 2º da Lei 11.419/2006</small>
             </div>
             <p style="font-size: 12px; color: var(--gov-text-secondary); margin: 0; line-height: 1.5;">
               Quando o sistema do tribunal sofre indisponibilidade superior ao limite legal, a registro é gravada de forma imutável no HeraclitusDB com LSN e hash SHA-256, assegurando a prorrogação automática dos prazos processuais para todas as partes.
             </p>
             <div class="resil-action-bar">
-              <button class="btn small primary" type="button" data-resil-action="emitir">📜 Gerar Registro Sintético de Indisponibilidade</button>
+              <button class="btn small primary" type="button" data-resil-action="emitir" data-help="Gera um registro sintético de indisponibilidade da POC. Não é certidão oficial nem produz efeito processual.">📜 Gerar Registro Sintético de Indisponibilidade</button>
             </div>
 
             ${threats.length ? `
@@ -184,22 +184,22 @@
 
           <section class="resil-box">
             <div class="resil-box-head">
-              <h3>Prova de Recuperação e Integridade de Backup</h3>
+              <h3 data-help="Compara o estado disponível no harness com checkpoints/backups sintéticos e reporta correspondência ou divergência.">Prova de Recuperação e Integridade de Backup</h3>
               <small>Comparação Antes vs Depois do Desastre</small>
             </div>
             <p style="font-size: 12px; color: var(--gov-text-secondary); margin: 0; line-height: 1.5;">
               Auditoria em tempo real que compara a raiz de Merkle em memória com o último checkpoint restaurável no disco.
             </p>
             <div class="resil-action-bar">
-              <button class="btn small ghost" type="button" data-resil-action="verificar">🔄 Auditar Snapshot vs Produção</button>
+              <button class="btn small ghost" type="button" data-resil-action="verificar" data-help="Executa a comparação do estado do harness com o checkpoint/backup sintético e reporta divergências.">🔄 Auditar Snapshot vs Produção</button>
             </div>
             <table class="resil-restore-table">
               <thead>
                 <tr>
-                  <th>Componente</th>
-                  <th>Produção (Live)</th>
-                  <th>Checkpoint / Backup</th>
-                  <th>Conferência</th>
+                  <th data-help="Componente sintético cujo estado está sendo comparado.">Componente</th>
+                  <th data-help="Estado primário observado no harness no momento da verificação; não significa produção institucional.">Produção (Live)</th>
+                  <th data-help="Snapshot/checkpoint sintético usado como referência de recuperação ou comparação.">Checkpoint / Backup</th>
+                  <th data-help="Resultado da comparação entre estado Live e a referência; não qualifica RPO/RTO institucional.">Conferência</th>
                 </tr>
               </thead>
               <tbody>

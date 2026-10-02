@@ -17,7 +17,7 @@
   const pretty = value => escapeHtml(JSON.stringify(value, null, 2));
   const statusClass = value => value === 'PASS' || value === true ? 'ok'
     : value === 'FAIL' || value === false ? 'fail' : 'neutral';
-  const check = (label, value) => `<span class="audit-check ${statusClass(value)}">${escapeHtml(label)}: ${shown(value)}</span>`;
+  const check = (label, value, help = '') => `<span class="audit-check ${statusClass(value)}"${help ? ` data-help="${escapeHtml(help)}"` : ''}>${escapeHtml(label)}: ${shown(value)}</span>`;
 
   let snapshot = null;
   let bundle = null;
@@ -56,7 +56,7 @@
         <div class="panel-head audit-head">
           <div>
             <span class="section-kicker">Cadeia de custódia da demonstração</span>
-            <h2>Auditoria e Evidências</h2>
+            <h2 data-help="Explora proveniência, hashes, replay histórico AS OF, Merkle e o Evidence Bundle da POC.">Auditoria e Evidências</h2>
             <p class="audit-head-sub">Explore o evento, seu vínculo criptográfico e o estado da campanha em um LSN.</p>
           </div>
           <div class="audit-head-actions">
@@ -73,7 +73,7 @@
         <div class="audit-grid">
           <section class="audit-box audit-events-box" aria-label="Eventos da campanha">
             <div class="audit-box-head">
-              <div><h3>Trilha de eventos</h3><p>Selecione um LSN local para examinar a proveniência.</p></div>
+              <div><h3 data-help="Sequência local de eventos ordenados por LSN. Recibos do HeraclitusDB real aparecem separadamente quando existirem.">Trilha de eventos</h3><p>Selecione um LSN local para examinar a proveniência.</p></div>
               <span class="audit-count" data-audit-count>0 eventos</span>
             </div>
             <div class="audit-filters">
@@ -83,18 +83,18 @@
             <div class="audit-event-list" data-audit-events role="listbox" aria-label="Eventos de auditoria"></div>
           </section>
           <section class="audit-box audit-detail-box" aria-label="Proveniência do evento">
-            <div class="audit-box-head"><div><h3>Proveniência do evento</h3><p>Vínculos calculados sobre a trilha local da POC.</p></div></div>
+            <div class="audit-box-head"><div><h3 data-help="Mostra origem, hashes e referências que vinculam o evento à trilha local da POC.">Proveniência do evento</h3><p>Vínculos calculados sobre a trilha local da POC.</p></div></div>
             <div data-audit-detail class="audit-detail"><p class="audit-empty">Selecione um evento.</p></div>
           </section>
         </div>
         <div class="audit-lower-grid">
           <section class="audit-box audit-replay-box" aria-label="Replay AS OF LSN">
-            <div class="audit-box-head"><div><h3>Estado AS OF LSN</h3><p>Replay local da campanha após o LSN escolhido; não é uma consulta histórica ao banco.</p></div></div>
+            <div class="audit-box-head"><div><h3 data-help="AS OF LSN reconstrói o estado com eventos até o LSN escolhido. É uma leitura histórica e não altera a trilha.">Estado AS OF LSN</h3><p>Replay local da campanha após o LSN escolhido; não é uma consulta histórica ao banco.</p></div></div>
             <div id="auditTimelineMount"></div>
             <div data-audit-replay class="audit-replay"><p class="audit-empty">Carregando replay…</p></div>
           </section>
           <section class="audit-box audit-package-box" aria-label="Pacote de evidências">
-            <div class="audit-box-head"><div><h3>Pacote e verificações</h3><p>Resultado da verificação no servidor da POC.</p></div></div>
+            <div class="audit-box-head"><div><h3 data-help="Evidence Bundle e checagens de cadeia, Merkle, manifesto, raiz do pacote e consistência semântica.">Pacote e verificações</h3><p>Resultado da verificação no servidor da POC.</p></div></div>
             <div data-audit-package class="audit-package"><p class="audit-empty">Carregando pacote…</p></div>
           </section>
         </div>
@@ -276,18 +276,18 @@
     const limitations = Array.isArray(bundle.limitations) ? bundle.limitations : [];
     target.innerHTML = `
       <div class="audit-checks">
-        ${check('Cadeia', v.chain)}${check('Merkle', v.merkle)}${check('Manifesto', v.manifest)}
-        ${check('Raiz do pacote', v.package_root)}${check('Semântica', v.semantic)}
+        ${check('Cadeia', v.chain, 'Valida relação e ordenação entre eventos.')}${check('Merkle', v.merkle, 'Merkle resume criptograficamente o conjunto de eventos e evidencia alteração no conjunto.')}${check('Manifesto', v.manifest, 'Inventário das seções e hashes incluídos no Evidence Bundle.')}
+        ${check('Raiz do pacote', v.package_root, 'Digest que vincula o conteúdo integral do pacote exportado.')}${check('Semântica', v.semantic, 'Valida coerência entre campos relacionados, não apenas bytes.')}
       </div>
       <dl class="audit-fields">
         <div><dt>Pacote</dt><dd>${shown(bundle.package_id)} · ${shown(bundle.schema_version)}</dd></div>
         <div><dt>Campanha</dt><dd>${shown(bundle.campaign_id)}</dd></div>
         <div><dt>Eventos</dt><dd>${Number(bundle.event_count)} · LSN ${Array.isArray(bundle.lsn_range) ? bundle.lsn_range.map(shown).join('–') : '—'}</dd></div>
-        <div><dt>Raiz Merkle dos eventos</dt><dd class="mono audit-hash">${shown(bundle.merkle_root)}</dd></div>
-        <div><dt>Raiz do pacote</dt><dd class="mono audit-hash">${shown(bundle.package_root)}</dd></div>
+        <div><dt data-help="Raiz Merkle: digest que resume o conjunto de eventos e muda se o conjunto for alterado.">Raiz Merkle dos eventos</dt><dd class="mono audit-hash">${shown(bundle.merkle_root)}</dd></div>
+        <div><dt data-help="Digest do Evidence Bundle completo, usado para detectar alteração no pacote.">Raiz do pacote</dt><dd class="mono audit-hash">${shown(bundle.package_root)}</dd></div>
         <div><dt>Data declarada no pacote</dt><dd>${shown(bundle.generated_at_claimed)} <small>(metadado, sem carimbo externo)</small></dd></div>
       </dl>
-      <details class="audit-manifest"><summary>Hashes das seções do manifesto</summary><dl class="audit-fields">${Object.entries(manifest).map(([name, hash]) => `<div><dt>${shown(name)}</dt><dd class="mono audit-hash">${shown(hash)}</dd></div>`).join('')}</dl></details>
+      <details class="audit-manifest"><summary data-help="Manifesto: inventário das partes do Evidence Bundle e seus hashes.">Hashes das seções do manifesto</summary><dl class="audit-fields">${Object.entries(manifest).map(([name, hash]) => `<div><dt>${shown(name)}</dt><dd class="mono audit-hash">${shown(hash)}</dd></div>`).join('')}</dl></details>
       <div class="audit-trust"><strong>Âncoras de confiança</strong><p>Assinatura institucional: ${shown(trust.institutional_signature)} · Carimbo externo: ${shown(trust.external_timestamp)} · Confiança institucional: ${shown(trust.institutional_trust)}</p></div>
       ${limitations.length ? `<details><summary>Limitações declaradas pelo pacote</summary><ul>${limitations.map(item => `<li>${shown(item)}</li>`).join('')}</ul></details>` : ''}
       <p class="audit-footnote">Para conferência independente do JSON baixado, execute <code>python verify.py caminho/para/evidence-stf-poc-001.json</code> com o verificador da POC. O botão de download salva a versão mais recente; atualize a tela se novos eventos forem inseridos.</p>`;
@@ -400,7 +400,7 @@
           <div class="scrubber-header-actions">
             <div class="scrubber-status-badge ${historico ? 'is-historical' : 'is-current'}">
               <span class="status-dot"></span>
-              <span id="auditAsOfLabel" class="status-text mono">
+              <span id="auditAsOfLabel" class="status-text mono" data-help="AS OF LSN mostra como a campanha parecia naquele ponto, usando apenas eventos até o LSN selecionado.">
                 ${historico ? `AS OF LSN ${asOfLsn} · Passo ${idxAtual + 1} de ${totalSteps}` : `Estado Atual · LSN ${lsns[totalSteps - 1] ?? '—'}`}
               </span>
             </div>

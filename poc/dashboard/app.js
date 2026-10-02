@@ -138,6 +138,145 @@ function toast(msg) {
   toast.t = setTimeout(() => t.classList.remove('show'), 2600);
 }
 
+
+/* ========================================================
+   AJUDA CONTEXTUAL ACESSÍVEL
+   data-help é a fonte única. Cada alvo recebe uma descrição
+   estática via aria-describedby e o mesmo texto é mostrado
+   por hover, foco e tap/click.
+   ======================================================== */
+let contextHelpSeq = 0;
+let contextHelpPinned = null;
+
+function isNaturallyFocusable(el) {
+  return /^(A|BUTTON|INPUT|SELECT|TEXTAREA|SUMMARY)$/.test(el.tagName) || el.hasAttribute('tabindex');
+}
+
+function decorateHelpTarget(el) {
+  if (!el || el.dataset.helpReady === '1') return;
+  const help = (el.dataset.help || '').trim();
+  if (!help) return;
+  el.dataset.helpReady = '1';
+  el.classList.add('has-context-help');
+  if (!isNaturallyFocusable(el)) el.tabIndex = 0;
+  const desc = document.createElement('span');
+  desc.className = 'sr-only context-help-description';
+  desc.id = 'context-help-desc-' + (++contextHelpSeq);
+  desc.textContent = help;
+  document.body.appendChild(desc);
+  const existing = (el.getAttribute('aria-describedby') || '').trim();
+  el.setAttribute('aria-describedby', [existing, desc.id].filter(Boolean).join(' '));
+}
+
+function decorateAllHelpTargets(root = document) {
+  if (root.matches?.('[data-help]')) decorateHelpTarget(root);
+  root.querySelectorAll?.('[data-help]').forEach(decorateHelpTarget);
+}
+
+function contextHelpPopover() {
+  let pop = document.getElementById('contextHelpPopover');
+  if (!pop) {
+    pop = document.createElement('div');
+    pop.id = 'contextHelpPopover';
+    pop.className = 'context-help-popover';
+    pop.setAttribute('role', 'tooltip');
+    pop.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(pop);
+  }
+  return pop;
+}
+
+function positionContextHelp(el, pop) {
+  const r = el.getBoundingClientRect();
+  const pr = pop.getBoundingClientRect();
+  const margin = 10;
+  let left = r.left + Math.min(r.width / 2, 80);
+  let top = r.bottom + 8;
+  if (left + pr.width > window.innerWidth - margin) left = window.innerWidth - pr.width - margin;
+  if (left < margin) left = margin;
+  if (top + pr.height > window.innerHeight - margin) top = Math.max(margin, r.top - pr.height - 8);
+  pop.style.left = left + 'px';
+  pop.style.top = top + 'px';
+}
+
+function showContextHelp(el, pin = false) {
+  if (!el?.dataset?.help) return;
+  decorateHelpTarget(el);
+  const pop = contextHelpPopover();
+  pop.textContent = el.dataset.help;
+  pop.classList.add('show');
+  pop.setAttribute('aria-hidden', 'false');
+  pop.dataset.owner = el.getAttribute('aria-describedby') || '';
+  positionContextHelp(el, pop);
+  if (pin) contextHelpPinned = el;
+}
+
+function hideContextHelp(el = null, force = false) {
+  if (!force && contextHelpPinned && (!el || contextHelpPinned === el)) return;
+  const pop = contextHelpPopover();
+  pop.classList.remove('show');
+  pop.setAttribute('aria-hidden', 'true');
+  if (force) contextHelpPinned = null;
+}
+
+function setupContextHelp() {
+  decorateAllHelpTargets();
+  const observer = new MutationObserver(records => {
+    for (const record of records) {
+      record.addedNodes.forEach(node => {
+        if (node.nodeType === Node.ELEMENT_NODE) decorateAllHelpTargets(node);
+      });
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+
+  document.addEventListener('pointerover', e => {
+    const el = e.target.closest?.('[data-help]');
+    if (el && e.pointerType !== 'touch') showContextHelp(el);
+  });
+  document.addEventListener('pointerout', e => {
+    const el = e.target.closest?.('[data-help]');
+    if (el && e.pointerType !== 'touch' && !el.contains(e.relatedTarget)) hideContextHelp(el);
+  });
+  document.addEventListener('focusin', e => {
+    const el = e.target.closest?.('[data-help]');
+    if (el) showContextHelp(el);
+  });
+  document.addEventListener('focusout', e => {
+    const el = e.target.closest?.('[data-help]');
+    if (el && !el.contains(e.relatedTarget)) hideContextHelp(el);
+  });
+  document.addEventListener('pointerup', e => {
+    if (e.pointerType !== 'touch') return;
+    const el = e.target.closest?.('[data-help]');
+    if (!el) {
+      if (contextHelpPinned) hideContextHelp(null, true);
+      return;
+    }
+    const same = contextHelpPinned === el;
+    hideContextHelp(null, true);
+    if (!same) showContextHelp(el, true);
+  }, true);
+  document.addEventListener('click', e => {
+    const el = e.target.closest?.('.help-tip[data-help]');
+    if (!el) return;
+    const same = contextHelpPinned === el;
+    hideContextHelp(null, true);
+    if (!same) showContextHelp(el, true);
+  }, true);
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') hideContextHelp(null, true);
+  });
+  window.addEventListener('resize', () => hideContextHelp(null, true));
+  window.addEventListener('scroll', () => hideContextHelp(null, true), true);
+}
+
+window.contextHelp = {
+  decorate: decorateAllHelpTargets,
+  show: showContextHelp,
+  hide: () => hideContextHelp(null, true)
+};
+
 // FORMATADOR DE DATA E HORA INSTITUCIONAL
 function formatDateTime(ev) {
   if (!ev) return '—';
@@ -1288,10 +1427,15 @@ function renderGraph(s) {
 
     return `
       <g class="graph-node ${n.isFixed ? 'fixed-network-node' : 'dynamic-attack-node'} ${isUnderAttackNow ? 'targeted-node attack-active-now' : ''} ${hasBeenAttacked ? 'node-has-attacks' : ''}" 
-         id="gn-${n.idx}" data-node-id="${esc(n.id)}" 
-         transform="translate(${n.x}, ${n.y})" 
+         id="gn-${n.idx}" data-node-id="${esc(n.id)}"
+         role="button" tabindex="0"
+         aria-label="${esc(n.friendlyName)}. Tipo ${esc(n.kind)}. Pressione Enter para filtrar ataques relacionados."
+         transform="translate(${n.x}, ${n.y})"
          onmouseenter="showNodeHintBottomRight('${esc(n.id)}', '${esc(n.friendlyName)}', '${esc(n.kind)}')"
+         onfocus="showNodeHintBottomRight('${esc(n.id)}', '${esc(n.friendlyName)}', '${esc(n.kind)}')"
          onmouseleave="hideNodeHintBottomRight()"
+         onblur="hideNodeHintBottomRight()"
+         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectGraphNode('${esc(n.id)}','${esc(n.kind)}','${esc(n.friendlyName)}')}"
          onclick="selectGraphNode('${esc(n.id)}', '${esc(n.kind)}', '${esc(n.friendlyName)}')">
         
         <!-- ANÉIS DE PULSO DE ALARME QUANDO SOB ATAQUE -->
@@ -3164,18 +3308,74 @@ function setupChartTooltip() {
   const panel = $('#chartsPanel');
   const tt = $('#chartTooltip');
   if (!panel || !tt) return;
-  panel.addEventListener('mousemove', evt => {
-    const g = evt.target.closest('[data-tip]');
+
+  const plainTip = html => {
+    const box = document.createElement('div');
+    box.innerHTML = html || '';
+    return (box.textContent || '').replace(/\\s+/g, ' ').trim();
+  };
+
+  const decorateTips = () => {
+    const items = [...panel.querySelectorAll('[data-tip]')];
+    items.forEach((item, index) => {
+      item.setAttribute('tabindex', index === 0 ? '0' : '-1');
+      item.setAttribute('role', item.getAttribute('role') || 'img');
+      item.setAttribute('aria-label', plainTip(item.getAttribute('data-tip')));
+      item.dataset.tipKeyboardReady = '1';
+    });
+  };
+
+  const showTip = (g, x, y) => {
     if (!g) { tt.classList.remove('show'); return; }
     tt.innerHTML = g.getAttribute('data-tip');
     const pad = 14;
-    let x = evt.clientX + pad, yy = evt.clientY + pad;
+    let left = x + pad, top = y + pad;
     const r = tt.getBoundingClientRect();
-    if (x + r.width > window.innerWidth - 8) x = evt.clientX - r.width - pad;
-    if (yy + r.height > window.innerHeight - 8) yy = evt.clientY - r.height - pad;
-    tt.style.left = `${x}px`;
-    tt.style.top = `${yy}px`;
+    if (left + r.width > window.innerWidth - 8) left = x - r.width - pad;
+    if (top + r.height > window.innerHeight - 8) top = y - r.height - pad;
+    tt.style.left = Math.max(8, left) + 'px';
+    tt.style.top = Math.max(8, top) + 'px';
     tt.classList.add('show');
+  };
+
+  const focusTip = g => {
+    if (!g) return;
+    const items = [...panel.querySelectorAll('[data-tip]')];
+    items.forEach(item => item.setAttribute('tabindex', item === g ? '0' : '-1'));
+    g.focus();
+  };
+
+  new MutationObserver(decorateTips).observe(panel, { childList: true, subtree: true });
+  decorateTips();
+
+  panel.addEventListener('mousemove', evt => {
+    showTip(evt.target.closest('[data-tip]'), evt.clientX, evt.clientY);
+  });
+  panel.addEventListener('focusin', evt => {
+    const g = evt.target.closest('[data-tip]');
+    if (!g) return;
+    const r = g.getBoundingClientRect();
+    showTip(g, r.left + r.width / 2, r.bottom);
+  });
+  panel.addEventListener('keydown', evt => {
+    const current = evt.target.closest('[data-tip]');
+    if (!current || !['ArrowRight','ArrowDown','ArrowLeft','ArrowUp'].includes(evt.key)) return;
+    const items = [...panel.querySelectorAll('[data-tip]')];
+    const index = items.indexOf(current);
+    if (index < 0 || items.length < 2) return;
+    evt.preventDefault();
+    const delta = evt.key === 'ArrowRight' || evt.key === 'ArrowDown' ? 1 : -1;
+    focusTip(items[(index + delta + items.length) % items.length]);
+  });
+  panel.addEventListener('focusout', evt => {
+    if (!panel.contains(evt.relatedTarget)) tt.classList.remove('show');
+  });
+  panel.addEventListener('pointerup', evt => {
+    if (evt.pointerType !== 'touch') return;
+    const g = evt.target.closest('[data-tip]');
+    if (!g) return;
+    const r = g.getBoundingClientRect();
+    showTip(g, r.left + r.width / 2, r.bottom);
   });
   panel.addEventListener('mouseleave', () => tt.classList.remove('show'));
 }
@@ -3230,6 +3430,7 @@ function render(s) {
 
 // INICIALIZAÇÃO
 async function init() {
+  setupContextHelp();
   setupLeftPanelTabs();
   setupChartTooltip();
   try { demoProfile = (await api('/api/demo-profile')).weights || demoProfile; } catch (_) {}

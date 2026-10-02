@@ -2859,3 +2859,47 @@ i.heat-cell.heat-now { border: 2px solid var(--gov-gold-light); }
 
 
 .proc-storage-warning{margin:10px 0;padding:10px 12px;border:1px solid #f59e0b;border-left:5px solid #d97706;border-radius:7px;background:#fffbeb;color:#92400e;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:11px}.proc-storage-warning strong{font-size:10px;letter-spacing:.04em}.proc-storage-warning span{color:#78350f}
+
+
+/* ========================================================
+   AJUDA CONTEXTUAL ACESSÍVEL
+   ======================================================== */
+.sr-only {
+  position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;
+  overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important;
+}
+.has-context-help { cursor: help; }
+.has-context-help:not(button):not(a)::after {
+  content: " ⓘ";
+  color: var(--gov-blue-primary);
+  font-size: .78em;
+  font-weight: 900;
+  opacity: .72;
+}
+.has-context-help:focus-visible {
+  outline: 2px solid var(--gov-blue-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.context-help-popover {
+  position:fixed;z-index:5000;max-width:min(360px,calc(100vw - 20px));padding:9px 11px;
+  border:1px solid #9eb6d4;border-radius:7px;background:#07162c;color:#f8fafc;
+  font-size:11px;line-height:1.45;box-shadow:0 10px 30px rgba(15,23,42,.28);
+  opacity:0;pointer-events:none;transform:translateY(-3px);transition:opacity .12s ease,transform .12s ease;
+}
+.context-help-popover.show { opacity:1;transform:translateY(0); }
+.help-tip {
+  width:18px;height:18px;padding:0;border:1px solid #b8c7da;border-radius:50%;background:#fff;color:#1d4ed8;
+  font-size:11px;font-weight:900;line-height:16px;cursor:help;vertical-align:middle;
+}
+.help-tip:hover,.help-tip:focus-visible { background:#eff6ff;border-color:#3b82f6; }
+.glossary-strip {
+  display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:8px 10px;border:1px solid var(--gov-border);
+  border-radius:7px;background:#f8fafc;color:var(--gov-muted);font-size:10.5px;
+}
+.glossary-strip strong { color:var(--gov-text); }
+.glossary-term {
+  padding:3px 6px;border:1px solid #cbd5e1;border-radius:999px;background:#fff;color:#334155;font-weight:800;
+}
+.graph-node[role="button"]:focus-visible circle,
+.graph-node[role="button"]:focus-visible rect { stroke:#f59e0b!important;stroke-width:4px!important; }

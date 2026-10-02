@@ -175,7 +175,7 @@
       <section class="panel logv-panel">
         <div class="panel-head logv-head">
           <div>
-            <h2>Log Visual HeraclitusDB <small class="head-hint">timeline forense • cadeia de integridade • eventos clicáveis</small></h2>
+            <h2 data-help="Visão visual do mesmo log processual. LSN ordena eventos; parents liga cada evento ao anterior.">Log Visual HeraclitusDB <small class="head-hint">timeline forense • cadeia de integridade • eventos clicáveis</small></h2>
             <p>Uma leitura visual do mesmo log imutável do acompanhamento processual, sem substituir a tabela técnica.</p>
           </div>
           <div class="logv-toolbar">
@@ -184,7 +184,7 @@
                 ${state.processos.map(p => `<option value="${esc(p.id)}" ${p.id === state.selectedProcess ? 'selected' : ''}>${esc(p.capa?.numero || p.id)}</option>`).join('')}
               </select>
             </label>
-            <button class="btn small primary" id="logvRefreshBtn">↻ Atualizar</button>
+            <button class="btn small primary" id="logvRefreshBtn" data-help="Reconsulta a API processual e redesenha a timeline, cadeia e inspetor sem alterar eventos.">↻ Atualizar</button>
           </div>
         </div>
 
@@ -204,17 +204,17 @@
         </div>
 
         <div class="logv-section-head">
-          <div><span class="logv-kicker">VISÃO TEMPORAL</span><h3>Timeline por componentes</h3><p>Cada bolha é um evento. A linha inferior mostra todos os Appends no Ledger.</p></div>
+          <div><span class="logv-kicker">VISÃO TEMPORAL</span><h3 data-help="Distribui cada evento pela categoria funcional e pela posição do seu LSN.">Timeline por componentes</h3><p>Cada bolha é um evento. A linha inferior mostra todos os Appends no Ledger.</p></div>
           <div class="logv-filters" role="group" aria-label="Filtrar eventos">
-            ${FILTERS.map(f => `<button class="logv-filter ${state.filter === f.id ? 'active' : ''}" data-logv-filter="${f.id}">${f.label}</button>`).join('')}
+            ${FILTERS.map(f => `<button class="logv-filter ${state.filter === f.id ? 'active' : ''}" data-logv-filter="${f.id}" data-help="Filtra visualmente a timeline; não altera nem exclui eventos do ledger.">${f.label}</button>`).join('')}
           </div>
         </div>
         ${renderSwimlanes(events)}
 
-        <div class="logv-section-head compact"><div><span class="logv-kicker">INTEGRIDADE</span><h3>Cadeia LSN → elo anterior</h3><p>Role horizontalmente quando houver muitos eventos.</p></div></div>
+        <div class="logv-section-head compact"><div><span class="logv-kicker">INTEGRIDADE</span><h3 data-help="Mostra a sequência local: cada evento, exceto a raiz, deve apontar por parents para o evento anterior do mesmo processo.">Cadeia LSN → elo anterior</h3><p>Role horizontalmente quando houver muitos eventos.</p></div></div>
         ${renderChain(events, integrity)}
 
-        <div class="logv-section-head compact"><div><span class="logv-kicker">INSPEÇÃO</span><h3>Detalhe do evento</h3></div></div>
+        <div class="logv-section-head compact"><div><span class="logv-kicker">INSPEÇÃO</span><h3 data-help="Inspetor do evento selecionado: identificadores, timestamp, elo parents, idempotência e JSON bruto.">Detalhe do evento</h3></div></div>
         <div class="logv-detail">${renderDetail(ev)}</div>
       </section>`;
   }

@@ -28,20 +28,20 @@
 
       <div class="header-badges">
         <div class="badge-item">
-          <span class="badge-label">RISCO</span>
+          <span class="badge-label" data-help="Pontuação sintética de risco calculada pelo cenário da POC. Não é score institucional do STF.">RISCO</span>
           <strong id="riskValue">0</strong>
           <span id="riskLabel" class="tag-status normal">NORMAL</span>
         </div>
         <div class="badge-item">
-          <span class="badge-label">INCIDENTE</span>
+          <span class="badge-label" data-help="Estado do incidente correlacionado pelo motor da POC a partir dos sinais observados.">INCIDENTE</span>
           <strong id="incidentState">NÃO ABERTO</strong>
         </div>
         <div class="badge-item">
-          <span class="badge-label">UPSTREAM</span>
+          <span class="badge-label" data-help="Quantidade de efeitos confirmados no upstream sintético protegido. Zero significa que nenhuma mutação foi aplicada ao sistema-alvo da POC.">UPSTREAM</span>
           <strong id="upstreamHits">0</strong>
         </div>
         <div class="badge-item">
-          <span class="badge-label">HERACLITUS</span>
+          <span class="badge-label" data-help="Estado da integração observada com o HeraclitusDB. Diferencia núcleo real, fallback volátil e indisponibilidade.">HERACLITUS</span>
           <span id="integrationBadge" class="tag-status hdb-status">CONECTANDO...</span>
         </div>
       </div>
@@ -74,17 +74,17 @@
 
   <!-- ABAS PRINCIPAIS -->
   <nav class="main-tabs" role="tablist" aria-label="Áreas do painel">
-    <button class="main-tab active" id="tabDefesa" role="tab" aria-selected="true" aria-controls="viewDefesa" data-view="defesa">🛡️ Defesa cibernética</button>
-    <button class="main-tab" id="tabProcessos" role="tab" aria-selected="false" aria-controls="viewProcessos" data-view="processos">
+    <button class="main-tab active" id="tabDefesa" role="tab" aria-selected="true" aria-controls="viewDefesa" data-view="defesa" data-help="Ataques sintéticos, grafo de correlação, contadores e ledger de eventos de segurança.">🛡️ Defesa cibernética</button>
+    <button class="main-tab" id="tabProcessos" role="tab" aria-selected="false" aria-controls="viewProcessos" data-view="processos" data-help="Processos fictícios reconstruídos por eventos append-only, inclusive visão histórica AS OF LSN.">
       ⚖️ Acompanhamento processual
       <span class="main-tab-badge" id="procNovosBadge" title="Andamentos novos desde a última visita" hidden>0</span>
     </button>
-    <button class="main-tab" id="tabLogvisual" role="tab" aria-selected="false" aria-controls="viewLogvisual" data-view="logvisual">📈 Log Visual HeraclitusDB</button>
-    <button class="main-tab" id="tabZanin" role="tab" aria-selected="false" aria-controls="viewZanin" data-view="zanin">🔬 Forense de IA</button>
-    <button class="main-tab" id="tabIncidente" role="tab" aria-selected="false" aria-controls="viewIncidente" data-view="incidente">🔍 Incidente 360º</button>
-    <button class="main-tab" id="tabAuditoria" role="tab" aria-selected="false" aria-controls="viewAuditoria" data-view="auditoria">📜 Auditoria e Evidências</button>
-    <button class="main-tab" id="tabResiliencia" role="tab" aria-selected="false" aria-controls="viewResiliencia" data-view="resiliencia">🔄 Resiliência e Continuidade</button>
-    <button class="main-tab" id="tabInteroperabilidade" role="tab" aria-selected="false" aria-controls="viewInteroperabilidade" data-view="interoperabilidade">🌐 Interoperabilidade e Reconciliação</button>
+    <button class="main-tab" id="tabLogvisual" role="tab" aria-selected="false" aria-controls="viewLogvisual" data-view="logvisual" data-help="Leitura visual do log processual: timeline, cadeia de elos e inspetor de eventos.">📈 Log Visual HeraclitusDB</button>
+    <button class="main-tab" id="tabZanin" role="tab" aria-selected="false" aria-controls="viewZanin" data-view="zanin" data-help="Análise forense de prompt injection documental, visão Humano × Máquina, Policy Gateway e Evidence Bundle.">🔬 Forense de IA</button>
+    <button class="main-tab" id="tabIncidente" role="tab" aria-selected="false" aria-controls="viewIncidente" data-view="incidente" data-help="Visão consolidada de sinais, correlação, decisões, timeline e evidência de um incidente.">🔍 Incidente 360º</button>
+    <button class="main-tab" id="tabAuditoria" role="tab" aria-selected="false" aria-controls="viewAuditoria" data-view="auditoria" data-help="Inspeção de proveniência, hashes, Merkle, replay AS OF e Evidence Bundle.">📜 Auditoria e Evidências</button>
+    <button class="main-tab" id="tabResiliencia" role="tab" aria-selected="false" aria-controls="viewResiliencia" data-view="resiliencia" data-help="Demonstração sintética de indisponibilidade, backup/checkpoint e verificação de recuperação.">🔄 Resiliência e Continuidade</button>
+    <button class="main-tab" id="tabInteroperabilidade" role="tab" aria-selected="false" aria-controls="viewInteroperabilidade" data-view="interoperabilidade" data-help="Fluxos sintéticos MNI, reconciliação e idempotência entre sistemas.">🌐 Interoperabilidade e Reconciliação</button>
   </nav>
 
   <div class="view" id="viewDefesa" role="tabpanel" aria-labelledby="tabDefesa">
@@ -95,7 +95,7 @@
     <aside class="panel attacks-panel" id="attacksPanel">
       <div class="panel-head attacks-head">
         <div class="attacks-head-title">
-          <h2>⚡ Ataques</h2>
+          <h2 data-help="Agrupa quatro fontes: infraestrutura sintética, testes do Agent-Atack-Heraclitus, campanha roteirizada e contadores por equipamento.">⚡ Ataques</h2>
           <span class="counter-badge" id="attackProgress">0 / 17 executados</span>
         </div>
         <button class="collapse-btn" id="collapseAttacksBtn" onclick="toggleAttacksPanel()" title="Recolher painel de ataques">«</button>
@@ -231,10 +231,10 @@
               <table class="simple-table counters-table">
                 <thead>
                   <tr>
-                    <th>Equipamento / Sistema</th>
-                    <th style="width: 62px; text-align: center;">Tent.</th>
-                    <th style="width: 62px; text-align: center;">Bloq.</th>
-                    <th style="width: 96px; text-align: center;">Status</th>
+                    <th data-help="Componente sintético da infraestrutura associado às tentativas registradas.">Equipamento / Sistema</th>
+                    <th style="width: 62px; text-align: center;" data-help="Tentativas: quantidade total de ataques executados contra o componente.">Tent.</th>
+                    <th style="width: 62px; text-align: center;" data-help="Bloqueadas: tentativas recusadas antes de produzir efeito não autorizado no alvo.">Bloq.</th>
+                    <th style="width: 96px; text-align: center;" data-help="Situação agregada: protegido, atacado/bloqueado ou chegou ao alvo no cenário sintético.">Status</th>
                   </tr>
                 </thead>
                 <tbody id="equipmentCounterRows"></tbody>
@@ -286,7 +286,7 @@
           <div class="focus-col"><span class="focus-label">Ativo</span><strong id="focusAsset">—</strong></div>
           <div class="focus-col"><span class="focus-label">Ator</span><strong id="focusActor">—</strong></div>
           <div class="focus-col"><span class="focus-label">Decisão</span><strong id="focusDecision">—</strong></div>
-          <div class="focus-col"><span class="focus-label">Upstream</span><strong id="focusUpstream">0</strong></div>
+          <div class="focus-col"><span class="focus-label" data-help="Efeito confirmado no sistema sintético protegido após a decisão de política.">Upstream</span><strong id="focusUpstream">0</strong></div>
         </div>
         <div class="focus-narrative" id="focusNarrative">
           Aguardando o início da simulação. Selecione um ataque à esquerda para disparar.
