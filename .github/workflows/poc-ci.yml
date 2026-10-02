@@ -20,4 +20,4 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
       - name: Dashboard JavaScript syntax
-        run: node --check poc/dashboard/app.js && node --check poc/dashboard/processos.js && node --check poc/dashboard/zanin.js
+        run: node --check poc/dashboard/app.js && node --check poc/dashboard/processos.js && node --check poc/dashboard/log-visual.js && node --check poc/dashboard/zanin.js

@@ -1,0 +1,81 @@
+/* ========================================================
+   LOG VISUAL HERACLITUSDB
+   ======================================================== */
+.logv-panel { overflow: hidden; }
+.logv-head { align-items: flex-start; gap: 20px; }
+.logv-head h2 { margin-bottom: 4px; }
+.logv-head p { margin: 0; color: var(--gov-muted); font-size: 12px; }
+.logv-toolbar { display: flex; align-items: end; gap: 8px; flex-wrap: wrap; }
+.logv-toolbar label { display: grid; gap: 4px; font-size: 10px; font-weight: 800; color: var(--gov-muted); text-transform: uppercase; letter-spacing: .04em; }
+.logv-select { min-width: 170px; border: 1px solid var(--gov-border); border-radius: 6px; padding: 7px 9px; background: #fff; color: var(--gov-text); }
+.logv-note { margin: 14px 16px 0; padding: 10px 12px; border: 1px solid var(--gov-border); border-radius: 7px; background: #f8fafc; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 11px; }
+.logv-note strong { color: var(--gov-blue-primary); font-size: 13px; }
+.logv-note > span { color: var(--gov-muted); }
+.logv-integrity { margin-left: auto; padding: 4px 8px; border-radius: 999px; font-weight: 800; }
+.logv-integrity.ok { color: #067647; background: #ecfdf3; border: 1px solid #abefc6; }
+.logv-integrity.broken { color: #b42318; background: #fef3f2; border: 1px solid #fecdca; }
+.logv-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 12px 16px 4px; }
+.logv-kpis > div { border: 1px solid var(--gov-border); border-radius: 8px; background: #fff; padding: 12px; display: grid; gap: 4px; }
+.logv-kpis span { color: var(--gov-muted); font-size: 10px; font-weight: 800; text-transform: uppercase; }
+.logv-kpis strong { font-size: 20px; color: var(--gov-blue-primary); }
+.logv-kpis strong.ok { color: #067647; }
+.logv-kpis strong.broken { color: #b42318; }
+.logv-help { font-weight: 700; cursor: help; color: var(--gov-blue-light); }
+.logv-section-head { padding: 18px 16px 8px; display: flex; align-items: end; justify-content: space-between; gap: 18px; }
+.logv-section-head.compact { padding-top: 22px; }
+.logv-section-head h3 { margin: 1px 0 3px; color: var(--gov-blue-primary); font-size: 15px; }
+.logv-section-head p { margin: 0; color: var(--gov-muted); font-size: 11px; }
+.logv-kicker { color: var(--gov-blue-light); font-size: 9px; font-weight: 900; letter-spacing: .11em; }
+.logv-filters { display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
+.logv-filter { border: 1px solid var(--gov-border); background: #fff; color: var(--gov-text-secondary); border-radius: 999px; padding: 5px 9px; font-size: 10px; font-weight: 700; cursor: pointer; }
+.logv-filter.active { background: var(--gov-blue-primary); color: #fff; border-color: var(--gov-blue-primary); }
+.logv-swimlanes { margin: 0 16px; border: 1px solid var(--gov-border); border-radius: 9px; overflow: hidden; background: #fff; }
+.logv-lane { min-height: 70px; display: grid; grid-template-columns: 160px minmax(500px, 1fr); border-bottom: 1px solid #eef2f6; }
+.logv-lane:last-of-type { border-bottom: 0; background: #f8fbff; }
+.logv-lane-label { padding: 12px; border-right: 1px solid #eef2f6; display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 6px; color: var(--gov-blue-primary); }
+.logv-lane-label strong { font-size: 11px; }
+.logv-lane-label small { min-width: 20px; padding: 2px 5px; text-align: center; border-radius: 999px; background: #eaf1fb; color: var(--gov-blue-primary); font-weight: 800; }
+.logv-lane-track { position: relative; min-width: 500px; min-height: 70px; overflow: visible; }
+.logv-lane-line { position: absolute; left: 3%; right: 3%; top: 35px; height: 2px; background: linear-gradient(90deg, #dbe7f5, var(--gov-blue-light), #dbe7f5); }
+.logv-event { position: absolute; top: 20px; transform: translateX(-50%); border: 0; background: transparent; cursor: pointer; display: grid; place-items: center; gap: 4px; z-index: 2; }
+.logv-event-core { width: 16px; height: 16px; border-radius: 50%; background: var(--gov-blue-primary); border: 3px solid #fff; box-shadow: 0 0 0 2px rgba(12,50,111,.22); transition: transform .15s, box-shadow .15s; }
+.logv-event:hover .logv-event-core, .logv-event.selected .logv-event-core { transform: scale(1.25); box-shadow: 0 0 0 4px rgba(12,50,111,.18); }
+.logv-event.selected .logv-event-core { background: var(--gov-gold); }
+.logv-event.filtered-out { opacity: .12; pointer-events: none; }
+.logv-event.compact .logv-event-core { width: 11px; height: 11px; border-width: 2px; }
+.logv-event-caption { font-size: 8px; font-weight: 800; color: var(--gov-blue-primary); white-space: nowrap; }
+.logv-axis { display: flex; justify-content: space-between; padding: 7px 164px 7px 172px; border-top: 1px solid #eef2f6; color: var(--gov-muted); font-size: 9px; font-weight: 700; }
+.logv-chain-scroll { margin: 0 16px; overflow-x: auto; padding-bottom: 4px; }
+.logv-chain { display: flex; align-items: center; min-width: max-content; padding: 10px 4px 14px; }
+.logv-chain-step { display: flex; align-items: center; }
+.logv-chain-node { width: 132px; min-height: 80px; border: 1px solid #cbd5e1; background: #fff; border-radius: 8px; padding: 8px; display: grid; gap: 3px; text-align: left; cursor: pointer; box-shadow: 0 2px 6px rgba(15,23,42,.04); }
+.logv-chain-node span { font-size: 9px; font-weight: 900; color: var(--gov-blue-light); }
+.logv-chain-node strong { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 10px; color: var(--gov-blue-primary); }
+.logv-chain-node small { font-size: 9px; color: var(--gov-muted); }
+.logv-chain-node.root { border-color: #98a2b3; background: #f8fafc; }
+.logv-chain-node.selected { outline: 3px solid rgba(224,159,31,.28); border-color: var(--gov-gold); }
+.logv-chain-node.broken { border-color: #f04438; background: #fef3f2; }
+.logv-chain-arrow { width: 38px; text-align: center; color: var(--gov-blue-light); font-size: 18px; font-weight: 800; }
+.logv-detail { margin: 0 16px 18px; border: 1px solid var(--gov-border); border-radius: 9px; background: #fff; padding: 14px; }
+.logv-detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; border-bottom: 1px solid #eef2f6; padding-bottom: 10px; }
+.logv-detail-head h3 { margin: 2px 0 0; color: var(--gov-blue-primary); font-size: 14px; }
+.logv-kind { border-radius: 999px; padding: 4px 8px; background: #eef4ff; color: var(--gov-blue-primary); font-size: 9px; font-weight: 800; }
+.logv-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding-top: 12px; }
+.logv-detail-grid > div { display: grid; gap: 3px; padding: 8px 10px; border-radius: 6px; background: #f8fafc; min-width: 0; }
+.logv-detail-grid > div.wide { grid-column: 1 / -1; }
+.logv-detail-grid span { color: var(--gov-muted); font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.logv-detail-grid strong { color: var(--gov-text); font-size: 11px; overflow-wrap: anywhere; }
+.logv-json { margin-top: 12px; border-top: 1px dashed var(--gov-border); padding-top: 10px; }
+.logv-json summary { cursor: pointer; color: var(--gov-blue-primary); font-weight: 800; font-size: 11px; }
+.logv-json pre { max-height: 320px; overflow: auto; padding: 12px; background: #0f172a; color: #e2e8f0; border-radius: 7px; font-size: 10px; white-space: pre-wrap; }
+.logv-loading, .logv-empty { padding: 28px; color: var(--gov-muted); text-align: center; }
+@media (max-width: 900px) {
+  .logv-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .logv-section-head, .logv-head { align-items: stretch; flex-direction: column; }
+  .logv-lane { grid-template-columns: 120px minmax(500px, 1fr); }
+  .logv-axis { padding-left: 130px; }
+}
+@media (max-width: 620px) {
+  .logv-kpis, .logv-detail-grid { grid-template-columns: 1fr; }
+  .logv-detail-grid > div.wide { grid-column: auto; }
+}

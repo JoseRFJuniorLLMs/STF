@@ -65,7 +65,7 @@ Defina `HERACLITUS_URL=http://127.0.0.1:<porta>` para habilitar a leitura. O das
 
 A aba **Acompanhamento processual** mostra só o log de processos fictícios — protocolo, andamentos, deslocamentos e petições — no formato do Acompanhamento Processual do portal do STF e da API pública do DataJud (códigos da Tabela Processual Unificada de movimentos do CNJ; número único da Resolução CNJ 65/2008).
 
-Cada linha é um evento imutável gravado no **núcleo** do HeraclitusDB (gRPC `Append`, encadeado ao anterior por `parents`, com chave de idempotência) e lido de volta por GQL, inclusive `AS OF LSN`.
+Cada linha é um evento imutável gravado no **núcleo** do HeraclitusDB (gRPC `Append`, encadeado ao anterior por `parents`, com chave de idempotência) e lido de volta por GQL, inclusive `AS OF LSN`.\n\nA aba **Log Visual HeraclitusDB** (`#logvisual`) usa o mesmo log para montar uma timeline por componentes, uma swimlane do Ledger, a cadeia visual LSN → elo anterior e um inspetor clicável de cada evento.
 
 | Variável | Uso | Padrão |
 | --- | --- | --- |

@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>STF POC | HeraclitusDB — Governança e Defesa Cibernética</title>
-  <link rel="stylesheet" href="styles.css?v=20260924-demo" />
+  <link rel="stylesheet" href="styles.css?v=20260924-demo" />\n  <link rel="stylesheet" href="log-visual.css" />
   <link rel="stylesheet" href="incidente.css" />
   <link rel="stylesheet" href="auditoria.css" />
   <link rel="stylesheet" href="resiliencia.css" />
@@ -432,6 +432,11 @@
     </section>
   </div>
 
+  <!-- LOG VISUAL HERACLITUSDB -->
+  <div class="view" id="viewLogvisual" role="tabpanel" aria-labelledby="tabLogvisual" hidden>
+    <section class="panel logv-panel"><div class="logv-loading">Abra a aba para carregar a timeline forense do HeraclitusDB.</div></section>
+  </div>
+
   <!-- DEFESA ZANIN (PROMPT INJECTION & FRAUDE POR IA) -->
   <div class="view" id="viewZanin" role="tabpanel" aria-labelledby="tabZanin" hidden></div>
 
@@ -454,7 +459,7 @@
 
 <div id="toast" class="toast"></div>
 <script src="app.js?v=20260924-demo"></script>
-<script src="processos.js"></script>
+<script src="processos.js"></script>\n<script src="log-visual.js"></script>
 <script src="zanin.js"></script>
 <script src="incidente.js?v=20260924-demo"></script>
 <script src="auditoria.js"></script>

@@ -39,7 +39,7 @@ const procData = iso => (iso ? procDataFmt.format(new Date(iso)) : '—');
 const procDataHora = iso => (iso ? procDataHoraFmt.format(new Date(iso)) : '—');
 const procHora = ms => (ms ? procDataHoraFmt.format(new Date(ms)) : '—');
 
-const ALL_VIEWS = ['defesa', 'processos', 'zanin', 'incidente', 'auditoria', 'resiliencia', 'interoperabilidade'];
+const ALL_VIEWS = ['defesa', 'processos', 'logvisual', 'zanin', 'incidente', 'auditoria', 'resiliencia', 'interoperabilidade'];
 
 function procViewAtiva() {
   return !$('#viewProcessos').hidden;
@@ -75,6 +75,8 @@ function mostrarView(view, atualizarHash = true) {
     if (procSelecionado) procNovos.delete(procSelecionado);
     atualizarBadgeNovos();
     carregarProcessos();
+  } else if (view === 'logvisual' && typeof refreshLogVisualHeraclitus === 'function') {
+    refreshLogVisualHeraclitus();
   } else if (view === 'zanin' && typeof refreshDefesaZanin === 'function') {
     refreshDefesaZanin();
   } else if (view === 'incidente' && typeof refreshIncidente360 === 'function') {
@@ -655,7 +657,15 @@ function renderSubtab(eventos, integ, novo) {
     }, 'Nenhum deslocamento neste ponto do histórico.');
   }
   const linhas = [...eventos].reverse();
-  return tabela(['Seq', 'LSN', 'Registrado', 'Kind', 'Evento (ULID)', 'Elo anterior', 'Chave de idempotência'], linhas, e => {
+  return tabela([
+    '<span title="Ordem visual do evento dentro deste processo.">Seq <span class="th-help">ⓘ</span></span>',
+    '<span title="Log Sequence Number: posição monotônica e imutável do evento no log.">LSN <span class="th-help">ⓘ</span></span>',
+    '<span title="Momento em que o evento foi persistido pelo núcleo HeraclitusDB.">Registrado <span class="th-help">ⓘ</span></span>',
+    '<span title="Tipo técnico do registro/evento persistido.">Kind <span class="th-help">ⓘ</span></span>',
+    '<span title="ULID único que identifica o evento e preserva ordenação temporal aproximada.">Evento (ULID) <span class="th-help">ⓘ</span></span>',
+    '<span title="Referência parents para o evento imediatamente anterior da cadeia.">Elo anterior <span class="th-help">ⓘ</span></span>',
+    '<span title="Chave usada para impedir duplicação lógica da mesma operação.">Chave de idempotência <span class="th-help">ⓘ</span></span>'
+  ], linhas, e => {
     const quebrado = !integ.integra && e.lsn === integ.lsn;
     return `<tr class="${novo(e.lsn)}${quebrado ? ' row-broken' : ''}">
       <td class="mono">${e.seq}</td>
