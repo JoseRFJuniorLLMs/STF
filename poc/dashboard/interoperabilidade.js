@@ -84,7 +84,7 @@
         <div class="interop-hero">
           <div>
             <span class="interop-eyebrow">PADRÃO CNJ MNI &amp; DATAJUD</span>
-            <h2>Interoperabilidade e Reconciliação</h2>
+            <h2 data-help="Demonstra remessas sintéticas entre sistemas, reconciliação e proteção contra duplicação lógica por idempotência.">Interoperabilidade e Reconciliação</h2>
             <p>Rastreamento de remessas processuais entre o STF e tribunais estaduais/federais com recibos de entrega e garantia de idempotência no HeraclitusDB.</p>
           </div>
           <div class="interop-status-badge">
@@ -123,12 +123,12 @@
         <div class="interop-grid">
           <section class="interop-box">
             <div class="interop-box-head">
-              <h3>Remessas e Transmissões MNI</h3>
+              <h3 data-help="MNI significa Modelo Nacional de Interoperabilidade. Nesta POC as remessas são sintéticas e não representam tráfego oficial.">Remessas e Transmissões MNI</h3>
               <div style="display: flex; gap: 8px;">
-                <button class="btn tiny primary" type="button" data-interop-action="reconciliar" ${reconciliando ? 'disabled' : ''}>
+                <button class="btn tiny primary" type="button" data-interop-action="reconciliar" data-help="Compara as remessas dos dois lados e tenta fechar diferenças sem criar uma nova operação lógica." ${reconciliando ? 'disabled' : ''}>
                   ${reconciliando ? '⏳ Reconciliando...' : '🔄 Reconciliar Barramento'}
                 </button>
-                <button class="btn tiny ghost" type="button" data-interop-action="duplicata" ${testando ? 'disabled' : ''}>
+                <button class="btn tiny ghost" type="button" data-interop-action="duplicata" data-help="Reenvia a mesma operação lógica para provar que a chave de idempotência impede duplicação divergente." ${testando ? 'disabled' : ''}>
                   ${testando ? '⚡ Enviando...' : '⚡ Testar Remessa Duplicada'}
                 </button>
               </div>
@@ -136,11 +136,11 @@
             <table class="interop-table">
               <thead>
                 <tr>
-                  <th>Código / Data</th>
-                  <th>Processo</th>
-                  <th>Origem ➔ Destino</th>
-                  <th>Status MNI</th>
-                  <th>Chave de Idempotência</th>
+                  <th data-help="Identificador sintético da remessa e momento de criação.">Código / Data</th>
+                  <th data-help="Processo fictício associado à remessa.">Processo</th>
+                  <th data-help="Sistemas sintéticos de origem e destino usados no fluxo de interoperabilidade.">Origem ➔ Destino</th>
+                  <th data-help="Estado da transmissão no MNI sintético: enviada, reconciliada, duplicada etc.">Status MNI</th>
+                  <th data-help="Identificador determinístico usado para reconhecer repetição da mesma operação e evitar duplicação divergente.">Chave de Idempotência</th>
                 </tr>
               </thead>
               <tbody>
@@ -175,7 +175,7 @@
 
           <section class="interop-box">
             <div class="interop-box-head">
-              <h3>Garantia de Idempotência Criptográfica</h3>
+              <h3 data-help="Idempotência garante que repetir a mesma operação lógica não crie uma segunda remessa divergente. A chave vincula a identidade da operação.">Garantia de Idempotência Criptográfica</h3>
             </div>
             <p style="font-size: 12px; color: var(--gov-text-secondary); margin: 0; line-height: 1.5;">
               No Poder Judiciário, problemas comuns de latência levam sistemas emissores a tentar reenviar a mesma petição ou andamento várias vezes.

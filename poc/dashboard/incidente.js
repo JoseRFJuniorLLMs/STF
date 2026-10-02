@@ -99,7 +99,7 @@
         <div><span>Bloqueados</span><strong>${counts.BLOCKED}</strong><small>${pct(counts.BLOCKED)} · barrados na entrada</small></div>
         <div><span>Chegaram ao alvo</span><strong>${counts.TARGET_REACHED}</strong><small>${pct(counts.TARGET_REACHED)} · :( somente simulação</small></div>
       </div>
-      <div class="table-wrap"><table class="simple-table"><thead><tr><th>Componente</th><th>Tent.</th><th>Def.</th><th>Bloq.</th><th>Alvo</th></tr></thead><tbody>
+      <div class="table-wrap"><table class="simple-table"><thead><tr><th data-help="Componente sintético atingido pelo teste.">Componente</th><th data-help="Tentativas observadas contra o componente.">Tent.</th><th data-help="Defendidas: detectadas e contidas no cenário antes de uma ação não autorizada.">Def.</th><th data-help="Bloqueadas: recusadas pelo gateway/policy antes de produzir efeito.">Bloq.</th><th data-help="Tentativas que chegaram ao alvo sintético; isso não significa acesso a infraestrutura real.">Alvo</th></tr></thead><tbody>
         ${rows.map(row => `<tr><td>${escapeHtml(row.name)}</td><td>${row.total}</td><td>${row.DEFENDED}</td><td>${row.BLOCKED}</td><td>${row.TARGET_REACHED}</td></tr>`).join('')}
       </tbody></table></div>
     </section>`;
@@ -193,13 +193,13 @@
           ${atkId === 'IA_ZAN_05' ? `<button type="button" class="btn tiny primary" data-go-zanin="IA_ZAN_05">🔬 Ver Forense de IA</button>` : ''}
         </div>
       ` : '';
-      const effect = decision ? `<div class="inc360-event-effect">Gateway: <strong>${clean(decision.outcome || event.outcome)}</strong> · upstream Δ ${event.upstream_delta === null || event.upstream_delta === undefined ? '—' : clean(event.upstream_delta)}${receipt ? ' · recibo local presente' : ''}${reason}</div>` : '';
+      const effect = decision ? `<div class="inc360-event-effect">Gateway: <strong data-help="Policy Gateway decide se uma ação pode produzir efeito com base na policy e no contexto de autorização.">${clean(decision.outcome || event.outcome)}</strong> · <span data-help="upstream_delta mede a variação de efeitos confirmados no upstream sintético. Zero significa nenhum efeito aplicado.">upstream Δ</span> ${event.upstream_delta === null || event.upstream_delta === undefined ? '—' : clean(event.upstream_delta)}${receipt ? ' · recibo local presente' : ''}${reason}</div>` : '';
 
       return `<li class="inc360-event">
         <span class="inc360-event-marker" aria-hidden="true"></span>
         <div class="inc360-event-card">
           <div class="inc360-event-top">
-            <span class="inc360-lsn">LSN ${clean(event.lsn)}</span>
+            <span class="inc360-lsn" data-help="LSN (Log Sequence Number): posição monotônica do evento na trilha local da POC.">LSN ${clean(event.lsn)}</span>
             <span class="inc360-event-source">${clean(event.source)}</span>
             ${attackBadge}
             <span class="inc360-badge ${evidence.kind}" title="${escapeHtml(evidence.explanation)}">${evidence.label}</span>
@@ -267,7 +267,7 @@
     const lastHash = events.length ? events[events.length - 1].event_hash : null;
     root.innerHTML = `<section class="panel inc360">
       <div class="inc360-hero">
-        <div><span class="inc360-eyebrow">VISÃO CONSOLIDADA · AMBIENTE SINTÉTICO</span><h2>Incidente 360º</h2><p>Da correlação de sinais à decisão do gateway, aprovação humana e consulta ao processo fictício.</p></div>
+        <div><span class="inc360-eyebrow">VISÃO CONSOLIDADA · AMBIENTE SINTÉTICO</span><h2 data-help="Consolida sinais, correlação, decisões de policy, timeline, processo relacionado e evidência do incidente sintético.">Incidente 360º</h2><p>Da correlação de sinais à decisão do gateway, aprovação humana e consulta ao processo fictício.</p></div>
         <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
           <button type="button" class="btn small primary" data-inc360-action="correlacionar">⚡ Executar Correlação de Sinais</button>
           <div class="inc360-hero-state"><span class="inc360-badge ${incident ? 'alert' : 'uncertain'}">${incident ? clean(incident.state) : 'NÃO ABERTO'}</span><strong>${incident ? clean(incident.incident_id) : 'Aguardando sinais'}</strong><small>${incident ? `Severidade ${clean(incident.severity)}` : 'Sem correlação qualificada'}</small></div>
@@ -282,19 +282,19 @@
       ${renderDemo()}
       <div class="inc360-grid">
         <div class="inc360-main">
-          <section class="inc360-section"><div class="inc360-section-head"><div><span class="inc360-section-kicker">DETECÇÃO</span><h3>Por que o incidente foi aberto</h3></div><span class="inc360-badge ${incident ? 'verified' : 'uncertain'}">${incident ? 'CORRELACIONADO' : 'PENDENTE'}</span></div>
+          <section class="inc360-section"><div class="inc360-section-head"><div><span class="inc360-section-kicker">DETECÇÃO</span><h3 data-help="Explica quais sinais correlacionados satisfizeram a regra de abertura do incidente. Correlação exige relação temporal e/ou entidades compartilhadas, não apenas horário parecido.">Por que o incidente foi aberto</h3></div><span class="inc360-badge ${incident ? 'verified' : 'uncertain'}">${incident ? 'CORRELACIONADO' : 'PENDENTE'}</span></div>
             <p class="inc360-section-copy">${escapeHtml(why.summary || 'Ainda não há evidência suficiente para abrir o incidente.')}</p>
             ${reasons.length ? `<div class="inc360-reasons">${reasons.map(reason => `<div><span>LSN ${clean(reason.lsn)} · ${clean(reason.source)}</span><strong>${clean(reason.reason_code)}</strong><small>${reason.hash_reference_valid ? 'Hash da referência confere' : 'Referência sem confirmação'} · ${clean(reason.asset)}</small></div>`).join('')}</div>` : '<div class="inc360-empty">Os sinais que compõem a abertura aparecerão aqui após a correlação.</div>'}
           </section>
-          <section class="inc360-section"><div class="inc360-section-head"><div><span class="inc360-section-kicker">HISTÓRICO</span><h3>Linha do tempo</h3></div><span class="inc360-count">${events.length} evento(s)</span></div>
+          <section class="inc360-section"><div class="inc360-section-head"><div><span class="inc360-section-kicker">HISTÓRICO</span><h3 data-help="Ordena os eventos relevantes do incidente por LSN, incluindo sinais, decisões e respostas.">Linha do tempo</h3></div><span class="inc360-count">${events.length} evento(s)</span></div>
             <div class="inc360-filters" role="group" aria-label="Filtrar linha do tempo"><button type="button" data-inc360-filter="all" aria-pressed="${activeFilter === 'all'}" class="${activeFilter === 'all' ? 'active' : ''}">Todos</button><button type="button" data-inc360-filter="signals" aria-pressed="${activeFilter === 'signals'}" class="${activeFilter === 'signals' ? 'active' : ''}">Sinais</button><button type="button" data-inc360-filter="response" aria-pressed="${activeFilter === 'response'}" class="${activeFilter === 'response' ? 'active' : ''}">Resposta</button></div>
             ${renderTimeline(events)}
           </section>
         </div>
         <div class="inc360-side">
-          <section class="inc360-section"><div class="inc360-section-head"><div><span class="inc360-section-kicker">RESPOSTA</span><h3>Decisões registradas</h3></div></div>${renderResponse(s, events)}</section>
+          <section class="inc360-section"><div class="inc360-section-head"><div><span class="inc360-section-kicker">RESPOSTA</span><h3 data-help="Resume decisões do Policy Gateway, aprovações humanas e efeitos confirmados no upstream sintético.">Decisões registradas</h3></div></div>${renderResponse(s, events)}</section>
           <section class="inc360-section"><div class="inc360-section-head"><div><span class="inc360-section-kicker">CONTEXTO</span><h3>Processo referenciado</h3></div></div>${renderProcess(s)}</section>
-          <section class="inc360-section inc360-evidence"><div class="inc360-section-head"><div><span class="inc360-section-kicker">RASTREABILIDADE</span><h3>Última evidência local</h3></div></div><div class="inc360-mono">${shortHash(lastHash)}</div><p class="inc360-caveat">Hash do último evento mostrado. Confira a cadeia e o pacote exportado na aba Auditoria e Evidências.</p></section>
+          <section class="inc360-section inc360-evidence"><div class="inc360-section-head"><div><span class="inc360-section-kicker">RASTREABILIDADE</span><h3 data-help="Mostra a evidência mais recente disponível na trilha local da POC; não equivale a prova institucional externa.">Última evidência local</h3></div></div><div class="inc360-mono">${shortHash(lastHash)}</div><p class="inc360-caveat">Hash do último evento mostrado. Confira a cadeia e o pacote exportado na aba Auditoria e Evidências.</p></section>
         </div>
       </div>
     </section>`;
