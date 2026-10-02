@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Reset destrutivo controlado do laboratório STF/HeraclitusDB.
 
-Exige --yes, valida o diretório permitido, cria backup obrigatório e nunca usa shell=True.
+Exige --yes, valida o diretório permitido, cria backup obrigatório e executa subprocessos por argv.
 """
 from __future__ import annotations
 import argparse, json, subprocess, time, urllib.request
