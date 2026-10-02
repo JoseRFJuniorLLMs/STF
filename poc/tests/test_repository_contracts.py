@@ -36,9 +36,10 @@ class RepositoryContracts(unittest.TestCase):
         self.assertIn("somente leitura",proc)
 
     def test_all_technical_table_headers_have_context_help(self):
-        files=("index.html","processos.js","zanin.js","incidente.js","resiliencia.js","interoperabilidade.js")
-        for name in files:
-            text=(DASH/name).read_text(encoding="utf-8")
+        files=[DASH/"index.html",*sorted(DASH.glob("*.js"))]
+        for path in files:
+            name=path.name
+            text=path.read_text(encoding="utf-8")
             for tag in re.findall(r"<th\\b[^>]*>",text):
                 self.assertRegex(tag,r"(?:data-help|title|aria-describedby)=",msg=f"{name}: technical <th> without help: {tag}")
 
@@ -72,6 +73,26 @@ class RepositoryContracts(unittest.TestCase):
         app=(DASH/"app.js").read_text(encoding="utf-8")
         for token in ('role="button" tabindex="0"',"onfocus=","onblur=","onkeydown=","event.key==='Enter'","aria-label="):
             self.assertIn(token,app)
+
+    def test_chart_tooltips_have_roving_keyboard_and_touch_access(self):
+        app=(DASH/"app.js").read_text(encoding="utf-8")
+        for token in ("decorateTips","tabindex', index === 0 ? '0' : '-1'","ArrowRight","ArrowLeft","focusTip","pointerup","plainTip"):
+            self.assertIn(token,app)
+
+    def test_context_help_is_materially_present_across_views(self):
+        expected={
+            "index.html":12,
+            "processos.js":3,
+            "log-visual.js":5,
+            "zanin.js":15,
+            "incidente.js":8,
+            "auditoria.js":7,
+            "resiliencia.js":8,
+            "interoperabilidade.js":8,
+        }
+        for name,minimum in expected.items():
+            text=(DASH/name).read_text(encoding="utf-8")
+            self.assertGreaterEqual(text.count("data-help="),minimum,msg=f"{name}: contextual help coverage regressed")
 
     def test_main_tabs_are_self_describing(self):
         html=(DASH/"index.html").read_text(encoding="utf-8")
