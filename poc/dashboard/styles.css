@@ -2801,6 +2801,31 @@ i.heat-cell.heat-now { border: 2px solid var(--gov-gold-light); }
   gap: 8px;
   border-top: 1px dashed #f87171;
   padding-top: 10px;
+  padding-right: 6px;
+  max-height: min(320px, 34vh);
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.proc-sec-attacks-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.proc-sec-attacks-list::-webkit-scrollbar-track {
+  background: #fee2e2;
+  border-radius: 999px;
+}
+
+.proc-sec-attacks-list::-webkit-scrollbar-thumb {
+  background: #f87171;
+  border-radius: 999px;
+  border: 2px solid #fee2e2;
+}
+
+.proc-sec-attacks-list::-webkit-scrollbar-thumb:hover {
+  background: #dc2626;
 }
 
 .proc-sec-attack-item {
