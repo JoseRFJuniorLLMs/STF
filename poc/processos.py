@@ -382,8 +382,10 @@ def _situacao(andamentos: list[dict[str, Any]]) -> str:
 
 
 class ResilientMemoryCore:
-    """Núcleo resiliente em memória para continuidade operacional ininterrupta
-    quando o processo gRPC do HeraclitusDB sofrer indisponibilidade ou contenção de I/O."""
+    """Snapshot sintético VOLÁTIL para leitura degradada.
+
+    Não é HeraclitusDB, não é HRKL durável e nunca confirma persistência.
+    """
     def __init__(self, addr: str = "127.0.0.1:7474") -> None:
         self.addr = addr
         self.rows: list[dict[str, Any]] = []
@@ -426,8 +428,42 @@ class ProcessLedger:
         self.core = core
         addr = getattr(core, "addr", "127.0.0.1:7474")
         self.fallback_core = ResilientMemoryCore(addr)
-        self._use_fallback = False
+        self._fallback_active = False
+        self._last_core_error: str | None = None
         self.lock = threading.Lock()
+
+    def storage_status(self) -> dict[str, Any]:
+        if self._fallback_active:
+            return {
+                "storage_mode": "MEMORY_FALLBACK",
+                "durability": "VOLATILE",
+                "fallback_active": True,
+                "core_connected": False,
+                "lsn_namespace": "FALLBACK_SYNTHETIC",
+                "storage_error": self._last_core_error,
+            }
+        return {
+            "storage_mode": "HERACLITUS_CORE",
+            "durability": "DURABLE",
+            "fallback_active": False,
+            "core_connected": True,
+            "lsn_namespace": "HERACLITUS",
+            "storage_error": None,
+        }
+
+    def _core_ok(self) -> None:
+        self._fallback_active = False
+        self._last_core_error = None
+
+    def _core_down(self, exc: Exception) -> None:
+        self._fallback_active = True
+        self._last_core_error = str(exc)
+
+    def _require_durable_write(self) -> None:
+        if self._fallback_active:
+            raise CoreUnavailable(
+                "núcleo HeraclitusDB indisponível; MEMORY_FALLBACK é somente leitura e não confirma persistência"
+            )
 
     def _prepopular_fallback(self) -> None:
         for proc in CATALOGO:
@@ -455,10 +491,10 @@ class ProcessLedger:
         as_of_clause = f" AS OF LSN {int(as_of) + 1}" if as_of is not None else ""
         eventos = []
         try:
-            core = self.fallback_core if self._use_fallback else self.core
-            rows = core.query(f"MATCH (n) WHERE {where}{as_of_clause} RETURN n")
-        except CoreUnavailable:
-            self._use_fallback = True
+            rows = self.core.query(f"MATCH (n) WHERE {where}{as_of_clause} RETURN n")
+            self._core_ok()
+        except CoreUnavailable as exc:
+            self._core_down(exc)
             if not self.fallback_core.rows:
                 self._prepopular_fallback()
             rows = self.fallback_core.query(f"MATCH (n) WHERE {where}{as_of_clause} RETURN n")
@@ -487,7 +523,8 @@ class ProcessLedger:
         ultimo = andamentos[-1] if andamentos else None
         return {
             "id": proc["id"], "capa": _capa(proc), "situacao": _situacao(andamentos),
-            "eventos": len(eventos), "pendentes": len(_passos(proc)) - len(eventos),
+            "eventos": len(eventos), "pendentes": max(0, len(_passos(proc)) - len(eventos)),
+            "continuous_mode": len(eventos) > len(_passos(proc)),
             "andamentos": len(andamentos),
             "ultimo_andamento": {
                 "dataHora": ultimo["dataHora"], "codigo": ultimo["movimento"]["codigo"],
@@ -507,6 +544,7 @@ class ProcessLedger:
             "processos": processos, "catalogo": len(CATALOGO),
             "eventos": sum(p["eventos"] for p in processos),
             "head_lsn": max((p["ultimo_lsn"] or 0 for p in processos), default=None),
+            **self.storage_status(),
         }
 
     def detalhe(self, processo_id: str, as_of: int | None = None) -> dict[str, Any] | None:
@@ -546,27 +584,24 @@ class ProcessLedger:
         return {
             "processo": self._resumo(proc, eventos), "eventos": eventos,
             "integridade": verificar_cadeia(eventos), "lsns": todos_lsns, "as_of_lsn": as_of,
-            "passos_timeline": passos_timeline,
+            "passos_timeline": passos_timeline, **self.storage_status(),
         }
 
     # -------------------------------------------------------------- escrita
     def _gravar(self, proc: dict[str, Any], seq: int, quando: datetime, pai: str | None) -> dict[str, Any]:
         conteudo = construir_conteudo(proc, seq, quando)
+        self._require_durable_write()
         try:
-            core = self.fallback_core if self._use_fallback else self.core
-            res = core.append(
+            res = self.core.append(
                 agent_id=AGENT_ID, session_id=conteudo["numeroProcesso"], kind=KINDS[conteudo["tipo"]],
                 content=conteudo, attrs=_attrs(proc, seq, conteudo), parents=[pai] if pai else [],
                 idempotency_key=f"stf-proc:{conteudo['numeroProcesso']}:{seq:03d}",
             )
-        except CoreUnavailable:
-            self._use_fallback = True
-            res = self.fallback_core.append(
-                agent_id=AGENT_ID, session_id=conteudo["numeroProcesso"], kind=KINDS[conteudo["tipo"]],
-                content=conteudo, attrs=_attrs(proc, seq, conteudo), parents=[pai] if pai else [],
-                idempotency_key=f"stf-proc:{conteudo['numeroProcesso']}:{seq:03d}",
-            )
-        return {**res, "processo_id": proc["id"], "seq": seq, "conteudo": conteudo}
+            self._core_ok()
+        except CoreUnavailable as exc:
+            self._core_down(exc)
+            raise
+        return {**res, "processo_id": proc["id"], "seq": seq, "conteudo": conteudo, **self.storage_status()}
 
     def protocolar(self) -> dict[str, Any]:
         """Grava a parte inicial do roteiro de cada processo (idempotente)."""
@@ -575,6 +610,7 @@ class ProcessLedger:
             atuais: dict[str, list[dict[str, Any]]] = {}
             for ev in self._eventos():
                 atuais.setdefault(ev["processo_id"], []).append(ev)
+            self._require_durable_write()
             for proc in CATALOGO:
                 evs = atuais.get(proc["id"], [])
                 pai = evs[-1]["id"] if evs else None
@@ -593,6 +629,7 @@ class ProcessLedger:
                 atuais: dict[str, int] = {}
                 for ev in self._eventos():
                     atuais[ev["processo_id"]] = atuais.get(ev["processo_id"], 0) + 1
+                self._require_durable_write()
                 if not atuais:
                     raise LookupError("nenhum processo protocolado no HeraclitusDB")
                 candidatos = [p for p in CATALOGO if 0 < atuais.get(p["id"], 0) < len(_passos(p))]
@@ -608,6 +645,7 @@ class ProcessLedger:
                 if proc is None:
                     raise KeyError(processo_id)
             evs = self._eventos(proc["id"])
+            self._require_durable_write()
             if not evs:
                 raise LookupError(f"{proc['id']} ainda não foi protocolado no HeraclitusDB")
             seq = len(evs) + 1
@@ -659,19 +697,16 @@ class ProcessLedger:
             }
             attrs = {**_attrs(proc, seq, conteudo, "avulso"), "approval_id": approval_id,
                      "aprovado_por": str(aprovacao.get("aprovador", ""))}
+            self._require_durable_write()
             try:
-                core = self.fallback_core if self._use_fallback else self.core
-                res = core.append(
+                res = self.core.append(
                     agent_id=AGENT_ID, session_id=capa["numeroUnico"], kind=KINDS["andamento"], content=conteudo,
                     attrs=attrs, parents=[evs[-1]["id"]],
                     idempotency_key=f"stf-proc:{capa['numeroUnico']}:av:{approval_id}",
                 )
-            except CoreUnavailable:
-                self._use_fallback = True
-                res = self.fallback_core.append(
-                    agent_id=AGENT_ID, session_id=capa["numeroUnico"], kind=KINDS["andamento"], content=conteudo,
-                    attrs=attrs, parents=[evs[-1]["id"]],
-                    idempotency_key=f"stf-proc:{capa['numeroUnico']}:av:{approval_id}",
-                )
-            return {**res, "processo_id": proc["id"], "seq": seq, "conteudo": conteudo}
+                self._core_ok()
+            except CoreUnavailable as exc:
+                self._core_down(exc)
+                raise
+            return {**res, "processo_id": proc["id"], "seq": seq, "conteudo": conteudo, **self.storage_status()}
 

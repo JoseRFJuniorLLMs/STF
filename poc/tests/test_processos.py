@@ -41,6 +41,22 @@ class NumeroUnicoTests(unittest.TestCase):
                 if passo["tipo"]=="andamento": self.assertIn(passo["codigo"],TPU,proc["id"])
             self.assertLessEqual(proc["inicial"],len(_passos(proc)))
 
+class DownCore(FakeCore):
+    def query(self,gql):
+        raise CoreUnavailable("core down")
+    def append(self,**kwargs):
+        raise CoreUnavailable("core down")
+
+
+class FlakyAppendCore(FakeCore):
+    def __init__(self):
+        super().__init__(); self.fail_append=False
+    def append(self,**kwargs):
+        if self.fail_append:
+            raise CoreUnavailable("append failed after successful read")
+        return super().append(**kwargs)
+
+
 class LedgerTests(unittest.TestCase):
     def setUp(self):
         self.core=FakeCore(); self.ledger=ProcessLedger(self.core)
@@ -86,7 +102,29 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual(passado["lsns"],[e["lsn"] for e in eventos])
         self.assertTrue(passado["integridade"]["integra"])
     def test_id_invalido_nao_chega_ao_gql(self):
-        with self.assertRaises(ValueError): self.ledger._eventos('RE-000001" OR n.x = "y')
+        with self.assertRaises(ValueError): self.ledger._eventos('RE-000001" OR n.x = "y")
+    def test_read_fallback_is_explicitly_volatile_and_not_connected(self):
+        ledger=ProcessLedger(DownCore())
+        lista=ledger.listar()
+        self.assertEqual(lista["storage_mode"],"MEMORY_FALLBACK")
+        self.assertEqual(lista["durability"],"VOLATILE")
+        self.assertTrue(lista["fallback_active"])
+        self.assertFalse(lista["core_connected"])
+        self.assertTrue(lista["processos"])
+        with self.assertRaises(CoreUnavailable):
+            ledger.protocolar()
+    def test_append_failure_after_real_read_never_writes_to_memory_fallback(self):
+        core=FlakyAppendCore(); ledger=ProcessLedger(core); ledger.protocolar()
+        before=len(core.rows)
+        core.fail_append=True
+        with self.assertRaises(CoreUnavailable):
+            ledger.tramitar("HC-000003",agora=datetime(2026,9,24,10,0,tzinfo=BRT))
+        self.assertEqual(len(core.rows),before)
+        self.assertEqual(len(ledger.fallback_core.rows),0)
+        status=ledger.storage_status()
+        self.assertEqual(status["storage_mode"],"MEMORY_FALLBACK")
+        self.assertEqual(status["durability"],"VOLATILE")
+        self.assertFalse(status["core_connected"])
     def test_acrescentar_avulso_com_aprovacao_humana(self):
         self.ledger.protocolar()
         antes = self.ledger.detalhe("RE-000001")["eventos"]
