@@ -102,7 +102,7 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual(passado["lsns"],[e["lsn"] for e in eventos])
         self.assertTrue(passado["integridade"]["integra"])
     def test_id_invalido_nao_chega_ao_gql(self):
-        with self.assertRaises(ValueError): self.ledger._eventos('RE-000001" OR n.x = "y")
+        with self.assertRaises(ValueError): self.ledger._eventos('RE-000001" OR n.x = "y')
     def test_read_fallback_is_explicitly_volatile_and_not_connected(self):
         ledger=ProcessLedger(DownCore())
         lista=ledger.listar()
