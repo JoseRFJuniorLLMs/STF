@@ -122,16 +122,22 @@ async function carregarProcessos() {
   try {
     const res = await api('/api/processos');
     $('#procAddr').textContent = res.addr || '—';
-    if (!res.connected) {
+    const volatileFallback = res.storage_mode === 'MEMORY_FALLBACK';
+    if (!res.connected && !volatileFallback) {
       setProcStatus('OFFLINE', 'critical');
       $('#procProtocolarBtn').hidden = true;
       procLista = [];
       $('#procList').innerHTML = `<div class="proc-empty">HeraclitusDB indisponível em <code>${esc(res.addr || '')}</code>.<br><small>${esc(res.error || '')}</small></div>`;
-      if (!procDetalhe) $('#procDetail').innerHTML = '<div class="proc-empty">Sem ligação ao banco não há log para mostrar.</div>';
+      if (!procDetalhe) $('#procDetail').innerHTML = '<div class="proc-empty">Sem núcleo nem snapshot de leitura não há log para mostrar.</div>';
       return;
     }
-    setProcStatus(`CONECTADO • ${res.eventos} eventos`, 'normal');
-    $('#procProtocolarBtn').hidden = res.processos.length >= res.catalogo;
+    if (volatileFallback) {
+      setProcStatus(`FALLBACK VOLÁTIL • ${res.eventos} eventos sintéticos`, 'warning');
+      $('#procProtocolarBtn').hidden = true;
+    } else {
+      setProcStatus(`CONECTADO • ${res.eventos} eventos`, 'normal');
+      $('#procProtocolarBtn').hidden = res.processos.length >= res.catalogo;
+    }
     detectarNovidades(res.processos);
     procLista = res.processos;
     renderListaProcessos();
@@ -225,7 +231,7 @@ async function carregarDetalhe() {
     const q = `id=${encodeURIComponent(id)}${asOf !== null ? `&as_of=${asOf}` : ''}`;
     const res = await api(`/api/processos/detalhe?${q}`);
     if (id !== procSelecionado || asOf !== procAsOf) return; // resposta obsoleta
-    if (!res.connected) {
+    if (!res.connected && res.storage_mode !== 'MEMORY_FALLBACK') {
       $('#procDetail').innerHTML = `<div class="proc-empty">HeraclitusDB indisponível: ${esc(res.error || '')}</div>`;
       return;
     }
@@ -486,7 +492,11 @@ function renderDetalhe() {
   if (!historico && eventos.length) procLsnRenderizado.set(c.id, eventos[eventos.length - 1].lsn);
   const novo = lsn => (lsn > jaVisto ? ' row-new' : '');
 
+  const storageNotice = procDetalhe.storage_mode === 'MEMORY_FALLBACK'
+    ? '<div class="proc-storage-warning"><strong>MEMORY FALLBACK · NÃO DURÁVEL</strong><span>Leitura sintética de contingência. Escritas permanecem bloqueadas até o núcleo HeraclitusDB voltar.</span></div>'
+    : '';
   $('#procDetail').innerHTML = `
+    ${storageNotice}
     <div class="proc-capa">
       <div class="proc-capa-main">
         <div class="proc-num">
@@ -722,6 +732,10 @@ async function protocolarProcessos() {
 }
 
 async function proximoAndamento() {
+  if (procDetalhe?.storage_mode === 'MEMORY_FALLBACK') {
+    toast('Escrita bloqueada: MEMORY FALLBACK é somente leitura e não durável.');
+    return;
+  }
   const btn = $('#procNextBtn');
   if (btn) btn.disabled = true;
   try {

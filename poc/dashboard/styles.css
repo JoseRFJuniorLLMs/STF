@@ -2857,3 +2857,5 @@ i.heat-cell.heat-now { border: 2px solid var(--gov-gold-light); }
   display: inline-block;
 }
 
+
+.proc-storage-warning{margin:10px 0;padding:10px 12px;border:1px solid #f59e0b;border-left:5px solid #d97706;border-radius:7px;background:#fffbeb;color:#92400e;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:11px}.proc-storage-warning strong{font-size:10px;letter-spacing:.04em}.proc-storage-warning span{color:#78350f}

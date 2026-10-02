@@ -28,6 +28,13 @@ class RepositoryContracts(unittest.TestCase):
         for phrase in banned:
             self.assertNotIn(phrase,runtime)
 
+    def test_fallback_is_visible_and_explicitly_volatile_in_ui(self):
+        proc=(DASH/"processos.js").read_text(encoding="utf-8")
+        visual=(DASH/"log-visual.js").read_text(encoding="utf-8")
+        self.assertIn("FALLBACK VOLÁTIL",proc)
+        self.assertIn("MEMORY FALLBACK · VOLATILE",visual)
+        self.assertIn("somente leitura",proc)
+
     def test_destructive_reset_never_uses_shell_true(self):
         text=(ROOT/"zera.py").read_text(encoding="utf-8")
         self.assertNotIn("shell=True",text)

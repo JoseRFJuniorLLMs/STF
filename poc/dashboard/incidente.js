@@ -18,6 +18,7 @@
   let processInfo = null;
   let processDetail = null;
   let processError = null;
+  let processStorage = null;
   let processBusy = false;
   let processCheckedAt = 0;
   let stateBusy = false;
@@ -240,7 +241,10 @@
     } else {
       const integrity = processDetail?.integridade;
       const integrityText = integrity ? integrity.integra ? `Cadeia íntegra · ${number(integrity.elos)} elos` : `Cadeia com falha · ${clean(integrity.falha)}` : 'Integridade ainda não consultada';
-      body = `<div class="inc360-process-stats"><div><span>Situação</span><strong>${clean(processInfo.situacao)}</strong></div><div><span>Eventos</span><strong>${number(processInfo.eventos)}</strong></div><div><span>Último LSN</span><strong>${clean(processInfo.ultimo_lsn)}</strong></div></div><div class="inc360-integrity ${integrity?.integra === false ? 'broken' : ''}">${integrityText}</div>`;
+      const storage = processStorage?.storage_mode === 'MEMORY_FALLBACK'
+        ? '<div class="inc360-caveat"><strong>MEMORY FALLBACK · VOLATILE:</strong> leitura sintética de contingência, sem persistência confirmada no núcleo.</div>'
+        : '<div class="inc360-caveat"><strong>HERACLITUS CORE · DURABLE</strong></div>';
+      body = `<div class="inc360-process-stats"><div><span>Situação</span><strong>${clean(processInfo.situacao)}</strong></div><div><span>Eventos</span><strong>${number(processInfo.eventos)}</strong></div><div><span>Último LSN</span><strong>${clean(processInfo.ultimo_lsn)}</strong></div></div><div class="inc360-integrity ${integrity?.integra === false ? 'broken' : ''}">${integrityText}</div>${storage}`;
     }
     return `<div class="inc360-process-head"><strong>${escapeHtml(id)}</strong><span class="inc360-badge observed">PROCESSO FICTÍCIO</span></div>
       <div class="inc360-mono inc360-target">${escapeHtml(target)}</div>${body}
@@ -302,19 +306,21 @@
     processCheckedAt = Date.now();
     try {
       const response = await getJson('/api/processos');
-      if (!response.connected) throw new Error(response.error || 'HeraclitusDB indisponível');
+      if (!response.connected && response.storage_mode !== 'MEMORY_FALLBACK') throw new Error(response.error || 'HeraclitusDB indisponível');
+      processStorage = response;
       const id = processId(snapshot);
       processInfo = Array.isArray(response.processos) ? response.processos.find(item => item.id === id) || null : null;
       processDetail = null;
       if (processInfo) {
         const detail = await getJson(`/api/processos/detalhe?id=${encodeURIComponent(id)}`);
-        if (!detail.connected) throw new Error(detail.error || 'detalhe indisponível');
+        if (!detail.connected && detail.storage_mode !== 'MEMORY_FALLBACK') throw new Error(detail.error || 'detalhe indisponível');
         processDetail = detail;
       }
       processError = null;
     } catch (error) {
       processInfo = null;
       processDetail = null;
+      processStorage = null;
       processError = error.message || 'falha de consulta';
     } finally {
       processBusy = false;
