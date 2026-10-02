@@ -57,7 +57,7 @@ Para ajustar os pesos antes de iniciar o servidor, defina `STF_DEMO_DEFENDED_PCT
 
 ## Integração com HeraclitusDB real
 
-O adapter somente leitura aceita apenas loopback e foi preparado para superfícies reais como `/sentinel/status`, `/api/v1/agent/status` e `/api/v1/agent/red-team/events`.
+O adapter de integração aceita apenas loopback; possui superfícies de leitura e escrita controlada para a POC e foi preparado para superfícies reais como `/sentinel/status`, `/api/v1/agent/status` e `/api/v1/agent/red-team/events`.
 
 Defina `HERACLITUS_URL=http://127.0.0.1:<porta>` para habilitar a leitura. O dashboard standalone continua funcional sem essa integração.
 
@@ -72,13 +72,13 @@ Cada linha é um evento imutável gravado no **núcleo** do HeraclitusDB (gRPC `
 | `HERACLITUS_CORE_ADDR` | núcleo gRPC (só loopback); também `--heraclitus-core` | `127.0.0.1:17474` |
 | `STF_HERACLITUS_CORE_TOKEN_FILE` / `STF_HERACLITUS_CORE_TOKEN` | token Bearer quando o núcleo exige RBAC (papel `writer`) | sem token |
 
-O `grpcio` é opcional: sem ele, a aba mostra o HeraclitusDB como indisponível e o resto do painel continua a funcionar. As variáveis `HERACLITUS_TOKEN(_FILE)` **não** são lidas, de propósito, para não enviar a credencial de outra instância.
+O `grpcio` é opcional. Sem o núcleo gRPC, leituras processuais podem usar um snapshot sintético em memória explicitamente marcado como `MEMORY_FALLBACK / VOLATILE`; escritas falham fechadas e nunca são apresentadas como persistidas no HeraclitusDB. As variáveis `HERACLITUS_TOKEN(_FILE)` **não** são lidas, de propósito, para não enviar a credencial de outra instância.
 
 Endpoints: `GET /api/processos[?as_of=LSN]`, `GET /api/processos/detalhe?id=RE-000001[&as_of=LSN]`, `POST /api/processos/protocolar`, `POST /api/processos/tramitar` (`{"id": "..."}` opcional).
 
-## Defesa Zanin — Laboratório de Prompt Injection
+## Forense de IA — Prompt Injection em Documentos Processuais
 
-A aba **Defesa Zanin** demonstra a perícia estrutural de documentos contra *Indirect Prompt Injection*, inspirada no incidente relatado em 25/09/2026. A demonstração é **integralmente sintética e independente**.
+A aba **Forense de IA** demonstra a perícia estrutural de documentos contra *Indirect Prompt Injection*, inspirada no incidente relatado em 25/09/2026. A demonstração é **integralmente sintética e independente**.
 
 Capacidades demonstradas:
 - **Preservação de bytes originais:** o arquivo nunca é sobrescrito durante a perícia;
@@ -108,7 +108,7 @@ O painel agora reúne:
 - sabotagens separadas: `modify`, `delete`, `reorder` e `truncate`;
 - Evidence Bundle e download JSON;
 - relatório sintético do incidente e download JSON;
-- bridge read-only para HeraclitusDB real em loopback.
+- bridge loopback para observação e ingest controlado do HeraclitusDB, com falhas de persistência tratadas como falha.
 
 ## Roteiro rápido de apresentação
 
