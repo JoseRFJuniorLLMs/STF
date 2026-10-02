@@ -122,16 +122,22 @@ async function carregarProcessos() {
   try {
     const res = await api('/api/processos');
     $('#procAddr').textContent = res.addr || '—';
-    if (!res.connected) {
+    const volatileFallback = res.storage_mode === 'MEMORY_FALLBACK';
+    if (!res.connected && !volatileFallback) {
       setProcStatus('OFFLINE', 'critical');
       $('#procProtocolarBtn').hidden = true;
       procLista = [];
       $('#procList').innerHTML = `<div class="proc-empty">HeraclitusDB indisponível em <code>${esc(res.addr || '')}</code>.<br><small>${esc(res.error || '')}</small></div>`;
-      if (!procDetalhe) $('#procDetail').innerHTML = '<div class="proc-empty">Sem ligação ao banco não há log para mostrar.</div>';
+      if (!procDetalhe) $('#procDetail').innerHTML = '<div class="proc-empty">Sem núcleo nem snapshot de leitura não há log para mostrar.</div>';
       return;
     }
-    setProcStatus(`CONECTADO • ${res.eventos} eventos`, 'normal');
-    $('#procProtocolarBtn').hidden = res.processos.length >= res.catalogo;
+    if (volatileFallback) {
+      setProcStatus(`FALLBACK VOLÁTIL • ${res.eventos} eventos sintéticos`, 'warning');
+      $('#procProtocolarBtn').hidden = true;
+    } else {
+      setProcStatus(`CONECTADO • ${res.eventos} eventos`, 'normal');
+      $('#procProtocolarBtn').hidden = res.processos.length >= res.catalogo;
+    }
     detectarNovidades(res.processos);
     procLista = res.processos;
     renderListaProcessos();
@@ -225,7 +231,7 @@ async function carregarDetalhe() {
     const q = `id=${encodeURIComponent(id)}${asOf !== null ? `&as_of=${asOf}` : ''}`;
     const res = await api(`/api/processos/detalhe?${q}`);
     if (id !== procSelecionado || asOf !== procAsOf) return; // resposta obsoleta
-    if (!res.connected) {
+    if (!res.connected && res.storage_mode !== 'MEMORY_FALLBACK') {
       $('#procDetail').innerHTML = `<div class="proc-empty">HeraclitusDB indisponível: ${esc(res.error || '')}</div>`;
       return;
     }
@@ -472,8 +478,8 @@ function renderDetalhe() {
               </div>
             </div>
             <div style="display: flex; gap: 6px;">
-              <button class="btn tiny primary" onclick="event.stopPropagation(); goToAttack('${atk.attack_id}')">🎯 Ver Ataque</button>
-              ${atk.attack_id === 'IA_ZAN_05' ? `<button class="btn tiny ghost" onclick="event.stopPropagation(); goToDefesaZanin('IA_ZAN_05')">🏛️ Ver Perícia</button>` : ''}
+              <button class="btn tiny primary" data-go-attack="${esc(atk.attack_id)}">🎯 Ver Ataque</button>
+              ${atk.attack_id === 'IA_ZAN_05' ? `<button class="btn tiny ghost" data-go-zanin="IA_ZAN_05">🔬 Ver Forense de IA</button>` : ''}
             </div>
           </div>
         `).join('')}
@@ -486,7 +492,11 @@ function renderDetalhe() {
   if (!historico && eventos.length) procLsnRenderizado.set(c.id, eventos[eventos.length - 1].lsn);
   const novo = lsn => (lsn > jaVisto ? ' row-new' : '');
 
+  const storageNotice = procDetalhe.storage_mode === 'MEMORY_FALLBACK'
+    ? '<div class="proc-storage-warning"><strong>MEMORY FALLBACK · NÃO DURÁVEL</strong><span>Leitura sintética de contingência. Escritas permanecem bloqueadas até o núcleo HeraclitusDB voltar.</span></div>'
+    : '';
   $('#procDetail').innerHTML = `
+    ${storageNotice}
     <div class="proc-capa">
       <div class="proc-capa-main">
         <div class="proc-num">
@@ -722,6 +732,10 @@ async function protocolarProcessos() {
 }
 
 async function proximoAndamento() {
+  if (procDetalhe?.storage_mode === 'MEMORY_FALLBACK') {
+    toast('Escrita bloqueada: MEMORY FALLBACK é somente leitura e não durável.');
+    return;
+  }
   const btn = $('#procNextBtn');
   if (btn) btn.disabled = true;
   try {
@@ -795,6 +809,18 @@ function setupProcessos() {
   const detalhe = $('#procDetail');
   if (detalhe) {
     detalhe.addEventListener('click', e => {
+      const attack = e.target.closest('[data-go-attack]');
+      if (attack) {
+        e.stopPropagation();
+        if (typeof goToAttack === 'function') goToAttack(attack.dataset.goAttack);
+        return;
+      }
+      const forensic = e.target.closest('[data-go-zanin]');
+      if (forensic) {
+        e.stopPropagation();
+        if (typeof goToDefesaZanin === 'function') goToDefesaZanin(forensic.dataset.goZanin);
+        return;
+      }
       const sub = e.target.closest('[data-subtab]');
       if (sub) {
         procSubtab = sub.dataset.subtab;

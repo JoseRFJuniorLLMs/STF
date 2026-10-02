@@ -46,6 +46,10 @@ class CoreUnavailable(RuntimeError):
     """O núcleo não está alcançável (grpcio ausente, porta fechada, timeout)."""
 
 
+class CoreProtocolError(RuntimeError):
+    """O núcleo respondeu, mas a resposta não respeita o contrato esperado."""
+
+
 # --------------------------------------------------------------- protobuf mínimo
 def _varint(value: int) -> bytes:
     if value < 0:
@@ -194,9 +198,13 @@ class HeraclitusCore:
             return []
         try:
             rows = json.loads(raw_resp)
-            return rows if isinstance(rows, list) else []
-        except Exception:
-            return []
+        except (json.JSONDecodeError, TypeError) as exc:
+            raise CoreProtocolError("resposta Query do HeraclitusDB não é JSON válido") from exc
+        if not isinstance(rows, list):
+            raise CoreProtocolError("resposta Query do HeraclitusDB deve ser uma lista JSON")
+        if not all(isinstance(row, dict) for row in rows):
+            raise CoreProtocolError("resposta Query contém item que não é objeto")
+        return rows
 
     def close(self) -> None:
         if self._channel is not None:

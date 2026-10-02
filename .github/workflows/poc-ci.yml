@@ -1,23 +1,49 @@
 name: STF POC CI
 on:
   push:
-    paths: ['poc/**', 'README.md', '.github/workflows/poc-ci.yml']
   pull_request:
-    paths: ['poc/**', '.github/workflows/poc-ci.yml']
+
+permissions:
+  contents: read
+
 jobs:
   qualify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with: { python-version: '3.12' }
+      - name: Repository hygiene
+        run: |
+          git diff --check
+          python - <<'PY'
+          from pathlib import Path
+          bad=[]
+          for path in Path('.').rglob('*'):
+              if not path.is_file() or '.git' in path.parts:
+                  continue
+              if path.suffix.lower() not in {'.py','.js','.html','.css','.md','.yml','.yaml','.sh','.ps1','.bat','.cmd'}:
+                  continue
+              text=path.read_text(encoding='utf-8',errors='ignore')
+              marker='-----BEGIN ' + 'PRIVATE KEY-----'
+              if marker in text:
+                  bad.append(str(path))
+          if bad:
+              raise SystemExit('private key material found: '+', '.join(bad))
+          PY
       - name: Python compile
-        run: python -m py_compile poc/server.py poc/verify.py poc/heraclitus_adapter.py poc/telemetry.py poc/correlation.py poc/detector.py poc/policy.py poc/faults.py poc/smoke.py poc/synthetic_upstream.py poc/heraclitus_core.py poc/processos.py poc/zanin_defense.py
-      - name: Unit tests
+        run: python -m compileall -q poc zera.py
+      - name: Unit and repository contract tests
         run: python -m unittest discover -s poc/tests -v
       - name: HTTP smoke test
         run: python poc/smoke.py
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with: { node-version: '22' }
       - name: Dashboard JavaScript syntax
-        run: node --check poc/dashboard/app.js && node --check poc/dashboard/processos.js && node --check poc/dashboard/log-visual.js && node --check poc/dashboard/zanin.js
+        run: |
+          set -euo pipefail
+          for file in poc/dashboard/*.js; do node --check "$file"; done
+      - name: Dependency inventory
+        run: |
+          python -m pip freeze | sort
+          printf 'Runtime principal usa stdlib; grpcio é integração opcional.\n'

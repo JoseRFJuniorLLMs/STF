@@ -190,7 +190,7 @@
           <strong style="color:#1e3a8a;font-size:12px;display:block;">🎯 ORIGEM DO ATAQUE: ${shown(atkId)}</strong>
           <span style="font-size:11px;color:#475569;">Alvo: <code>${shown(ev.asset)}</code> • upstream_delta = ${shown(ev.upstream_delta ?? 0)}</span>
         </div>
-        <button type="button" class="btn tiny primary" onclick="event.stopPropagation(); goToAttack('${atkId}')">Localizar Ataque na Aba 1 ➔</button>
+        <button type="button" class="btn tiny primary" data-go-attack="${shown(atkId)}">Localizar Ataque na Aba 1 ➔</button>
       </div>
     ` : '';
 
@@ -647,6 +647,11 @@
     markup();
     setupAuditTimelineEvents();
     root.addEventListener('click', event => {
+      const attack = event.target.closest('[data-go-attack]');
+      if (attack) {
+        if (typeof goToAttack === 'function') goToAttack(attack.dataset.goAttack);
+        return;
+      }
       const item = event.target.closest('[data-audit-lsn][role="option"]');
       if (item) {
         selectEvent(Number(item.dataset.auditLsn));

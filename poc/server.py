@@ -39,7 +39,7 @@ from policy import decide as policy_decide
 from faults import simulate as simulate_fault
 from synthetic_upstream import SyntheticUpstream
 from heraclitus_adapter import HeraclitusAdapter
-from heraclitus_core import CoreUnavailable, HeraclitusCore
+from heraclitus_core import CoreProtocolError, CoreUnavailable, HeraclitusCore
 from processos import ProcessLedger
 from zanin_defense import (
     PUBLIC_INCIDENT_FACTS,
@@ -2095,7 +2095,7 @@ class PocEngine:
         }
 
     @locked_method
-    def emit_certidao(self, motivo: str = "", duracao_segundos: int = 184, operador: str = "SecOps / SRE Tribunal (STF)") -> dict[str, Any]:
+    def emit_certidao(self, motivo: str = "", duracao_segundos: int = 184, operador: str = "Operador da POC") -> dict[str, Any]:
         agora = datetime.now(timezone(timedelta(hours=-3)))
         duracao_segundos = max(10, int(duracao_segundos))
         inicio = agora - timedelta(seconds=duracao_segundos)
@@ -2112,17 +2112,17 @@ class PocEngine:
             "duracao_segundos": duracao_segundos,
             "motivo": motivo.strip() or "Oscilação transitória de enlace primário e failover automático para gateway redundante",
             "amparo_legal": "Lei 11.419/2006, art. 10, § 2º c/c Resolução CNJ 185/2013",
-            "prorrogacao": "Prazos processuais com vencimento na data prorrogados para o primeiro dia útil seguinte (art. 10, § 2º da Lei 11.419/2006).",
-            "operador": operador.strip() or "SecOps / SRE Tribunal (STF)",
+            "prorrogacao": "Referência normativa simulada: eventual efeito processual depende da indisponibilidade oficialmente aferida pelo sistema judicial competente; este registro da POC não produz efeito jurídico.",
+            "operador": operador.strip() or "Operador da POC",
         }
         ev_spec = {
             "phase": "RESILIENCIA",
-            "source": "SRE/Tribunal",
+            "source": "POC/Resiliencia",
             "type": "stf.resilience.certidao_indisponibilidade",
             "severity": "INFO",
             "actor": operador,
             "asset": "stf:portal-processual",
-            "summary": f"Certidão Oficial de Indisponibilidade emitida: {cert_id} (Duração: {duracao_fmt})",
+            "summary": f"Registro Sintético de Indisponibilidade gerado: {cert_id} (Duração: {duracao_fmt})",
             "outcome": "EMITIDA",
             "risk": 0,
             "details": payload,
@@ -2132,7 +2132,7 @@ class PocEngine:
         res_payload["lsn"] = ev.lsn
         res_payload["hash"] = ev.event_hash
         res_payload["hlc"] = ev.hlc
-        self.last_action = f"Certidão emitida no HeraclitusDB: {cert_id} (LSN {ev.lsn})"
+        self.last_action = f"Registro sintético gerado no harness: {cert_id} (LSN {ev.lsn})"
         return res_payload
 
     @locked_method
@@ -2155,7 +2155,7 @@ class PocEngine:
                 "motivo": "Oscilação transitória de enlace primário e failover automático para gateway redundante",
                 "amparo_legal": "Lei 11.419/2006, art. 10, § 2º c/c Resolução CNJ 185/2013",
                 "prorrogacao": "Prazos processuais com vencimento na data prorrogados para o primeiro dia útil seguinte (art. 10, § 2º da Lei 11.419/2006).",
-                "operador": "SecOps / SRE Tribunal (STF)",
+                "operador": "Operador da POC",
                 "lsn": 1,
                 "hash": "9a84f32e6d18105cbf5d098e1f0e2d31c4b7852a1e09c8d76e5f4a3b2c1d0e9f"
             })
@@ -2373,7 +2373,9 @@ PROCESSOS=ProcessLedger(HeraclitusCore(os.environ.get("HERACLITUS_CORE_ADDR","12
 
 def _processos_erro(exc:Exception)->tuple[dict[str,Any],int]:
     if isinstance(exc,CoreUnavailable):
-        return {"connected":False,"addr":PROCESSOS.core.addr,"error":str(exc)},503
+        return {"connected":False,"addr":PROCESSOS.core.addr,**PROCESSOS.storage_status(),"error":str(exc)},503
+    if isinstance(exc,CoreProtocolError):
+        return {"connected":False,"addr":PROCESSOS.core.addr,"storage_mode":"INVALID_RESPONSE","durability":"UNKNOWN","fallback_active":False,"core_connected":False,"error":str(exc)},502
     if isinstance(exc,KeyError): return {"connected":True,"error":f"processo desconhecido: {exc.args[0]}"},404
     if isinstance(exc,LookupError): return {"connected":True,"error":str(exc)},409
     if isinstance(exc,ValueError): return {"connected":True,"error":str(exc)},400
@@ -2562,14 +2564,14 @@ class Handler(BaseHTTPRequestHandler):
                         ENGINE.enrich_process_list(lista)
                     except Exception as err:
                         print(f"[STF-POC WARN] enrich_process_list: {err}")
-                    return self._json({"connected":True,"addr":PROCESSOS.core.addr,"as_of_lsn":as_of,**lista})
+                    return self._json({"connected":bool(lista.get("core_connected")),"addr":PROCESSOS.core.addr,"as_of_lsn":as_of,**lista})
                 detalhe=PROCESSOS.detalhe(query.get("id",[""])[0],as_of)
                 if detalhe is None: return self._json({"error":"processo_desconhecido"},404)
                 try:
                     ENGINE.enrich_process_detalhe(detalhe)
                 except Exception as err:
                     print(f"[STF-POC WARN] enrich_process_detalhe: {err}")
-                return self._json({"connected":True,"addr":PROCESSOS.core.addr,**detalhe})
+                return self._json({"connected":bool(detalhe.get("core_connected")),"addr":PROCESSOS.core.addr,**detalhe})
             except Exception as e:
                 import traceback
                 traceback.print_exc()
@@ -2767,12 +2769,14 @@ class Handler(BaseHTTPRequestHandler):
             })
         if path in ("/api/processos/protocolar","/api/processos/tramitar"):
             try:
-                if path=="/api/processos/protocolar": return self._json({"connected":True,**PROCESSOS.protocolar()})
+                if path=="/api/processos/protocolar":
+                    result=PROCESSOS.protocolar()
+                    return self._json({"connected":True,**PROCESSOS.storage_status(),**result})
                 body=self._read_json_body()
                 processo_id=body.get("id")
                 if processo_id is not None and not isinstance(processo_id,str): raise ValueError("id must be a string")
                 res=PROCESSOS.tramitar(processo_id)
-                return self._json({"connected":True,"lsn":res["lsn"],"event_id":res["event_id"],"deduplicated":res["deduplicated"],
+                return self._json({"connected":True,**PROCESSOS.storage_status(),"lsn":res["lsn"],"event_id":res["event_id"],"deduplicated":res["deduplicated"],
                                    "processo_id":res["processo_id"],"seq":res["seq"],"evento":res["conteudo"]})
             except Exception as e:
                 body,status=_processos_erro(e)
@@ -2782,7 +2786,7 @@ class Handler(BaseHTTPRequestHandler):
                 body=self._read_json_body()
                 motivo=body.get("motivo","")
                 duracao=body.get("duracao_segundos",184)
-                operador=body.get("operador","SecOps / SRE Tribunal (STF)")
+                operador=body.get("operador","Operador da POC")
                 res=ENGINE.emit_certidao(motivo,duracao,operador)
                 return self._json(res,201)
             except Exception as e:
@@ -2809,7 +2813,7 @@ class Handler(BaseHTTPRequestHandler):
                     complemento,
                     {"approval_id": approval_id, "aprovador": str(body.get("aprovador", "operador-stf")).strip()},
                 )
-                return self._json({"connected":True,**res},200)
+                return self._json({"connected":True,**PROCESSOS.storage_status(),**res},200)
             except Exception as e:
                 body_err,status_code=_processos_erro(e)
                 return self._json(body_err,status_code)

@@ -1,7 +1,7 @@
 import json,os,pathlib,re,sys,tempfile,unittest
 from datetime import datetime
 HERE=pathlib.Path(__file__).resolve().parents[1];sys.path.insert(0,str(HERE))
-from heraclitus_core import CoreUnavailable,HeraclitusCore,_fields,decode_append_response,decode_query_response,encode_append_request,encode_query_request,resolve_token
+from heraclitus_core import CoreProtocolError,CoreUnavailable,HeraclitusCore,_fields,decode_append_response,decode_query_response,encode_append_request,encode_query_request,resolve_token
 from processos import BRT,CATALOGO,TPU,ProcessLedger,_passos,numero_unico,numero_unico_valido,verificar_cadeia
 
 class FakeCore:
@@ -40,6 +40,22 @@ class NumeroUnicoTests(unittest.TestCase):
             for passo in proc["roteiro"]:
                 if passo["tipo"]=="andamento": self.assertIn(passo["codigo"],TPU,proc["id"])
             self.assertLessEqual(proc["inicial"],len(_passos(proc)))
+
+class DownCore(FakeCore):
+    def query(self,gql):
+        raise CoreUnavailable("core down")
+    def append(self,**kwargs):
+        raise CoreUnavailable("core down")
+
+
+class FlakyAppendCore(FakeCore):
+    def __init__(self):
+        super().__init__(); self.fail_append=False
+    def append(self,**kwargs):
+        if self.fail_append:
+            raise CoreUnavailable("append failed after successful read")
+        return super().append(**kwargs)
+
 
 class LedgerTests(unittest.TestCase):
     def setUp(self):
@@ -87,6 +103,28 @@ class LedgerTests(unittest.TestCase):
         self.assertTrue(passado["integridade"]["integra"])
     def test_id_invalido_nao_chega_ao_gql(self):
         with self.assertRaises(ValueError): self.ledger._eventos('RE-000001" OR n.x = "y')
+    def test_read_fallback_is_explicitly_volatile_and_not_connected(self):
+        ledger=ProcessLedger(DownCore())
+        lista=ledger.listar()
+        self.assertEqual(lista["storage_mode"],"MEMORY_FALLBACK")
+        self.assertEqual(lista["durability"],"VOLATILE")
+        self.assertTrue(lista["fallback_active"])
+        self.assertFalse(lista["core_connected"])
+        self.assertTrue(lista["processos"])
+        with self.assertRaises(CoreUnavailable):
+            ledger.protocolar()
+    def test_append_failure_after_real_read_never_writes_to_memory_fallback(self):
+        core=FlakyAppendCore(); ledger=ProcessLedger(core); ledger.protocolar()
+        before=len(core.rows)
+        core.fail_append=True
+        with self.assertRaises(CoreUnavailable):
+            ledger.tramitar("HC-000003",agora=datetime(2026,9,24,10,0,tzinfo=BRT))
+        self.assertEqual(len(core.rows),before)
+        self.assertEqual(len(ledger.fallback_core.rows),0)
+        status=ledger.storage_status()
+        self.assertEqual(status["storage_mode"],"MEMORY_FALLBACK")
+        self.assertEqual(status["durability"],"VOLATILE")
+        self.assertFalse(status["core_connected"])
     def test_acrescentar_avulso_com_aprovacao_humana(self):
         self.ledger.protocolar()
         antes = self.ledger.detalhe("RE-000001")["eventos"]
@@ -132,6 +170,12 @@ class CoreCodecTests(unittest.TestCase):
     def test_nucleo_so_aceita_loopback(self):
         HeraclitusCore("127.0.0.1:17474")
         with self.assertRaises(ValueError): HeraclitusCore("10.0.0.5:17474")
+    def test_query_response_invalida_falha_fechado(self):
+        core=HeraclitusCore("127.0.0.1:17474")
+        core._call=lambda method,request: encode_query_request('{"not":"a-list"}')
+        with self.assertRaises(CoreProtocolError): core.query("MATCH (n) RETURN n")
+        core._call=lambda method,request: encode_query_request("{broken")
+        with self.assertRaises(CoreProtocolError): core.query("MATCH (n) RETURN n")
 
 class TokenTests(unittest.TestCase):
     def setUp(self):

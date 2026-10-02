@@ -5,6 +5,7 @@ from urllib.parse import urlparse, quote
 
 ALLOWED_HOSTS={"127.0.0.1","localhost","::1"}
 MAX_RESPONSE_BYTES=15*1024*1024
+MAX_BUNDLE_BYTES=64*1024*1024
 STATIC_PATHS={
     "sentinel_status":"/sentinel/status",
     "sentinel_incidents":"/sentinel/incidents",
@@ -109,16 +110,22 @@ class HeraclitusAdapter:
             raise
 
     def record_red_team_event(self,event_data:dict)->dict:
-        """Persiste um evento real de ataque/telemetria no log HRKL v6 do HeraclitusDB com fallback resiliente."""
+        """Tenta persistir no HRKL real sem converter falha em recibo positivo."""
         try:
-            return self.post("/api/v1/agent/red-team/events",event_data)
+            result=self.post("/api/v1/agent/red-team/events",event_data)
+            if not isinstance(result,dict):
+                raise ValueError("HeraclitusDB returned a non-object persistence receipt")
+            return result
         except Exception as exc:
             self._offline_until = time.time() + 10.0
             return {
-                "accepted": True,
-                "lsn": int(event_data.get("sequence") or 1),
-                "fallback": True,
-                "error": str(exc)
+                "accepted": False,
+                "persisted": False,
+                "status": "UNAVAILABLE",
+                "lsn": None,
+                "fallback": False,
+                "storage_mode": "HERACLITUS_UNAVAILABLE",
+                "error": str(exc),
             }
 
     def export_evidence_bundle(self)->dict:
@@ -135,8 +142,22 @@ class HeraclitusAdapter:
         if parsed.hostname not in ALLOWED_HOSTS:
             raise ValueError("Safety gate: request escaped loopback")
         req=urllib.request.Request(url,headers={"Accept":"*/*"})
-        with self._opener.open(req,timeout=15.0) as r:
-            return r.read()
+        try:
+            with self._opener.open(req,timeout=15.0) as r:
+                final=urlparse(r.geturl())
+                if final.hostname not in ALLOWED_HOSTS:
+                    raise ValueError("Safety gate: final URL escaped loopback")
+                raw=r.read(MAX_BUNDLE_BYTES+1)
+                if len(raw)>MAX_BUNDLE_BYTES:
+                    raise ValueError("Evidence Bundle exceeds safety limit")
+                return raw
+        except urllib.error.HTTPError as exc:
+            if exc.code >= 500:
+                self._offline_until = time.time() + 2.0
+            raise
+        except (urllib.error.URLError, TimeoutError, OSError):
+            self._offline_until = time.time() + 2.0
+            raise
 
     def _read(self,path):
         try: return {"status":"PASS","data":self.get(path),"path":path}

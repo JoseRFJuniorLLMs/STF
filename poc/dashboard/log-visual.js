@@ -9,7 +9,9 @@
     detail: null,
     selectedEventId: null,
     filter: 'all',
-    loading: false
+    loading: false,
+    storageMode: 'UNKNOWN',
+    durability: 'UNKNOWN'
   };
 
   const LANES = [
@@ -167,6 +169,7 @@
     const first = events[0], last = events[events.length - 1];
     const proc = state.processos.find(p => p.id === state.selectedProcess);
     const ev = selectedEvent();
+    const fallback = state.storageMode === 'MEMORY_FALLBACK';
 
     root.innerHTML = `
       <section class="panel logv-panel">
@@ -188,8 +191,10 @@
         <div class="logv-note">
           <strong>${esc(proc?.capa?.numero || state.selectedProcess || '—')}</strong>
           <span>${esc(proc?.capa?.numeroUnico || '')}</span>
-          <span class="logv-integrity ${integrity.ok ? 'ok' : 'broken'}">${integrity.ok ? '✓ Cadeia íntegra' : '⛓ Cadeia quebrada'}</span>
+          <span class="logv-integrity ${integrity.ok ? 'ok' : 'broken'}">${integrity.ok ? '✓ Cadeia íntegra nesta representação' : '⛓ Cadeia quebrada'}</span>
+          <span class="logv-integrity ${fallback ? 'broken' : 'ok'}">${fallback ? 'MEMORY FALLBACK · VOLATILE' : 'HERACLITUS CORE · DURABLE'}</span>
         </div>
+        ${fallback ? '<div class="logv-fallback-warning">Leitura de contingência em memória. Os LSNs desta visão não são LSNs confirmados pelo núcleo e nenhuma escrita é permitida.</div>' : ''}
 
         <div class="logv-kpis">
           <div><span>Eventos <b class="logv-help" title="Quantidade de eventos imutáveis deste processo.">ⓘ</b></span><strong>${events.length}</strong></div>
@@ -221,7 +226,9 @@
       return;
     }
     const res = await api('/api/processos/detalhe?id=' + encodeURIComponent(state.selectedProcess));
-    if (!res.connected) throw new Error(res.error || 'HeraclitusDB indisponível');
+    if (!res.connected && res.storage_mode !== 'MEMORY_FALLBACK') throw new Error(res.error || 'HeraclitusDB indisponível');
+    state.storageMode = res.storage_mode || state.storageMode;
+    state.durability = res.durability || state.durability;
     state.detail = res;
     const events = res.eventos || [];
     if (!events.some(ev => ev.id === state.selectedEventId)) {
@@ -237,7 +244,9 @@
     if (root) root.innerHTML = '<section class="panel logv-panel"><div class="logv-loading">Carregando log visual do HeraclitusDB…</div></section>';
     try {
       const res = await api('/api/processos');
-      if (!res.connected) throw new Error(res.error || 'HeraclitusDB indisponível');
+      if (!res.connected && res.storage_mode !== 'MEMORY_FALLBACK') throw new Error(res.error || 'HeraclitusDB indisponível');
+      state.storageMode = res.storage_mode || 'UNKNOWN';
+      state.durability = res.durability || 'UNKNOWN';
       state.processos = Array.isArray(res.processos) ? res.processos : [];
       if (!state.processos.some(p => p.id === state.selectedProcess)) {
         state.selectedProcess = state.processos[0]?.id || null;

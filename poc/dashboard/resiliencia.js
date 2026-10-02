@@ -36,14 +36,14 @@
     }
   }
 
-  async function emitirCertidaoOficial(threat) {
+  async function emitirCertidaoSintetica(threat) {
     const atkId = threat?.attack_id || '';
-    statusMensagem = `Emitindo certidão oficial no HeraclitusDB ${atkId ? 'para o ataque ' + atkId : ''}...`;
+    statusMensagem = `Emitindo registro sintético de indisponibilidade no HeraclitusDB ${atkId ? 'para o ataque ' + atkId : ''}...`;
     render();
     try {
       const motivo = atkId
-        ? `Tentativa de degradação/sobrecarga via Ataque ${atkId} (${threat.title || 'Infraestrutura'}). Neutralizado pelo HeraclitusDB com RPO=0s e integridade preservada.`
-        : 'Oscilação controlada de enlace primário e failover automático de gateway com garantia de integridade';
+        ? `Tentativa sintética de degradação/sobrecarga via Ataque ${atkId} (${threat.title || 'Infraestrutura'}). O harness registrou a contenção; RPO institucional não é afirmado.`
+        : 'Oscilação controlada simulada e failover de demonstração; sem claim de RPO/RTO institucional';
 
       const res = await fetch('api/certidoes/emitir', {
         method: 'POST',
@@ -52,12 +52,12 @@
           motivo,
           attack_id: atkId,
           duracao_segundos: 184,
-          operador: 'SecOps / SRE Tribunal (STF)'
+          operador: 'Operador da POC'
         })
       }).then(r => r.json());
       if (res.error) throw new Error(res.error);
-      statusMensagem = `Certidão ${res.id} emitida com sucesso e vinculada ao ataque (LSN ${res.lsn})!`;
-      if (typeof toast === 'function') toast(`📜 Certidão ${res.id} emitida e vinculada ao Ataque ${atkId || 'de infraestrutura'}`);
+      statusMensagem = `Registro ${res.id} emitida com sucesso e vinculada ao ataque (LSN ${res.lsn})!`;
+      if (typeof toast === 'function') toast(`📜 Registro ${res.id} emitida e vinculada ao Ataque ${atkId || 'de infraestrutura'}`);
       await carregarDados();
     } catch (e) {
       statusMensagem = `Erro ao emitir certidão: ${e.message}`;
@@ -66,11 +66,11 @@
   }
 
   function verificarSnapshot() {
-    statusMensagem = 'Executando auditoria criptográfica de snapshot vs réplicas live no HeraclitusDB...';
+    statusMensagem = 'Executando verificação do snapshot disponível no harness...';
     render();
     setTimeout(() => {
       const v = snapshot?.verification?.overall || 'PASS';
-      statusMensagem = `Auditoria concluída: 100% de paridade de hashes e dados entre o WAL primário e réplicas. Verificação geral: ${v}. RPO = 0s.`;
+      statusMensagem = `Verificação do harness concluída: ${v}. Este teste não qualifica RPO/RTO, réplica institucional nem perda zero em crash real.`;
       if (typeof toast === 'function') toast('✅ Snapshot auditado: 100% de paridade com o ledger');
       render();
     }, 500);
@@ -86,36 +86,30 @@
       <section class="panel resil-panel">
         <div class="resil-hero">
           <div>
-            <span class="resil-eyebrow">CONTINUIDADE OPERACIONAL &amp; CONFORMIDADE LEGAL</span>
+            <span class="resil-eyebrow">CONTINUIDADE · DEMONSTRAÇÃO CONTROLADA</span>
             <h2>Resiliência e Continuidade</h2>
-            <p>Monitoramento de SLA, contingência judicial (Lei 11.419/2006, art. 10, § 2º) e custódia real de certidões no HeraclitusDB.</p>
+            <p>Demonstração sintética de registro de indisponibilidade, integridade e recuperação. Não substitui certificação oficial do sistema judicial.</p>
           </div>
           <div class="resil-status-badge">
             <span>●</span>
-            <span>ALTA DISPONIBILIDADE ATIVA (RPO = 0) · ${escapeHtml(isLive)}</span>
+            <span>HARNESS DE CONTINUIDADE · ${escapeHtml(isLive)}</span>
           </div>
         </div>
 
         <div class="resil-kpis">
           <div class="resil-kpi-card">
-            <span>Disponibilidade Mensal</span>
-            <strong>99.98%</strong>
-            <small>Dentro do SLA do Judiciário</small>
+            <span>Disponibilidade institucional</span><strong>UNVERIFIED</strong><small>A POC não mede SLA oficial</small>
           </div>
           <div class="resil-kpi-card">
-            <span>RPO Comprovado</span>
-            <strong>0 segundos</strong>
-            <small>Replicação síncrona / Zero perda</small>
+            <span>RPO institucional</span><strong>UNVERIFIED</strong><small>Exige teste de crash/storage/replicação</small>
           </div>
           <div class="resil-kpi-card">
-            <span>RTO Medido em Falha</span>
-            <strong>1.4s</strong>
-            <small>Failover automatizado de nó</small>
+            <span>RTO institucional</span><strong>UNVERIFIED</strong><small>Não qualificado por esta POC</small>
           </div>
           <div class="resil-kpi-card">
             <span>Certidões no HeraclitusDB</span>
             <strong>${certidoes.length}</strong>
-            <small>Resguardo jurídico dos prazos</small>
+            <small>Registros de demonstração</small>
           </div>
         </div>
 
@@ -126,14 +120,14 @@
         <div class="resil-grid">
           <section class="resil-box">
             <div class="resil-box-head">
-              <h3>Certidões Oficiais de Indisponibilidade</h3>
+              <h3>Registros Sintéticos de Indisponibilidade</h3>
               <small>Art. 10, § 2º da Lei 11.419/2006</small>
             </div>
             <p style="font-size: 12px; color: var(--gov-text-secondary); margin: 0; line-height: 1.5;">
-              Quando o sistema do tribunal sofre indisponibilidade superior ao limite legal, a certidão é gravada de forma imutável no HeraclitusDB com LSN e hash SHA-256, assegurando a prorrogação automática dos prazos processuais para todas as partes.
+              Quando o sistema do tribunal sofre indisponibilidade superior ao limite legal, a registro é gravada de forma imutável no HeraclitusDB com LSN e hash SHA-256, assegurando a prorrogação automática dos prazos processuais para todas as partes.
             </p>
             <div class="resil-action-bar">
-              <button class="btn small primary" type="button" data-resil-action="emitir">📜 Emitir Certidão Oficial de Indisponibilidade (HeraclitusDB)</button>
+              <button class="btn small primary" type="button" data-resil-action="emitir">📜 Gerar Registro Sintético de Indisponibilidade</button>
             </div>
 
             ${threats.length ? `
@@ -147,12 +141,12 @@
                       <div>
                         <strong>${escapeHtml(t.attack_id)}: ${escapeHtml(t.title)}</strong>
                         <div style="font-size: 11px; color: #64748b; margin-top: 2px;">
-                          Equipamento: <code>${escapeHtml(t.equipment)}</code> • LSN: <code>${escapeHtml(t.lsn)}</code> • RPO Comprovado: <strong style="color: #166534;">0s (Sem Perda)</strong>
+                          Equipamento: <code>${escapeHtml(t.equipment)}</code> • LSN: <code>${escapeHtml(t.lsn)}</code> • Estado do harness: <strong style="color: #166534;">evento preservado no cenário</strong>
                         </div>
                       </div>
                       <div style="display: flex; gap: 6px; flex-shrink: 0;">
                         <button class="btn tiny ghost" type="button" data-go-attack="${escapeHtml(t.attack_id)}">🎯 Ver Ataque</button>
-                        <button class="btn tiny primary" type="button" data-emit-threat="${escapeHtml(t.attack_id)}" data-threat-title="${escapeHtml(t.title)}">📜 Emitir Certidão</button>
+                        <button class="btn tiny primary" type="button" data-emit-threat="${escapeHtml(t.attack_id)}" data-threat-title="${escapeHtml(t.title)}">📜 Gerar Registro</button>
                       </div>
                     </div>
                   `).join('')}
@@ -174,7 +168,7 @@
                     <strong>Período:</strong> ${escapeHtml(new Date(c.dataHoraInicio).toLocaleTimeString('pt-BR'))} às ${escapeHtml(new Date(c.dataHoraFim).toLocaleTimeString('pt-BR'))} (${escapeHtml(c.duracao)})<br>
                     <strong>Causa técnica:</strong> ${escapeHtml(c.motivo)}<br>
                     ${c.attack_id ? `<div style="margin: 4px 0;"><span style="background: #fee2e2; color: #991b1b; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; border: 1px solid #fca5a5;">Vinculada ao Ataque: ${escapeHtml(c.attack_id)}</span> <button class="btn tiny ghost" type="button" data-go-attack="${escapeHtml(c.attack_id)}" style="margin-left: 6px;">🎯 Ver Ataque</button></div>` : ''}
-                    <strong>Efeito legal:</strong> ${escapeHtml(c.prorrogacao)}
+                    <strong>Regra jurídica de referência:</strong> ${escapeHtml(c.prorrogacao)}
                   </div>
                   <div class="resil-certidao-meta">
                     <span class="mono" style="word-break: break-all;">Hash HeraclitusDB: ${escapeHtml(c.hash)}</span>
@@ -184,7 +178,7 @@
                     </div>
                   </div>
                 </div>
-              `).join('') : '<div class="proc-empty">Nenhuma certidão registrada no momento.</div>'}
+              `).join('') : '<div class="proc-empty">Nenhuma registro registrada no momento.</div>'}
             </div>
           </section>
 
@@ -219,7 +213,7 @@
                   <td><strong>Transações Registradas</strong></td>
                   <td>${totalEventos} eventos</td>
                   <td>${totalEventos} eventos</td>
-                  <td class="resil-hash-ok">✓ 100% PARIDADE</td>
+                  <td class="resil-hash-ok">✓ SNAPSHOT COINCIDE NESTA EXECUÇÃO</td>
                 </tr>
                 <tr>
                   <td><strong>Raiz Criptográfica</strong></td>
@@ -229,16 +223,16 @@
                 </tr>
                 <tr>
                   <td><strong>Tempo de Recuperação</strong></td>
-                  <td colspan="2">Teste automatizado de réplica</td>
-                  <td><strong>1.4 segundos</strong></td>
+                  <td colspan="2">Não qualificado nesta POC</td>
+                  <td><strong>UNVERIFIED</strong></td>
                 </tr>
               </tbody>
             </table>
 
             <div style="background: #fafcff; border: 1px solid var(--gov-border); border-radius: 6px; padding: 12px; font-size: 11.5px; color: var(--gov-text-secondary); display: flex; flex-direction: column; gap: 6px;">
-              <strong style="color: var(--gov-blue-primary);">Garantia de Não-Repúdio e Continuidade:</strong>
+              <strong style="color: var(--gov-blue-primary);">Limite de confiança da demonstração:</strong>
               <span>
-                O HeraclitusDB utiliza log estruturado em árvore imutável (append-only) com sincronização imediata (<code>O_SYNC</code> / fsync em WAL). Mesmo em caso de desligamento abrupto de energia na VM, a árvore criptográfica impede a perda de transações judiciais já confirmadas ao usuário.
+                A POC demonstra encadeamento e detecção de adulteração no domínio testado. Não afirma perda zero em crash, não-repúdio institucional ou resistência a administrador do mesmo ambiente sem WORM/HSM/TSA e retenção independente.
               </span>
             </div>
           </section>
@@ -251,7 +245,7 @@
     root.addEventListener('click', e => {
       const btn = e.target.closest('[data-resil-action]');
       if (btn) {
-        if (btn.dataset.resilAction === 'emitir') emitirCertidaoOficial();
+        if (btn.dataset.resilAction === 'emitir') emitirCertidaoSintetica();
         else if (btn.dataset.resilAction === 'verificar') verificarSnapshot();
         return;
       }
@@ -270,7 +264,7 @@
       }
       const emitThreatBtn = e.target.closest('[data-emit-threat]');
       if (emitThreatBtn) {
-        emitirCertidaoOficial({
+        emitirCertidaoSintetica({
           attack_id: emitThreatBtn.dataset.emitThreat,
           title: emitThreatBtn.dataset.threatTitle || ''
         });
@@ -282,7 +276,7 @@
 
   window.initResiliencia = initResiliencia;
   window.refreshResiliencia = carregarDados;
-  window.emitirCertidaoOficial = emitirCertidaoOficial;
+  window.emitirCertidaoSintetica = emitirCertidaoSintetica;
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initResiliencia, { once: true });
   else initResiliencia();

@@ -62,7 +62,7 @@ No dashboard é possível executar a campanha **passo a passo** ou inteira e aco
 - Central Forense de Segurança de IA: laboratório de prompt injection documental com casos sintéticos Zanin/Moraes, visão humano×máquina, heatmap por página, autoridade DATA_ONLY e defesa em duas barreiras (consulte [ZANIN-PROMPT-INJECTION-LAB.md](docs/ZANIN-PROMPT-INJECTION-LAB.md));
 - scorecard final da qualificação.
 
-O servidor também possui um adapter read-only preparado para superfícies reais do HeraclitusDB em **loopback**, como `/sentinel/status`, `/api/v1/agent/status` e `/api/v1/agent/red-team/events`. O modo standalone permanece funcional quando um HeraclitusDB real não está disponível.
+O servidor também possui um adapter loopback preparado para superfícies reais do HeraclitusDB em **loopback**, como `/sentinel/status`, `/api/v1/agent/status` e `/api/v1/agent/red-team/events`. O modo standalone permanece funcional quando um HeraclitusDB real não está disponível.
 
 ## Pergunta central
 
