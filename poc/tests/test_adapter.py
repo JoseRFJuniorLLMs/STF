@@ -1,6 +1,7 @@
 import pathlib,sys,unittest,threading,urllib.error
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 HERE=pathlib.Path(__file__).resolve().parents[1];sys.path.insert(0,str(HERE))
+import heraclitus_adapter as adapter_mod
 from heraclitus_adapter import extract_incident_ids,HeraclitusAdapter,STATIC_PATHS
 
 class AdapterTests(unittest.TestCase):
@@ -67,6 +68,36 @@ class AdapterTests(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError):
                 adapter.get("/sentinel/status")
         finally:
+            server.shutdown();server.server_close()
+
+    def test_failed_red_team_persistence_never_fabricates_acceptance(self):
+        adapter=HeraclitusAdapter("http://127.0.0.1:7473")
+        def fail(*args,**kwargs): raise RuntimeError("disk unavailable")
+        adapter.post=fail
+        result=adapter.record_red_team_event({"sequence":77})
+        self.assertFalse(result["accepted"])
+        self.assertFalse(result["persisted"])
+        self.assertIsNone(result["lsn"])
+        self.assertEqual(result["status"],"UNAVAILABLE")
+        self.assertEqual(result["storage_mode"],"HERACLITUS_UNAVAILABLE")
+
+    def test_bundle_download_has_hard_size_limit(self):
+        class Bundle(BaseHTTPRequestHandler):
+            def log_message(self,*args): pass
+            def do_GET(self):
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"x"*1025)
+        server=ThreadingHTTPServer(("127.0.0.1",0),Bundle)
+        thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+        old=adapter_mod.MAX_BUNDLE_BYTES
+        try:
+            adapter_mod.MAX_BUNDLE_BYTES=1024
+            adapter=HeraclitusAdapter(f"http://127.0.0.1:{server.server_address[1]}")
+            with self.assertRaisesRegex(ValueError,"exceeds safety limit"):
+                adapter.get_bundle_bytes("/bundle.zip")
+        finally:
+            adapter_mod.MAX_BUNDLE_BYTES=old
             server.shutdown();server.server_close()
 
 

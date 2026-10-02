@@ -1,7 +1,7 @@
 import json,os,pathlib,re,sys,tempfile,unittest
 from datetime import datetime
 HERE=pathlib.Path(__file__).resolve().parents[1];sys.path.insert(0,str(HERE))
-from heraclitus_core import CoreUnavailable,HeraclitusCore,_fields,decode_append_response,decode_query_response,encode_append_request,encode_query_request,resolve_token
+from heraclitus_core import CoreProtocolError,CoreUnavailable,HeraclitusCore,_fields,decode_append_response,decode_query_response,encode_append_request,encode_query_request,resolve_token
 from processos import BRT,CATALOGO,TPU,ProcessLedger,_passos,numero_unico,numero_unico_valido,verificar_cadeia
 
 class FakeCore:
@@ -132,6 +132,12 @@ class CoreCodecTests(unittest.TestCase):
     def test_nucleo_so_aceita_loopback(self):
         HeraclitusCore("127.0.0.1:17474")
         with self.assertRaises(ValueError): HeraclitusCore("10.0.0.5:17474")
+    def test_query_response_invalida_falha_fechado(self):
+        core=HeraclitusCore("127.0.0.1:17474")
+        core._call=lambda method,request: encode_query_request('{"not":"a-list"}')
+        with self.assertRaises(CoreProtocolError): core.query("MATCH (n) RETURN n")
+        core._call=lambda method,request: encode_query_request("{broken")
+        with self.assertRaises(CoreProtocolError): core.query("MATCH (n) RETURN n")
 
 class TokenTests(unittest.TestCase):
     def setUp(self):
