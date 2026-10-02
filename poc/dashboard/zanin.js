@@ -33,25 +33,25 @@
             <p>Acompanhe como conteúdo documental não confiável é detectado, limitado a <code>DATA_ONLY</code>, avaliado pelo Policy Gateway e vinculado à evidência verificável da POC.</p>
           </div>
           <div class="zanin-experience-toggle" role="group" aria-label="Nível de detalhe">
-            <button type="button" class="zanin-experience-btn active" data-experience="executive">Modo Executivo</button>
-            <button type="button" class="zanin-experience-btn" data-experience="forensic">Modo Pericial</button>
+            <button type="button" class="zanin-experience-btn active" data-experience="executive" data-help="Resume a história do incidente, a diferença Humano × Máquina, decisão e efeito, ocultando detalhes periciais.">Modo Executivo</button>
+            <button type="button" class="zanin-experience-btn" data-experience="forensic" data-help="Exibe spans, hashes, mapa forense, findings, policy, Evidence Bundle e Offline Verifier.">Modo Pericial</button>
           </div>
         </section>
 
         <section class="zanin-casebar" aria-label="Casos forenses">
-          <button class="zanin-case-chip active" id="cardIncZanin" data-scenario="vector_stego_coercion" data-attack="IA_ZAN_05">
+          <button class="zanin-case-chip active" id="cardIncZanin" data-help="Esteganografia documental: conteúdo que a máquina extrai, mas o humano pode não perceber visualmente." data-scenario="vector_stego_coercion" data-attack="IA_ZAN_05">
             <span>ZANIN</span><small>Esteganografia</small>
           </button>
-          <button class="zanin-case-chip" id="cardIncMoraes" data-scenario="vector_moraes_header" data-attack="IA_MOR_01">
+          <button class="zanin-case-chip" id="cardIncMoraes" data-help="Instruction override em cabeçalho sintético com microfonte/baixa opacidade para demonstrar diferença estrutural." data-scenario="vector_moraes_header" data-attack="IA_MOR_01">
             <span>MORAES</span><small>Header override</small>
           </button>
-          <button class="zanin-case-chip" id="cardIncVitoria" data-scenario="vector_tool_exfil" data-attack="IA_VIT_03">
+          <button class="zanin-case-chip" id="cardIncVitoria" data-help="Documento tenta transformar texto em autorização de ferramenta ou exfiltração; o gateway exige autoridade independente." data-scenario="vector_tool_exfil" data-attack="IA_VIT_03">
             <span>VITÓRIA</span><small>Tool abuse</small>
           </button>
-          <button class="zanin-case-chip" id="cardIncMiss" data-scenario="vector_zeroday_bypass" data-attack="IA_VIC_01">
+          <button class="zanin-case-chip" id="cardIncMiss" data-help="Cenário adversarial em que o detector falha de propósito; a segunda barreira deve manter upstream_delta=0." data-scenario="vector_zeroday_bypass" data-attack="IA_VIC_01">
             <span>DETECTOR MISS</span><small>Barreira 2</small>
           </button>
-          <button class="zanin-case-chip legit" id="cardIncLegit" data-scenario="vector_legit_hitl" data-attack="BASELINE_00">
+          <button class="zanin-case-chip legit" id="cardIncLegit" data-help="Controle negativo: documento legítimo que cita segurança de IA sem ser classificado como ataque." data-scenario="vector_legit_hitl" data-attack="BASELINE_00">
             <span>CONTROLE</span><small>Documento legítimo</small>
           </button>
         </section>
@@ -90,9 +90,9 @@
               <h3>O humano vê uma coisa. A máquina pode receber outra.</h3>
             </div>
             <div class="zanin-hm-contract">
-              <span class="zanin-contract-pill">UNTRUSTED_DOCUMENT</span>
-              <span class="zanin-contract-pill">DATA_ONLY</span>
-              <span class="zanin-contract-pill deny">NO TOOL AUTHORITY</span>
+              <span class="zanin-contract-pill" data-help="Rótulo de confiança: o conteúdo veio de um documento externo e não é tratado como instrução confiável.">UNTRUSTED_DOCUMENT</span>
+              <span class="zanin-contract-pill" data-help="Authority label: o conteúdo pode ser lido/analisado como dado, mas não autoriza ações.">DATA_ONLY</span>
+              <span class="zanin-contract-pill deny" data-help="O documento não pode conceder permissão para chamar ferramentas, alterar sistemas ou executar comandos.">NO TOOL AUTHORITY</span>
             </div>
           </div>
           <div class="zanin-hm-compare">
@@ -116,7 +116,7 @@
               <h3>Como o documento percorre as duas barreiras</h3>
               <p id="replayNarrative">Clique em reproduzir para acompanhar a causalidade do incidente.</p>
             </div>
-            <button type="button" class="btn primary small" id="btnReplayIncident">▶ Reproduzir incidente</button>
+            <button type="button" class="btn primary small" id="btnReplayIncident" data-help="Reproduz visualmente a causalidade Documento → Parser → Detector → Authority Boundary → Policy Gateway → Upstream → Evidência.">▶ Reproduzir incidente</button>
           </div>
           <div class="zanin-replay-track" id="replayTrack"></div>
         </section>
@@ -128,7 +128,7 @@
               <h3>Do documento ao efeito observado</h3>
               <p>Clique em um nó para ver a relação entre conteúdo, finding, política, efeito e bundle.</p>
             </div>
-            <button type="button" class="btn small ghost" id="btnWhyBlocked">❓ Por que foi bloqueado?</button>
+            <button type="button" class="btn small ghost" id="btnWhyBlocked" data-help="Abre a justificativa técnica da decisão, incluindo finding, regra de policy e efeito observado.">❓ Por que foi bloqueado?</button>
           </div>
           <div class="zanin-evidence-graph" id="evidenceGraph"></div>
           <div class="zanin-evidence-detail" id="evidenceGraphDetail">Selecione um nó da cadeia.</div>
@@ -138,6 +138,13 @@
           <div class="zanin-stage-head">
             <div>
               <span class="zanin-story-kicker">O QUE FOI PROVADO</span>
+              <div class="glossary-strip">
+                <strong>Glossário:</strong>
+                <span class="glossary-term" data-help="Evidence Bundle: pacote que reúne manifesto, eventos, hashes e provas para verificação offline.">Evidence Bundle</span>
+                <span class="glossary-term" data-help="TSA: Time Stamping Authority, uma autoridade externa de carimbo de tempo. Aqui está UNVERIFIED.">TSA</span>
+                <span class="glossary-term" data-help="HSM/KMS: serviços ou hardware para proteger chaves criptográficas fora do processo da aplicação.">HSM/KMS</span>
+                <span class="glossary-term" data-help="WORM: armazenamento Write Once Read Many, usado para retenção resistente a regravação.">WORM</span>
+              </div>
               <h3>Verificação sem transformar “não verificado” em verde decorativo</h3>
             </div>
             <span class="tag-status" id="ledgerStatusBadge">HARNESS LOCAL</span>
@@ -191,7 +198,7 @@
             <div class="zanin-stage-head">
               <div>
                 <span class="zanin-story-kicker">ARQUITETURA DE DEFESA EM PROFUNDIDADE</span>
-                <h3>Barreira 1 → Authority Boundary → Policy Gateway</h3>
+                <h3 data-help="Authority Boundary separa conteúdo de autoridade. Policy Gateway decide se uma ação pode produzir efeito com base em identidade, parâmetros e aprovação, não no texto do documento.">Barreira 1 → Authority Boundary → Policy Gateway</h3>
               </div>
               <button type="button" class="btn small ghost" id="btnReexecutar">🔄 Reexecutar Pipeline</button>
             </div>
@@ -247,7 +254,7 @@
               <button type="button" class="btn small primary" id="btnVerifyBundle">⚡ Rodar Offline Verifier</button>
             </div>
             <table class="zanin-verifier-table">
-              <thead><tr><th>Item</th><th>Status</th><th>Detalhes</th></tr></thead>
+              <thead><tr><th data-help="Verificação individual executada pelo Offline Verifier.">Item</th><th data-help="PASS/FAIL/UNVERIFIED conforme a evidência disponível.">Status</th><th data-help="Explicação e evidência associada ao resultado.">Detalhes</th></tr></thead>
               <tbody id="verifierTableBody">
                 <tr><td colspan="3">Clique em “Rodar Offline Verifier” para testar o bundle.</td></tr>
               </tbody>
