@@ -215,6 +215,7 @@ EXTERNAL_TRUST                   UNVERIFIED
 - [SPEC-0025](specs/SPEC-0025-post-compromise-process-abuse.md) — abuso pós-compromisso
 - [SPEC-0026](specs/SPEC-0026-two-phase-end-to-end-qualification.md) — qualification ponta a ponta
 - [SPEC-0027](specs/SPEC-0027-stf-public-environment-profile.md) — perfil público aproximado
+- [SPEC-0028](specs/SPEC-0028-document-llm-injection-forensics.md) — forense documental, prompt injection, Human × Machine e fronteira DATA_ONLY
 
 ## Regra de ouro
 

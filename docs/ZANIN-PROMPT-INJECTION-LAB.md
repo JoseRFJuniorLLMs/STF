@@ -1,5 +1,7 @@
 # Central Forense de Segurança de IA — Laboratório de Prompt Injection em Documentos Processuais
 
+> **Especificação normativa:** [SPEC-0028 — Document & LLM Injection Forensics](../specs/SPEC-0028-document-llm-injection-forensics.md)
+
 > **Aviso de Escopo:** Prova de conceito independente e integralmente sintética. Não representa sistema oficial, perícia oficial, homologação ou integração operacional do Supremo Tribunal Federal. O HeraclitusDB não estava instalado no STF e não participou do incidente real noticiado.
 
 ---

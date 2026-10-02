@@ -1,6 +1,6 @@
 # Estado de Implementação — POC STF / HeraclitusDB
 
-**Atualizado:** 23/09/2026
+**Atualizado:** 01/10/2026
 
 Este documento separa capacidades realmente executadas pelo harness da POC de entradas e integrações que continuam sintéticas.
 
@@ -29,7 +29,7 @@ Este documento separa capacidades realmente executadas pelo harness da POC de en
 | Offline verifier | IMPLEMENTADO | `poc/verify.py` independente do servidor e com isolamento temporário |
 | Adapter & Surface Health | IMPLEMENTADO | `poc/heraclitus_adapter.py` monitora status `CONNECTED`, `DEGRADED` e `UNAVAILABLE` |
 | Dashboard & Guided Journey | IMPLEMENTADO | modo guiado narrativo ("Acompanhe a Campanha"), Journey Map em 8 estágios, replay, WHY, graph, policy, forensic diff, evidence inspector |
-| Defesa Zanin (Prompt Injection Lab) | IMPLEMENTADO NO HARNESS | `poc/zanin_defense.py`: parser multi-camada, findings explicáveis, defesa em 2 barreiras (detector miss -> gateway deny), Evidence Bundle e offline verifier |
+| Central Forense de Segurança de IA / SPEC-0028 | IMPLEMENTADO NO HARNESS | `poc/zanin_defense.py`: casos Zanin/Moraes/VitórIA/MISS/benigno, Human × Machine, heatmap, findings explicáveis, autoridade DATA_ONLY, defesa em 2 barreiras, Evidence Bundle e offline verifier |
 | HTTP smoke | IMPLEMENTADO | CI sobe servidor loopback e valida endpoints e proteções CSRF |
 
 ## Sintético por desenho
